@@ -1,0 +1,130 @@
+select Close from Quote_get('IBM', '2-Nov-2013', '5-Nov-2013');
+          close          
+-------------------------
+ float4:{20.2,30.2,40.2}
+(1 row)
+
+select Close from Quote_get('IBM', '2-Nov-2013');
+            close             
+------------------------------
+ float4:{20.2,30.2,40.2,50.5}
+(1 row)
+
+select Close from Quote_get('IBM', from_ts:='2-Nov-2013');
+            close             
+------------------------------
+ float4:{20.2,30.2,40.2,50.5}
+(1 row)
+
+select Close from Quote_get('IBM', till_ts:='5-Nov-2013');
+            close             
+------------------------------
+ float4:{10.5,20.2,30.2,40.2}
+(1 row)
+
+select Close from Quote_get('IBM');
+               close               
+-----------------------------------
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(1 row)
+
+select Close from Quote_span('IBM', 1, 3);
+          close          
+-------------------------
+ float4:{20.2,30.2,40.2}
+(1 row)
+
+select Close from Quote_span('IBM', 1);
+            close             
+------------------------------
+ float4:{20.2,30.2,40.2,50.5}
+(1 row)
+
+select Close from Quote_span('IBM', from_pos:=1);
+            close             
+------------------------------
+ float4:{20.2,30.2,40.2,50.5}
+(1 row)
+
+select Close from Quote_span('IBM', till_pos:=3);
+            close             
+------------------------------
+ float4:{10.5,20.2,30.2,40.2}
+(1 row)
+
+select Close from Quote_span('IBM');
+               close               
+-----------------------------------
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(1 row)
+
+select Close from Quote_get(array['ABB','IBM'], '2-Nov-2013', '5-Nov-2013');
+          close          
+-------------------------
+ float4:{60.2}
+ float4:{20.2,30.2,40.2}
+(2 rows)
+
+select Close from Quote_get(array['ABB','IBM'], '2-Nov-2013');
+            close             
+------------------------------
+ float4:{60.2,70.5}
+ float4:{20.2,30.2,40.2,50.5}
+(2 rows)
+
+select Close from Quote_get(array['ABB','IBM'], from_ts:='2-Nov-2013');
+            close             
+------------------------------
+ float4:{60.2,70.5}
+ float4:{20.2,30.2,40.2,50.5}
+(2 rows)
+
+select Close from Quote_get(array['ABB','IBM'], till_ts:='5-Nov-2013');
+            close             
+------------------------------
+ float4:{60.2}
+ float4:{10.5,20.2,30.2,40.2}
+(2 rows)
+
+select Close from Quote_get(array['ABB','IBM']);
+               close               
+-----------------------------------
+ float4:{60.2,70.5}
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(2 rows)
+
+select Close from Quote_span(array['ABB','IBM'], 1, 3);
+          close          
+-------------------------
+ float4:{70.5}
+ float4:{20.2,30.2,40.2}
+(2 rows)
+
+select Close from Quote_span(array['ABB','IBM'], 1);
+            close             
+------------------------------
+ float4:{70.5}
+ float4:{20.2,30.2,40.2,50.5}
+(2 rows)
+
+select Close from Quote_span(array['ABB','IBM'], from_pos:=1);
+            close             
+------------------------------
+ float4:{70.5}
+ float4:{20.2,30.2,40.2,50.5}
+(2 rows)
+
+select Close from Quote_span(array['ABB','IBM'], till_pos:=3);
+            close             
+------------------------------
+ float4:{60.2,70.5}
+ float4:{10.5,20.2,30.2,40.2}
+(2 rows)
+
+select Close from Quote_span(array['ABB','IBM']);
+               close               
+-----------------------------------
+ float4:{60.2,70.5}
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(2 rows)
+

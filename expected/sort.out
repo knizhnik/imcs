@@ -1,0 +1,106 @@
+select cs_top_max(Close, 3) from Quote_get('IBM');
+       cs_top_max        
+-------------------------
+ float4:{50.5,40.2,30.2}
+(1 row)
+
+select cs_top_min(Close, 3) from Quote_get('IBM');
+       cs_top_min        
+-------------------------
+ float4:{10.5,20.2,30.2}
+(1 row)
+
+select cs_top_max_pos(Close, 3) from Quote_get('IBM');
+ cs_top_max_pos 
+----------------
+ int8:{4,3,2}
+(1 row)
+
+select cs_top_min_pos(Close, 3) from Quote_get('IBM');
+ cs_top_min_pos 
+----------------
+ int8:{0,1,2}
+(1 row)
+
+select Quote_project(q.*, cs_top_max_pos(Close, 3)) from Quote_get('IBM') q;
+            quote_project             
+--------------------------------------
+ (IBM,11-06-2013,50.2,51,50,50.5,500)
+ (IBM,11-05-2013,40.5,41,40,40.2,400)
+ (IBM,11-04-2013,30.5,31,30,30.2,300)
+(3 rows)
+
+select cs_sort(Close) from Quote_get('IBM');
+              cs_sort              
+-----------------------------------
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(1 row)
+
+select cs_sort(Close, 'desc') from Quote_get('IBM');
+              cs_sort              
+-----------------------------------
+ float4:{50.5,40.2,30.2,20.2,10.5}
+(1 row)
+
+select Quote_project(q.*, cs_sort_pos(Close)) from Quote_get('IBM') q;
+              quote_project               
+------------------------------------------
+ (IBM,11-01-2013,10.2,11,10,10.5,100)
+ (IBM,11-02-2013,20.2,20.2,20.2,20.2,200)
+ (IBM,11-04-2013,30.5,31,30,30.2,300)
+ (IBM,11-05-2013,40.5,41,40,40.2,400)
+ (IBM,11-06-2013,50.2,51,50,50.5,500)
+(5 rows)
+
+select Quote_project(q.*, cs_sort_pos(Close, 'desc')) from Quote_get('IBM') q;
+              quote_project               
+------------------------------------------
+ (IBM,11-06-2013,50.2,51,50,50.5,500)
+ (IBM,11-05-2013,40.5,41,40,40.2,400)
+ (IBM,11-04-2013,30.5,31,30,30.2,300)
+ (IBM,11-02-2013,20.2,20.2,20.2,20.2,200)
+ (IBM,11-01-2013,10.2,11,10,10.5,100)
+(5 rows)
+
+select cs_rank(Close) from Quote_get('IBM');
+     cs_rank      
+------------------
+ int8:{1,2,3,4,5}
+(1 row)
+
+select cs_rank('float4:{1.1,0.1,2.2,0.2,0.1}');
+     cs_rank      
+------------------
+ int8:{4,1,5,3,1}
+(1 row)
+
+select cs_dense_rank('float4:{1.1,0.1,2.2,0.2,0.1}');
+  cs_dense_rank   
+------------------
+ int8:{3,1,4,2,1}
+(1 row)
+
+select cs_rank('float4:{1.1,0.2,2.2,0.2,0.1}', 'desc');
+     cs_rank      
+------------------
+ int8:{2,3,1,3,5}
+(1 row)
+
+select cs_dense_rank('float4:{1.1,0.2,2.2,0.2,0.1}', 'desc');
+  cs_dense_rank   
+------------------
+ int8:{2,3,1,3,4}
+(1 row)
+
+select cs_quantile(Close, 2) from Quote_get('IBM');
+       cs_quantile       
+-------------------------
+ float4:{10.5,30.2,50.5}
+(1 row)
+
+select cs_quantile('float4:{10,3,0,3,4,5,9,11,7,3,3}', 2);
+   cs_quantile   
+-----------------
+ float4:{0,4,11}
+(1 row)
+

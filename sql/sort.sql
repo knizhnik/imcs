@@ -1,0 +1,16 @@
+select cs_top_max(Close, 3) from Quote_get('IBM');
+select cs_top_min(Close, 3) from Quote_get('IBM');
+select cs_top_max_pos(Close, 3) from Quote_get('IBM');
+select cs_top_min_pos(Close, 3) from Quote_get('IBM');
+select Quote_project(q.*, cs_top_max_pos(Close, 3)) from Quote_get('IBM') q;
+select cs_sort(Close) from Quote_get('IBM');
+select cs_sort(Close, 'desc') from Quote_get('IBM');
+select Quote_project(q.*, cs_sort_pos(Close)) from Quote_get('IBM') q;
+select Quote_project(q.*, cs_sort_pos(Close, 'desc')) from Quote_get('IBM') q;
+select cs_rank(Close) from Quote_get('IBM');
+select cs_rank('float4:{1.1,0.1,2.2,0.2,0.1}');
+select cs_dense_rank('float4:{1.1,0.1,2.2,0.2,0.1}');
+select cs_rank('float4:{1.1,0.2,2.2,0.2,0.1}', 'desc');
+select cs_dense_rank('float4:{1.1,0.2,2.2,0.2,0.1}', 'desc');
+select cs_quantile(Close, 2) from Quote_get('IBM');
+select cs_quantile('float4:{10,3,0,3,4,5,9,11,7,3,3}', 2);

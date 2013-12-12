@@ -1,0 +1,1462 @@
+<html>
+<head>
+<title>In-Memory Columnar Store (IMCS)</title>
+<h1>In-Memory Columnar Store (IMCS)</h1>
+<ul>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#functions">Functions</a></li>
+<ul>
+  <li><a href="#gen">General columnar store functions</a></li>
+  <li><a href="#ddl">Generated data manipulation functions</a></li>
+  <li><a href="#single">Generated data access functions for single timeseries</a></li>
+  <li><a href="#multiple">Generated data access functions for multiple timeseries (identified by timeseries ID)</a></li>
+  <li><a href="#cons">Timeseries constructors</a></li>
+  <li><a href="#bin">Binary operations</a></li>
+  <li><a href="#unary">Unary operations</a></li>
+  <li><a href="#math">Mathematical functions</a></li>
+  <li><a href="#datetime">Date/time functions</a></li>
+  <li><a href="#scalar">Binary scalar functions</a></li>
+  <li><a href="#transform">Timeseries transformation functions</a></li>
+  <li><a href="#grand">Grand aggregates</a></li>
+  <li><a href="#groupby">Group-by aggregates</a></li>
+  <li><a href="#grid">Grid aggregates</a></li>
+  <li><a href="#window">Window (moving) aggregates</a></li>
+  <li><a href="#hash">Hash aggregates (group-by using hash function)</a></li>
+  <li><a href="#cum">Cumulative aggregates</a></li>
+  <li><a href="#sort">Sort functions</a></li>
+  <li><a href="#spec">Special functions</a></li>
+</ul>
+<li><a href="#operators">Operators</a></li>
+<li><a href="#projection">Projection issues</a></li>
+<li><a href="#impletemtation">Implementation details</a></li>
+<li><a href="#installation">Installation and tuning</a></li>
+<li><a href="#performance">Performance comparison</a></li>
+<li><a href="#license">License</a></li>
+</ul>
+</head>
+<body>
+<h2><a name="introduction">Introduction</a></h2>
+<p>
+Columnar store or vertical representation of data allows to achieve better performance in comparison with classical horizontal representation due to three factors:
+<ol>
+<li>Reducing size of fetched data: only columns involved in query are accessed.</li>
+<li>Vector operations. Applying an operator to set of values (tile) makes it possible to minimize interpretation cost.
+Also SIMD instructions of modern processors accelerate execution of vector operations.</li>
+<li>Compression of data. Certainly compression can also be used for all the records, but independent compression of each column can give much better results without significant extra CPU overhead. For example such simple compression algorithm like RLE 
+(run-length-encoding) allows not only to reduce used space, but also minimize number of performed operations.
+</ol>
+
+There are several database systems based on vertical data model: Vertica, SciDB,... There are also extensions to existed DBMSes, such as
+"Oracle In-Memory Option". This plug-in tries to provide such functionality for PostgreSQL.
+</p>
+<h2><a name="overview">Overview</a></h2>
+<p>
+As it is clear from the abbreviation (IMCS: In-Memory Columnar Store) this plugin adds to PostgreSQL in-memory columnar store.
+So vertical representation of data is complementary to standard horizontal representation.
+Data is imported in PostgreSQL database in usual way and is stored in normal table.
+Then columns from this table are fetched and stored in shared memory. IMCS provides a lot of timeseries functions which can be used for data 
+analysis. Operations with timeseries are performed in vector mode allowing to reach maximal possible speed of such operations.
+Also IMCS makes it possible to parallelize execution of some queries (for example calculation of aggregates) and utilize all CPU cores. All this three factors: in-memory location of data, vector operations, parallel query execution, makes it possible
+to increase speed of some queries more than 100 times comparing with standard PostgreSQL queries.
+</p><p>
+To make access to timeseries as convenient as possible, IMCS provides generator of access functions. You should specify name of source table or view (from which data will be imported), name of timestamp field (this is a main key by which timeseries elements are accessed) and 
+optionally timeseries identifier. The last one needs some explanations. In some cases all data from the table should be placed in a single timeseries. For example assume that we collect data about phone calls (date, duration, caller, callee,...). It will be a single timeseries. But for example in trading systems there are separate data (ticks) associated with each symbol. So we have separate timeseries for ABB, GOOG, IBM, YHOO,... In this case securities identifier (symbol) can be considered as identifier of timeseries.
+</p><p>
+IMCS supports the following element type for timeseries: <code>"char", int2, int4, date, int8, time, timestamp, float4, float8, bpchar</code>.
+All timeseries elements should have the same size, so only fixed size character types are supported: for example <code>char(10)</code>, but not <code>varchar</code>. Also IMCS is not able to represent NULL values. It is not enforced that fields of the source table were declared as <code>NOT NULL</code>, but attempt to insert NULL value in timeseries will cause error (or optionally NULL can be substituted with zero). Please use default values instead of NULLs.
+</p><p>
+Given all this information IMCS generates corresponding types and functions for loading/appending/accessing this timeseries.
+Assume that we have table <code>Quote</code>. After calling <code>cs_create('Quote', 'Day', 'Symbol')</code>
+we will get <code>Quote_load()</code> function for loading data from table in memory, 
+<code>Quote_get(symbol char(10), low date, high date)</code> function for fetching/slicing corresponding timeseries and triggers which will keep track updates in <code>Quote</code> table and propagate this changes to timeseries.
+</p><p>
+There are two ways of synchronizing original table and timeseries:
+<ol>
+<li>Automatic: using triggers. In this case all inserts/deletes in original table are immediately reflected in timeseries.</li>
+<li>Manual: using explicit invocation of load/append/delete methods.</li>
+</ol>
+
+Execution of <code>load()</code> is significantly more efficient than propagation of updates using triggers. Mostly because of slowness of PL/pgSQL.
+Also please notice, that been stored in shared memory, timeseries have to be reloaded after restart of 
+the server. Unfortunately PostgreSQL doesn't support database level triggers (like <code>after startup on database</code> in Oracle). 
+IMCS provides two alternatives: use <i>autoload</i> mode or manually load data. In case of using <i>autoload</i>  mode, data will be automatically loaded from table to columnar store on demand when it is first accessed by any query. Please notice that for large tables loading data can take substantial amount of time and so increase execution time of the query initiated this load (it can confuse an user which expects this query to complete very fast). 
+Fortunately database servers are not restarted frequently...
+</p><p>
+When data is loaded from the table, records are sorted by timestamp and inserted in ascending order.
+You can append data to existed timeseries, but timestamps of inserted elements should be greater than already loaded.
+When timeseries is populated using insert trigger it is necessary to enforce that the data is inserted in the table in timestamp ascending order. Otherwise <i>out-of-order</i> error will be reported while inserting element in timeseries.
+</p><p>
+<code><b>TABLE</b>_get</code> functions returns row of type <code><b>TABLE</b>_timeseries</code> (this type is also generated by IMCS) which has the same columns as original table, but type of this columns is <code>timeseries</code>. So it is possible to refer to this timeseries as to any other columns and apply timeseries functions to them. For example query:
+
+<pre>
+    select cs_max(Close) from Quote_get('IBM');
+</pre>
+
+returns maximal close price for IBM.
+IMCS provide standard operators for timeseries type, allowing to write queries with more complex expressions in standard way:
+
+<pre>
+    select cs_avg(High - (Open + Close)/2) from Quote_get('IBM');
+</pre>
+
+Result of the query above is scalar value (because of used grand aggregate). But most of timeseries functions take timeseries as input and return also timeseries. For example result of the query below is timeseries:
+
+<pre>
+    select cs_filter(Open < Close, Day) from Quote_get('IBM');
+</pre>
+
+When you print result of execution of this query at the screen (for example by running this query in psql), it will be represented as large string literal in braces: 'date:{01/01/2010, 01/02/2010,...}'
+Certainly it is not convenient for really large timeseries and may even cause memory exhaustion. 
+Alternatively it is possible to change  vertical representation back to horizontal representation using <code><b>TABLE</b>_project</code> or <code>cs_project</code> functions. Then produced tuples can be accessed in normal way using all SQL stuff.
+For example it is possible to sort them or perform more grouping/filtering.
+</p> 
+
+
+
+<h2><a name="functions">Functions</a></h2>
+<h3><a name="gen">General columnar store functions</a></h3>
+<p>
+General columnar store functions are used to generate table-specific API functions, get information about columnar store and perform cleanup.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_create(table_name text, timestamp_id text, timeseries_id text default null, autoupdate bool default false) returns void</code></td>
+<td>This function is used to generate all API functions, types and triggers for the specified table or view <code>table_name</code>.
+These can be latter removed using <code><b>table_name</b>_drop</code> function. <code>timestamp_id</code> is name of timestamp field by which timeseries elements are sorted in ascending order, allowing to efficiently extract time slices. <code>timeseries_id</code> is optional field identifying timeseries. For example for quotes it can be a symbol name.  If this field is specified, then separate timeseries will be maintained for each symbol. If <code>autoupdate</code> parameter is true, then IMCS will create triggers which automatically update timeseries when new data is added/deleted to/from the source table. Alternatively it is possible to explicitly load/append/delete data to timeseries. Please notice that explicit bulk update/delete is significantly more efficient than row-level updated performed by trigger. If columnar store interface for a table was generated with <code>autoupdate=false</code>, then triggers are still generated but are disabled. You can enable them later using <code>alter table <b>TABLE</b> enable trigger user</code> command. As far as views cannot have row-level BEFORE or AFTER triggers in PostgreSQL, IMCS doesn't generate them if <code>table_name</code> is a view.</td>
+</tr>
+<tr>
+<td><code>function cs_delete_all() returns bigint</code></td>
+<td>Deletes all timeseries in columnar store. This function can be used for most efficient cleanup of columnar store.
+Please notice that PostgreSQL doesn't allow to free shared memory, so it still be in use. But it can be reused in subsequent 
+allocation requests of columnar store. This function returns total number of removed elements (in all timeseries)</td>
+</tr>
+<tr>
+<td><code>function cs_used_memory() returns bigint</code></td>
+<td>Returns amount of memory used by columnar store.</td>
+</tr>
+<tr>
+<td><code>function cs_profile(reset bool default false)  setof cs_profile_item</code></td>
+<td>Returns number of calls of each IMCS command. If <code>parameter</code> is true, then all counters
+are reset after execution of this call.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="ddl">Generated data manipulation functions</a></h3>
+<p>
+Generated functions for loading/storing/deleting timeseries.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function <b>TABLE</b>_drop() returns void</code></td>
+<td>Deletes all generated functions and types for table <b>TABLE</b>.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_load(already_sorted bool default false, filter text default null) returns bigint</code></td>
+<td>Populates timeseries with data from PostgreSQL table. If <code>already_sorted</code> parameter is true, then it is assumed that
+records in the table are stored in proper (timestamp ascending) order. Otherwise IMCS will add "order by" clause
+to select statement. Please notice that PostgreSQL vacuuming can change original order of the records. So disable vacuuming for the
+table if you want to preserve insert order. Optional <code>filter</code> parameter allows to specify additional selection criteria for table records. It allows to include in timeseries only some subset of the table.
+Particularly it can be used to append existed timeseries with new data.
+This function returns number of inserted timeseries elements. If <code>filter</code> is not specified then this function loads data from the table only if timeseries are not yet initialized. If <code>filter</code> is not null, then this functions always tries to load data, assuming that programmer has specified proper filter condition allowing to avoid duplicates and preserve proper timeseries order. If <code>filter</code> is null and timeseries are already initialized, then this function does nothing and immediately returns zero.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_append(start_from <b>TIMESTAMP_TYPE</b>) returns bigint</code></td>
+<td>Appends to timeseries records from the source table starting from <code>start_from</code> timestamp (inclusive).
+Use this function if on-update trigger is disabled (autoupdate=false in parameters of <code>cs_create</code>).
+Please also notice that this function is implemented in PL/pgSQL and so it is significantly slower than <code><b>TABLE</b>_load</code> with the same filter condition.
+This function returns number of added timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_truncate() returns void</code></td>
+<td>Truncates all timeseries for this table. This is most efficient way to delete vertical representation for the specific table.
+If you need to delete all data in columnar store, better use <code>cs_delete_all()</code> function.
+</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="single">Generated data access functions for single timeseries</a></h3>
+<p>
+Functions generated for accessing single timeseries (timeseries having no identifier).
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function <b>TABLE</b>_first() returns <b>TIMESTAMP_TYPE</b></code></td>
+<td>Returns oldest timestamp.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_last() returns <b>TIMESTAMP_TYPE</b></code></td>
+<td>Returns most recent timestamp.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_count() returns bigint</code></td>
+<td>Returns number of elements in timeseries.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_get(low <b>TIMESTAMP_TYPE</b> default null, high <b>TIMESTAMP_TYPE</b> default null) returns <b>TABLE</b>_timeseries</code></td>
+<td>Returns vertical representation of the whole table or its time slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_span(from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns <b>TABLE</b>_timeseries</code></td>
+<td>Returns vertical representation of the whole table or its horisonal slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). 
+Parameter <code>from_pos</code> specifies start position in timeseries (inclusive) and parameter <code>till_pos</code> specifies end position (inclusive). If <code>till_pos</code> parameter is missed, then subsequence spans till end of timeseries. Values of both <code>from_pos</code> and <code>till_pos</code> parameters can be negative. In this case position is calculated from end of timeseries, i.e. <code><b>TABLE</b>_span(from_pos:=-1)</code> extracts last element of the timeseries.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_delete(low <b>TIMESTAMP_TYPE</b>, high <b>TIMESTAMP_TYPE</b>) returns bigint</code></td>
+<td>Deletes timeseries elements belonging to the specified interval. If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are nulls, then corresponding boundary is open. This function returns number of deleted elements.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_delete(till <b>TIMESTAMP_TYPE</b> default null) returns bigint</code></td>
+<td>Deletes timeseries elements from the beginning till specified timestamp <code>till</code> (inclusive) or delete all elements if this parameter is null/omitted.
+This function is  equivalent to <code><b>TABLE</b>_delete(null, till)</code>. IMCS provides separate function for it because it is intended to be the 
+most frequent case of deleting elements from timeseries: it correponds to shifting data window when new elements are appended and 
+deteriorated are thrown away. This function returns number of deleted elements.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_project(input <b>TABLE</b>_timeseries input, positions timeseries default null,disable_caching bool default false) returns setof <b>TABLE</b></td>
+<td>Makes horizontal projection of timeseries. Optional <code>positions</code> parameter specifies positions of selected timeseries elements.
+If parameter <code>positions</code> is omitted, then all timeseries elements are transformed to horizontal representation. 
+So this function is opposite to <code><b>TABLE</b>_get()</code>: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. It is possible to use this function only if number of columns returned by <b>TABLE</b>_get()</code>
+and element types of corresponding timeseries are not changed. For example it is possible to run query like this:
+<pre>
+    select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* from Quote_get('ABB', date('01-Jan-2010'), date('31-Mar-2010')) abb;
+    select (Quote_project(abb.*)).* from (select Symbol,Day,cs_maxof(Open,Close),High,Low,cs_minof(Open,Close),Volume from Quote_get('ABB')) abb;
+</pre>
+but not
+<pre>
+    select (Quote_project(abb.*)).* from (select Symbol,cs_maxof(Open,Close) from Quote_get('ABB')) abb;
+</pre>
+In the last case it is possible to use <code>cs_project()</code> function:
+<pre>
+    select cs_project(abb.*) from (select Symbol,cs_maxof(Open,Close) from Quote_get('ABB')) abb;
+</pre>
+Please notice that we can not use <code>().*</code> clause in this case because <code>cs_project</code> returns anonymous row.
+But in PostgreSQL 9.3 we can use <i>lateral join</i>:
+<pre>
+    select p.* from (select Symbol,cs_maxof(Open,Close) from Quote_get('ABB')) abb, cs_project(abb.*) p(symbol char(10), max real);
+</pre>
+Please find more information about projection of timeseries, problems with <code>(...).*</code> construction in PostgreSQL and 
+purpose of <code>disable_caching</code> parameter in section <a href="#projection">Projection issues</a>.
+</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="multiple">Generated data access functions for multiple timeseries (identified by timeseries ID)</a></h3>
+<p>
+Functions generated for accessing multiple timeseries (source table contains identifier of timeseries, for example 'Symbol').
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function <b>TABLE</b>_first(id <b>TIMESERIES_ID_TYPE</b>) returns <b>TIMESTAMP_TYPE</b></code></td>
+<td>Returns oldest timestamp.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_last(id <b>TIMESERIES_ID_TYPE</b>) returns <b>TIMESTAMP_TYPE</b></code></td>
+<td>Returns most recent timestamp.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_count(id <b>TIMESERIES_ID_TYPE</b>) returns bigint</code></td>
+<td>Returns number of elements in timeseries.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>, <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null) returns <b>TABLE</b>_timeseries</code></td>
+<td>Returns timeseries with specified identifier for the corresponding table or its time slice. Returned record contains the same columns as record of original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>[], <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null) returns setof <b>TABLE</b>_timeseries</code></td>
+<td>Does the same as function described above but for array of timeseries identifiers. For each timeseries identifier this function returns <code><b>TABLE</b>_timeseries</code> record, so output will contain as much rows as there are identifiers.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_span(id <b>TIMESERIES_ID_TYPE</b>, from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns <b>TABLE</b>_timeseries</code></td>
+<td>Returns timeseries with specified identifier for the corresponding table or its horisonal slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). 
+Parameter <code>from_pos</code> specifies start position in timeseries (inclusive) and parameter <code>till_pos</code> specifies end position (inclusive). If <code>till_pos</code> parameter is missed, then subsequence spans till end of timeseries. Values of both <code>from_pos</code> and <code>till_pos</code> parameters can be negative. In this case position is calculated from end of timeseries, i.e. <code><b>TABLE</b>_span(id,from_pos:=-1)</code> extracts last element of the timeseries.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_span(id <b>TIMESERIES_ID_TYPE</b>[],  from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns setof <b>TABLE</b>_timeseries</code></td>
+<td>Does the same as function described above but for array of timeseries identifiers. For each timeseries identifier this function returns <code><b>TABLE</b>_timeseries</code> record, so output will contain as much rows as there are identifiers.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_concat(id <b>TIMESERIES_ID_TYPE</b>[], <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null) returns <b>TABLE</b>_timeseries</code></td>
+<td>Concatenates slices of timeseries for the specified identifiers. Returned record contains the same columns as record of original table, but them have <code>timeseries</code> type instead of original scalar types. Each such timeseries is concatenation of slices of timeseries for all specified identifiers. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_delete(id <b>TIMESERIES_ID_TYPE</b>, low <b>TIMESTAMP_TYPE</b>, high <b>TIMESTAMP_TYPE</b>) returns bigint</code></td>
+<td>Deletes timeseries elements belonging to the specified interval. If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are nulls, then corresponding boundary is open. This function returns number of deleted elements.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_delete(id <b>TIMESERIES_ID_TYPE</b>, till <b>TIMESTAMP_TYPE</b> default null) returns bigint</code></td>
+<td>Deletes timeseries elements from the beginning till specified timestamp <code>till</code> (inclusive) or delete all elements if this parameter is null/omitted.
+This function is  equivalent to <code><b>TABLE</b>_delete(id, null, till)</code>. IMCS provides separate function for it because it is intended to be the 
+most frequent case of deleting elements from timeseries: it correponds to shifting data window when new elements are appended and 
+deteriorated are thrown away. This function returns number of deleted elements.</td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_project(input <b>TABLE</b>_timeseries input, positions timeseries default null,disable_caching bool default false) returns setof <b>TABLE</b></td>
+<td>Makes horizontal projection of timeseries. Optional <code>positions</code> parameter specifies positions of timeseries elements.
+If skipped, then all timeseries elements are transformed to horizontal representation. 
+So this function is opposite to  <b>TABLE</b>_get: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. See comments to <code>project</code> function in the previous section.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="cons">Timeseries constructors</a></h3>
+<p>
+Functions constructing constant timeseries (timeseries of repeated value) or timseries created by parsing string literal.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_parse(str text, elem_type cs_elem_type, elem_size integer default 0) returns timeseries<code></td>
+<td>Creates timeseries from string, for example '{1,2,3,4,5}'. Type of timeseries is specified by <code>elem_type</code> parameter. For timeseries of characters it is also necessary to specify size of timeseries element - <code>elem_size</code>.
+Please notice that PostgreSQL allows implicit cast from string to the target type using this type input function, but in this case information about timeseries element type and size should be encoded in the string: <code>'int4:{1,2,3,4,5}'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_const(val float8, elem_type cs_elem_type) returns timeseries<code></td>
+<td>Creates timeseries of numeric (integer or floating point) elements. Type of timeseries is specified by <code>elem_type</code> parameter.
+Should be one of: <code>'char', 'int2', 'int4', 'int8', 'float4', 'float8'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_const(val timestamp, elem_type cs_elem_type) returns timeseries<code></td>
+<td>Creates timeseries of date/time elements. Type of timeseries is specified by <code>elem_type</code> parameter.
+Should be one of: <code>'date', 'time', 'timestamp'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_const(val text, elem_size integer) returns timeseries<code></td>
+<td>Creates timeseries of character type. Size of timeseries element is specified by <code>elem_size</code> parameter.
+</tr>
+<tr>
+<td><code>function cs_const(val text) returns timeseries<code></td>
+<td>Creates timeseries of character type. Size of timeseries element is equal to the length of <code>val</code>.
+</tr>
+</table>
+</p>
+
+<h3><a name="bin">Binary operations</a></h3>
+<p>
+Binary operations with timeseries. These functions take two timeseries arguments and return result timeseries.
+IMCS tries to automatically adjust types of input arguments (for example if one timeseries has "int8" element type and another - "float8", then first one will be converted to "float8").
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_add(timeseries,timeseries) returns timeseries</code></td>
+<td>Adds elements of two timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_sub(timeseries,timeseries) returns timeseries</code></td>
+<td>Subtracts elements of two timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_mul(timeseries,timeseries) returns timeseries</code></td>
+<td>Multiplies elements of two timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_div(timeseries,timeseries) returns timeseries</code></td>
+<td>Divides elements of two timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_pow(timeseries,timeseries) returns timeseries</code></td>
+<td>Raises element of first timeseries to power specified by element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_and(timeseries,timeseries) returns timeseries</code></td>
+<td>Bitwise AND of elements of two integer or boolean timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_or(timeseries,timeseries) returns timeseries</code></td>
+<td>Bitwise OR of elements of two integer or boolean timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_xor(timeseries,timeseries) returns timeseries</code></td>
+<td>Bitwise XOR of elements of two integer or boolean timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_eq(timeseries,timeseries) returns timeseries</code></td>
+<td>Checks if element of first timeseries is equal to element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_ne(timeseries,timeseries) returns timeseries</code></td>
+<td>Checks if element of first timeseries is not equal to element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_gt(timeseries,timeseries) returns timeseries</code></td>
+<td>Checks if element of first timeseries is greater than element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_ge(timeseries,timeseries) returns timeseries</code></td>
+<td>Checks if element of first timeseries is greater or equal than element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_lt(timeseries,timeseries) returns timeseries</code></td>
+<td>Checks if element of first timeseries is less than element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_le(timeseries,timeseries) returns timeseries</code></td>
+<td>Checks if element of first timeseries is less or equal than element of second timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_maxof(timeseries,timeseries) returns timeseries</code></td>
+<td>Maximum of two elements</td>
+</tr>
+<tr>
+<td><code>function cs_minof(timeseries,timeseries) returns timeseries</code></td>
+<td>Minimum of two elements</td>
+</tr>
+<tr>
+<td><code>function cs_like(timeseries,pattern text) returns timeseries</code></td>
+<td>Finds elements of character timeseries matching specified pattern (case sensitive). Rules of matching are the same as for PostgreSQL <code>LIKE</code> predicate.</td>
+</tr>
+<tr>
+<td><code>function cs_ilike(timeseries,pattern text) returns timeseries</code></td>
+<td>Finds elements of character timeseries matching specified pattern (ignore case). Rules of matching are the same as for PostgreSQL <code>ILIKE</code> predicate.</td>
+</tr>
+<tr>
+<td><code>function cs_cat(timeseries,timeseries) returns timeseries</code></td>
+<td>Concatenates elements of two timeseries. Input timeseries can have any element type, result is always timeseries of characters which element size
+is equal to sum of element sizes of concatenated timeseries. For example <code>cs_cat('bpchar1:{a,b,c}', 'bpchar1:{x,y,z}') = 'bpchar2:{ax,by,cz}'</code>. 
+In case of concatenation of character strings which actual length is smaller than fixed element size, result will contains filler character ('\0'). 
+So if element size of concatenated timeseries in the above example is 3, then result will be <code>E'{a\\000\\000x\\000\\000,b\\000\\000y\\000\000,c\\000\\000z\\000\000}'</code>. If you prefer to get <code>'{ax,by,cz}'</code>, then please use <code>cs_add</code> instead of <code>cs_cat</code>.
+Function <code>cs_cat</code> is intended to be used for concatenation of group-by keys (character or numeric) for aggregation.
+</td>
+</tr>
+<tr>
+<td><code>function cs_concat(head timeseries,tail timeseries) returns timeseries</code></td>
+<td>Concatenates two timeseries. Result of this function is timeseries containing elements both of <code>head</code> and <code>tail</code> timeseries.
+For example <code>cs_concat('int4:{1,2,3}','int4:{4,5,6}') = '{int4:1,2,3,4,5,6}'</code>.
+Parameters <code>head</code> or <code>tail</code> may be null. In this case <code>cs_concat</code> returns just not-null timeseries.
+</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="unary">Unary operations</a></h3>
+<p>
+Unary operations with timeseries. These functions take single timeseries and return timeseries as result.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_neg(timeseries) returns timeseries</code></td>
+<td>Negates timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_not(timeseries) returns timeseries</code></td>
+<td>Logical NOT of boolean timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_bit_not(timeseries) returns timeseries</code></td>
+<td>Bitwise NOT of integer timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_abs(timeseries) returns timeseries</code></td>
+<td>Absolute value of timeseries element</td>
+</tr>
+<tr>
+<td><code>function cs_norm(timeseries) returns timeseries</code></td>
+<td>Normalizes timeseries elements (divides each element by square root of sum of all elements)</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="math">Mathematical functions</a></h3>
+<p>
+Calculation of mathematical functions for all timeseries elements.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_sin(timeseries) returns timeseries</code></td>
+<td>Sine function</td>
+</tr>
+<tr>
+<td><code>function cs_cos(timeseries) returns timeseries</code></td>
+<td>Cosine function</td>
+</tr>
+<tr>
+<td><code>function cs_tan(timeseries) returns timeseries</code></td>
+<td>Tangent function</td>
+</tr>
+<tr>
+<td><code>function cs_exp(timeseries) returns timeseries</code></td>
+<td>Exponent function</td>
+</tr>
+<tr>
+<td><code>function cs_asin(timeseries) returns timeseries</code></td>
+<td>Arcsine function</td>
+</tr>
+<tr>
+<td><code>function cs_acos(timeseries) returns timeseries</code></td>
+<td>Arccosine function</td>
+</tr>
+<tr>
+<td><code>function cs_atan(timeseries) returns timeseries</code></td>
+<td>Arctangent function</td>
+</tr>
+<tr>
+<td><code>function cs_sqrt(timeseries) returns timeseries</code></td>
+<td>Square root function</td>
+</tr>
+<tr>
+<td><code>function cs_log(timeseries) returns timeseries</code></td>
+<td>Natural logarithm function</td>
+</tr>
+<tr>
+<td><code>function cs_ceil(timeseries) returns timeseries</code></td>
+<td>Rounds timeseries element to the smallest integer greater or equal than the element value</td>
+</tr>
+<tr>
+<td><code>function cs_floor(timeseries) returns timeseries</code></td>
+<td>Rounds timeseries element to the largest integer less or equal than the element value</td>
+</tr>
+<tr>
+<td><code>function cs_isnan(timeseries) returns timeseries</code></td>
+<td>Checks if floating point timeseries element is NaN</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="datetime">Date/time functions</a></h3>
+<p>
+Extracts components of date/time type. These functions are mostly needed in group-by operations to calculate aggregates for various intervals (days, weeks, months, quarters, years...).
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_year(timeseries) returns timeseries</code></td>
+<td>Extracts year from date/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_month(timeseries) returns timeseries</code></td>
+<td>Extracts month (1..12) from date/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_mday(timeseries) returns timeseries</code></td>
+<td>Extracts month day (1..31) from date/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_wday(timeseries) returns timeseries</code></td>
+<td>Extracts week day (0..6 starting from Sunday) from date/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_week(timeseries) returns timeseries</code></td>
+<td>Extracts week number since start of epoch from date/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_quarter(timeseries) returns timeseries</code></td>
+<td>Extracts quarter (1..4) from date/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_hour(timeseries) returns timeseries</code></td>
+<td>Extracts hour (0..23) from time/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_minute(timeseries) returns timeseries</code></td>
+<td>Extracts minute (0..59) from time/timestamp</td>
+</tr>
+<tr>
+<td><code>function cs_second(timeseries) returns timeseries</code></td>
+<td>Extracts second (0..59) from time/timestamp</td>
+</tr>
+</table>
+</p>
+
+
+
+<h3><a name="scalar">Binary scalar functions</a></h3>
+<p>
+Functions of this group take two timeseries arguments and calculate single scalar value as result.
+IMCS tries to automatically adjust types of input arguments (for example if one timeseries has "int8" element type and another - "float8", then first one will be converted to "float8").
+</p><p>
+Execution of these functions can be parallelized.
+<p></p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_wsum(timeseries,timeseries) returns float8</code></td>
+<td>Weighted sum of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_wavg(a timeseries,b timeseries) returns float8</code></td>
+<td>Weighted average of timeseries elements: <code>sum(a*b)/sum(a)</code></td>
+</tr>
+<tr>
+<td><code>function cs_corr(a timeseries,b timeseries) returns float8</code></td>
+<td>Correlation of two timeseries</td>
+</tr>
+<tr>
+<td><code>function cs_cov(a timeseries,b timeseries) returns float8</code></td>
+<td>Covariation of two timeseries</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="transform">Timeseries transformation functions</a></h3>
+<p>
+Functions performing various transformations of input timeseries.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_cast(input timeseries, elem_type cs_elem_type) returns timeseries</code></td>
+<td>Casts timeseries elements to the specified type defined in cs_elem_type enum: ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'float4', 'float8', 'bpchar'). Explicit casts are rarely needed, in most cases IMCS performs implicit type conversion.</td>
+</tr>
+<tr>
+<td><code>function cs_to_<b>TYPE</b>_array(timeseries) returns <b>TYPE</b>[]</code></td>
+<td>Converts timeseries to array. <b>TYPE</b> should be one of <code>"char", int2, int4, date, int8, time, timestamp, float4, float8, bpchar</code> and should match element type of the converted timeseries. Please notice that array is constructed in memory and large timeseries can cause memory overflow.</td>
+</tr>
+<tr>
+<td><code>function cs_from_array(anyarray, elem_size integer default 0) returns timeseries</code></td>
+<td>Converts array to timeseries. This function creates timeseries iterator for the input array, allowing to apply to it any timeseries functions. Type of the result timeseries element is the same as type of the array element.
+Optional <code>elem_size</code> parameter is needed only for text array, it should specify maximal size of array element.</td>
+</tr>
+<tr>
+<td><code>function cs_thin(timeseries, origin integer, step integer) returns timeseries</code></td>
+<td>Leaves only each <code>step</code>-th element of timeseries starting from <code>origin</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_limit(timeseries, from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns timeseries</code></td>
+<td>Extracts subsequence from timeseries. Parameter <code>from_pos</code> specifies start position of subsequence (inclusive) and parameter <code>till_pos</code> specifies end position (inclusive). If <code>till_pos</code> parameter is missed, then subsequence spans till end of timeseries. Values of both <code>from_pos</code> and <code>till_pos</code> parameters can be negative. In this case position is calculated from end of timeseries, i.e. <code>cs_limit(s, from_pos:=-1)</code> extracts last element of the timeseries.</td>
+</tr>
+<tr>
+<td><code>function cs_head(timeseries, n bigint) returns timeseries</code></td>
+<td>Extracts <code>n</code> first elements of timeseries. This function is equivalent to <code>cs_limit(0, n-1)</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_tail(timeseries, n bigint) returns timeseries</code></td>
+<td>Extracts <code>n</code> last elements of timeseries. This function is equivalent to <code>cs_limit(-n)</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_cut_head(timeseries, n bigint) returns timeseries</code></td>
+<td>Extracts all except first <code>n</code> elements of timeseries. This function is equivalent to <code>cs_limit(n)</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_cut_tail(timeseries, n bigint) returns timeseries</code></td>
+<td>Extracts all except last <code>n</code> elements of timeseries. This function is equivalent to <code>cs_limit(0,-n-1)</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_call(input timeseries, func oid) returns timeseries</code></td>
+<td>Calls specified function for all elements of <code>input</code> timeseries.
+To specify function cast function name to <code>regproc</code> or function prototype (name and argument types) to <code>recprocedure</code>:
+<pre>
+    select cs_call(Close, 'sin'::regproc) from Quote_get('IBM');
+    select cs_call(Close, 'sin(float)'::regprocedure) from Quote_get('IBM');
+</pre>
+Please notice that <code>sin</code> is taken here only as example. There is special <code>cs_sin</code> in IMCS API.
+But you can specify here name of any function, including plpgsql function:
+<pre>
+    create function mul2(x real) returns real as $$ begin return x*2; end; $$ language plpgsql strict immutable;
+    select cs_call(Close, 'mult2'::regproc) from Quote_get('IBM');
+</pre></td>
+</tr>
+<tr>
+<td><code>function cs_union(left timeseries, right timeseries)</code></td>
+<td>Unions two sorted timeseries (usually timestamps). For example <code>cs_union('int8:{1,5,7,8}', 'int8:{2,3,5,6}') = 'int8:{1,2,3,5,5,6,7,8}'</td>
+</tr>
+<tr>
+<td><code>function cs_iif(cond timeseries, then_ts timeseries, else_ts timeseries) returns timeseries</code></td>
+<td>Chooses one of two alternatives: if element of <code>cond</code> boolean timeseries is true, then use element of <code>then_ts</code> timeseries, otherwise use element of <code>else_ts</code> timeseries. All timeseries are traversed with the same speed: if we take element from <code>then_ts</code> timeseries, then corresponding element of <code>else_ts</code> timeseries is skipped.
+For example <code>cs_iif('char:{1,0,1}', 'float4:{1.0,2.0,3.0}', 'float4:{0.1,0.2,0.3}') = 'float4:{1.0,0.2,3.0}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_if(cond timeseries, then_ts timeseries, else_ts timeseries) returns timeseries</code></td>
+<td>Conditional computation: if element of <code>cond</code> boolean timeseries is true, then take next element of <code>then_ts</code> timeseries, otherwise use element of <code>else_ts</code> timeseries. Unlike <code>cs_iff</code> then/else timeseries are accessed only on demand, so number of elements fetched from this timeseries depends on condition.
+For example <code>cs_if('char:{1,0,1}', 'float4:{1.0,2.0,3.0}', 'float4:{0.1,0.2,0.3}') = 'float4:{1.0,0.1,2.0}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_filter(cond timeseries, input timeseries) returns timeseries</code></td>
+<td>Leaves only those elements from timeseries <code>input</code> for which condition <code>cond</code> is true.
+For example <code>cs_filter('char:{1,0,1}', 'float4:{1.0,2.0,3.0}') = 'float4:{1.0,3.0}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_filter_pos(cond timeseries) returns timeseries</code></td>
+<td>Returns positions of timeseries elements for which condition <code>cond</code> is true.
+For example <code>cs_filter_pos('char:{1,0,1}') = 'int8:{0,2}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_unique(timeseries) returns timeseries</code></td>
+<td>Removes subsequent duplicate values. To eliminate all duplicates in timeseries it should be sorted prior applying <code>cs_unique</code>. For example <code>cs_unique('int4:{1,1,2,2,2,1,3}') = 'int4:{1,2,1,3}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_reverse(timeseries) returns timeseries</code></td>
+<td>Reverses order of timeseries elements .For example <code>cs_reverse('int4:{1,2,3}') = 'int4:{3,2,1}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_diff(input timeseries) returns timeseries</code></td>
+<td>Calculates difference between pairs of subsequent timeseries elements: <code>result[0] = input[0], result[i] = input[i] - input[i-1]</code>. For example <code>cs_diff('int8:{1,3,2,5}) = 'int8:{1,2,-1,3}</code></td>
+</tr>
+<tr>
+<td><code>function cs_diff0(input timeseries) returns timeseries</code></td>
+<td>Calculates difference between pairs of subsequent timeseries elements: <code>result[0] = 0, result[i] = input[i] - input[i-1]</code>. For example <code>cs_diff0('int8:{1,3,2,5}) = 'int8:{0,2,-1,3}</code></td>
+</tr>
+<tr>
+<td><code>function cs_project(anyelement, positions timeseries default null, disable_caching book default false) returns setof record</code></td>
+<td>Transforms vertical representation (all timeseries elements or just elements on specified positions) to horizontal representation. This is more generic version of <code><b>TABLE</b>_project</code> which can be applied to arbitrary set of columns.
+But as far as result row is anonymous, it is not possible to unnest it using PostgreSQL <code>().*</code> clause.
+In PostgreSQL 9.3 it is possible to use <code>cs_project</code> in FROM list (<i>lateral join</i>) providing alias with 
+description of returned columns.
+Concerning optional <code>disable_caching</code> parameter please read section <a href="#projection">Projection issues</a>.
+</td>
+</tr>
+<tr>
+<td><code>function cs_project_agg(anyelement, positions timeseries default null, disable_caching book default false) returns setof cs_agg_result</code></td>
+<td>This is specialized version of <code>cs_project</code> for transposing result of <code>hash_agg_*</code> functions.
+They return two timeseries: the first one with values of aggregate and the second one with values of group-by key.
+<code>cs_project_agg</code> transforms this result to set of <code>cs_agg_result</code> rows, consisting of two columns: <code>(agg_val float8, group_by bytea)</code>. In case of combining several keys for group-by key, it can be splitted back into separate values using <code>cs_cut</code> or <code>cs_as</code> functions. 
+Concerning optional <code>disable_caching</code> parameter please read section <a href="#projection">Projection issues</a>.
+</td>
+</tr>
+<tr>
+<td><code>function cs_map(input timeseries, positions timeseries) returns timeseries</code></td>
+<td>Extracts from first timeseries elements with positions specified in the second timeseries. 
+Example of <code>cs_map</code> usage: <code>cs_map('float8:{3.14,0.1,-10}', 'int8:{1,2}')='float8:{-0.1,10}'</code></td>
+</tr>
+</table>
+</p>
+
+<h3><a name="grand">Grand aggregates</a></h3>
+<p>
+Functions calculating grand aggregates: aggregation of all timeseries elements.
+</p><p>
+Execution of these functions can be parallelized (except <code>cs_median</code>).
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_count(timeseries) returns bigint</code></td>
+<td>Counts number of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_empty(timeseries) returns bool</code></td>
+<td>Checks if timeseries contains no elements. This function is usually more efficient than <code>cs_count() %lt;%gt; 0</code> except cases when filter is applied to large timeseries and relatively small number of elements fits filter condition (unlike <code>cs_empty</code>, <code>cs_count</code> can be executed in parallel)</td>
+</tr>
+<tr>
+<td><code>function cs_approxdc(timeseries) returns bigint</code></td>
+<td>Approximates number of different timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_max(timeseries) returns float8</code></td>
+<td>Maximal value of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_min(timeseries) returns float8</code></td>
+<td>Minimum value of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_avg(timeseries) returns float8</code></td>
+<td>Average value of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_sum(timeseries) returns float8</code></td>
+<td>Sum of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_prd(timeseries) returns float8</code></td>
+<td>Product of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_var(timeseries) returns float8</code></td>
+<td>Variation of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_dev(timeseries) returns float8</code></td>
+<td>Standard deviation of timeseries elements.</td>
+</tr>
+<tr>
+<td><code>function cs_median(timeseries) returns float8</code></td>
+<td>Median element of timeseries.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="groupby">Group-by aggregates</a></h3>
+<p>
+Functions calculating aggregates for each group.
+Groups are identified by sequence of elements with the same value in <code>group-by</code> timeseries.
+It is not mandatory to sort this timeseries. But you should realize that sequences of the same value in different parts of the timeseries will form different groups. For example, there are four groups in timeseries <code>'{1, 1, 2, 1, 1, 1, 2, 2,}': ('{1, 1}', '{2}', '{1, 1, 1}', '{2, 2}')</code>. If you want to perform aggregation for all timeseries element with the same value, then use <code>cs_hash_*</code> functions instead.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_group_count(timeseries) returns timeseries</code></td>
+<td>Returns number of elements in each group (sequences of repeated values)</td>
+</tr>
+<tr>
+<td><code>function cs_group_apporaxdc(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Approximates number of distinct values in each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_max(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Maximal value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_min(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Minimal value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_avg(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Average value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_var(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Variation of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_dev(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Standard deviation of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_first(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>First element of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_last(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Last element of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="grid">Grid aggregates</a></h3>
+<p>
+Splitting timeseries into intervals intervaland calculating aggregate for each interval (grid cell).
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_grid_max(input timeseries, step integer) returns timeseries</code></td>
+<td>Maximal value of each interval. Parameter <code>step</code> specifies size of interval.</td>
+</tr>
+<tr>
+<td><code>function cs_grid_min(input timeseries, step integer) returns timeseries</code></td>
+<td>Minimal value of each interval. Parameter <code>step</code> specifies size of interval.</td>
+</tr>
+<tr>
+<td><code>function cs_grid_avg(input timeseries, step integer) returns timeseries</code></td>
+<td>Average value of each interval. Parameter <code>step</code> specifies size of interval.</td>
+</tr>
+<tr>
+<td><code>function cs_grid_sum(input timeseries, step integer) returns timeseries</code></td>
+<td>Sum of each interval. Parameter <code>step</code> specifies size of interval.</td>
+</tr>
+<tr>
+<td><code>function cs_grid_var(input timeseries, step integer) returns timeseries</code></td>
+<td>Variation of each interval. Parameter <code>step</code> specifies size of interval.</td>
+</tr>
+<tr>
+<td><code>function cs_grid_dev(input timeseries, step integer) returns timeseries</code></td>
+<td>Standard deviation of each interval. Parameter <code>step</code> specifies size of interval.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="window">Window (moving) aggregates</a></h3>
+<p>
+Aggregation is done for window - N subsequent elements of timeseries where N is window size. At each step window is moved at one position forward. So result timeseries has the same number of elements as input timeseries. First N-1 elements of result are calculated for windows smaller than N. You can use <code>cs_limit(cs_window_AGG(input, N), N-1)</code> to skip these elements.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_window_max(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Maximal value of each window. Parameter <code>window_size</code> specifies size of window.</td>
+</tr>
+<tr>
+<td><code>function cs_window_min(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Minimal value of each window. Parameter <code>window_size</code> specifies size of window.</td>
+</tr>
+<tr>
+<td><code>function cs_window_avg(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Average value of each window. Parameter <code>window_size</code> specifies size of window.</td>
+</tr>
+<tr>
+<td><code>function cs_window_sum(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Sum of each window. Parameter <code>window_size</code> specifies size of window.</td>
+</tr>
+<tr>
+<td><code>function cs_window_var(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Variation of each window. Parameter <code>window_size</code> specifies size of window.</td>
+</tr>
+<tr>
+<td><code>function cs_window_dev(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Standard deviation of each window. Parameter <code>window_size</code> specifies size of window.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="hash">Hash aggregates (group-by using hash function)</a></h3>
+</p><p>
+Aggregation with group-by. These function perform grouping and aggregation similar to SQL. All elements of <code>group_by</code> sequence with the same value forms single group. It is done using hash function, so <code>cs_hash_*</code> aggregates require additional memory for building hash table. These functions contain two out parameters: return two timeseries.
+The first one contains calculated aggregates. The second one contains corresponding group keys.
+</p><p>
+If it is necessary to perform grouping by more than one key, it is possible to use <code>cs_cat</code> (or <code>||</code> SQL operator) to concatenate several columns. Later it is possible to use <code>cs_cut</code> or <code>cs_as</code> functions to split concatenated value back into components.
+</p><p>
+Execution of these functions can be parallelized.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_hash_count(group_by timeseries, out count timeseries, out groups timeseries) returns record</code></td>
+<td>Counts number of elements having the same value. This function has two output parameters: <code>count</code> timeseries contains counters and <code>groups</code> timeseries contains corresponding group key values. So result of <code>cs_hash_count('float4:{1,3,1,4,2,2}')</code> will be <code>('int8:{2,2,1,1}', 'float4:{1,2,3,4}')</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_dup_count(input timeseries, group_by timeseries, out count timeseries, out groups timeseries, min_occurrences integer default 1) returns record</code></td>
+<td>Counts number of duplicates for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>count</code> timeseries contains counters and <code>groups</code> timeseries contains corresponding group key values. Parameter <code>min_occurrences</code> specifies minimal number of occurrences of element in each group. With default value 1 of <code>min_occurrences</code> this function calculates number of distinct values.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_max(input timeseries, group_by timeseries, out max timeseries, out groups timeseries) returns record</code></td>
+<td>Calculates maximal value for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>max</code> timeseries contains calculated maximums and <code>groups</code> timeseries contains corresponding group key values.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_min(input timeseries, group_by timeseries, out max timeseries, out groups timeseries) returns record</code></td>
+<td>Calculates minimal value for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>min</code> timeseries contains calculated minimums and <code>groups</code> timeseries contains corresponding group key values.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_avg(input timeseries, group_by timeseries, out avg timeseries, out groups timeseries) returns record</code></td>
+<td>Calculates average value for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>avg</code> timeseries contains calculated averages and <code>groups</code> timeseries contains corresponding group key values.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_sum(input timeseries, group_by timeseries, out avg timeseries, out groups timeseries) returns record</code></td>
+<td>Calculates sum of elements for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>sum</code> timeseries contains calculated sums and <code>groups</code> timeseries contains corresponding group key values.</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="cum">Cumulative aggregates</a></h3>
+<p>
+Aggregates calculated for all preceding elements of timeseries.
+Result timeseries has the same number of elements as input timeseries.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_cum_max(timeseries) returns float8</code></td>
+<td>Cumulative maximal value of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_cum_min(timeseries) returns timeseries</code></td>
+<td>Cumulative minimum value of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_cum_avg(timeseries) returns timeseries</code></td>
+<td>Cumulative average value of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_cum_sum(timeseries) returns timeseries</code></td>
+<td>Cumulative sum of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_prd(timeseries) returns timeseries</code></td>
+<td>Cumulative product of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_var(timeseries) returns timeseries</code></td>
+<td>Cumulative variation of timeseries elements</td>
+</tr>
+<tr>
+<td><code>function cs_dev(timeseries) returns timeseries</code></td>
+<td>Cumulative standard deviation of timeseries elements</td>
+</tr>
+</table>
+</p>
+
+<h3><a name="sort">Sort functions</a></h3>
+</p><p>
+Top functions find out top-N values of timeseries. N can not be larger than <code>imcs.tile_size</code> (default value 128).
+</p><p>
+Execution of <code>cs_top_*</code> functions can be parallelized. Please notice that calculation of TOP-n
+is much faster than full sort.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_top_max(timeseries, top integer) returns timeseries</code></td>
+<td>Returns <code>top</code> maximal elements in timeseries in descent order.
+For example <code>cs_top_max('float4:{1.1,0.1,2.2,0.2}', 2)='float4:{2.2,1.1}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_top_min(timeseries, top integer) returns timeseries</code></td>
+<td>Returns <code>top</code> minimum elements in timeseries in ascent order.
+For example <code>cs_top_min('float4:{1.1,0.1,2.2,0.2}', 2)='float4:{0.1,0.2}'</code></td>
+</tr>
+<tr>
+<tr>
+<td><code>function cs_top_max_pos(timeseries, top integer) returns timeseries</code></td>
+<td>Returns positions of <code>top</code> maximal elements in timeseries in descent order.
+For example <code>cs_top_max_pos'float4:{1.1,0.1,2.2,0.2}', 2)='int8:{2,0}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_top_min_pos(timeseries, top integer) returns timeseries</code></td>
+<td>Returns positions of <code>top</code> minimum elements in timeseries in ascent order.
+For example <code>cs_top_min_pos('float4:{1.1,0.1,2.2,0.2}', 2)='int8:{1,3}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_sort(timeseries, sort_order cs_sort_order default 'asc') returns timeseries</code></td>
+<td>Sorts specified timeseries of scalar element type.
+For example <code>cs_sort('float4:{1.1,0.1,2.2,0.2}')='float4:{0.1,0.2,1.1,2.2}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_sort_pos(timeseries, sort_order cs_sort_order default 'asc') returns timeseries</code></td>
+<td>Returns positions of timeseries scalar elements in specified order.
+For example <code>cs_sort_pos('float4:{1.1,0.1,2.2,0.2}')='int8:{1,3,0,2}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_rank(timeseries, sort_order cs_sort_order default 'asc') returns timeseries</code></td>
+<td>Returns rank of scalar timeseries elements.
+For example <code>cs_rank('float4:{1.1,0.1,2.2,0.2,0.1}')='int8:{4,1,5,3,1}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_dense_rank(timeseries, sort_order cs_sort_order default 'asc') returns timeseries</code></td>
+<td>Returns dense rank of scalar timeseries elements.
+For example <code>cs_rank('float4:{1.1,0.1,2.2,0.2,0.1}')='int8:{3,1,4,2,1}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_quantile(timeseries, q_num integer) returns timeseries</code></td>
+<td>Calculates q-quantiles for timeseries of scalar element type.
+The quantiles are the data values marking the boundaries between consecutive subsets.
+This functions returns timeseries with <code>q_num+1</code> values of the same type as input timeseries
+For example <code>cs_quantile('float4:{10,3,0,3,4,5,9,11,7,3,3}', 2)='float4:{0,4,11}'</code></td>
+</tr>
+</table>
+</p>
+
+<h3><a name="spec">Special functions</a></h3>
+<p>
+This group contains functions performing quite complex precessing of timeseries.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_histogram(input timeseries, min float8, max float8, n_intervals integer) returns timeseries</code></td>
+<td>Builds histogram for the input timeseries. Minimal (inclusive) and maximal (exclusive) values for input timeseries should be specified as well as number of interval (histogram columns). Values outside specified range <code>[min_value,max_value) are ignored. Number of intervals should not be greater than tile size. Execution of these functions can be parallelized.</td>
+</tr>
+<tr>
+<td><code>function cs_cross(input timeseries, first_cross_direction integer) returns timeseries</code></td>
+<td>Finds positions in input timeseries where it crosses zero, if <code>first_cross_direction</code> is positive then starts with first cross over, if negative then starts with cross below, if zero it doesn't matter (first cross can be over or below)
+For example <code>cs_cross('float4:{1,2,-1,0.5,0.6,0.0,0.1,0.3,-5}', 0)='int8:{2,3,7}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_extrema(input timeseries, first_extremum integer) returns timeseries</code></td>
+<td>Finds positions of extrema (local minimum and maximums) in input timeseries, if <code>first_extremum</code> is positive then starts with first local maximum, if negative starts with local minimum, if zero it doesn't matter.
+For example <code>cs_extrema('float4:{1,2,3,2,1,0,0,1,1,2,4,0}', 0)='int8:{2,6,10}'</code></td>
+</tr>
+<tr>
+<td><code>function cs_stretch(ts1 timeseries, ts2 timeseries, vals timeseries, filler float8 defaults 1.0) returns timeseries</code></td>
+<td>Stretches <code>vals</code> timeseries to the length of first timeseries. Repeats elements of <code>vals</code> timeseries while corresponding timestamp (timeseries <code>ts2</code>) is larger than timestamp from <code>ts1</code>. For exampe <code>cs_stretch('int4:{1,2,3,4,5}', 'int4:{2,4}', 'float4:{1.1,2.2}', 1.0) = 'float4:{1.1,2.2,2.2,1.0,1.0}'</code>. This function can be used to calculate split adjusted price. We need to revert timeseries of splits, calculate cumulative product, stretch and multiply it on price.</td>
+</tr>
+<tr>
+<td><code>function cs_stretch0(ts1 timeseries, ts2 timeseries, vals timeseries, filler float8 defaults 0.0) returns timeseries</code></td>
+<td>Injects missed elements in <code>vals</code> timeseries (associated with <code>ts2</code>) so that corresponding timestamps of <code>ts1</code> and <code>ts2</code> are matched. For example <code>cs_stretch0('int4:{1,2,3,5}', 'int4:{2,3,4}', 'float4:{1.1,1.2,1.3}', 0.0) = 'float4:{0.0,1.1,1.2,1.3,0.0}'</code>. This function may be useful if we need to perform operations with trading data for different symbols
+ and this data can contains some holes (no trading for particular symbol for this date)</td>
+</tr>
+<tr>
+<td><code>function cs_asof_join(ts1 timeseries, ts2 timeseries, vals timeseries) returns timeseries</code></td>
+<td>Gets values from third timeseries corresponding to the timestamp from <code>ts2</code> closest to the timestamp from <code>ts1</code>. For example <code>cs_asof_join('int4:{4,9}', 'int4:{1,3,6,10}', 'float4:{0.1,0.3,0.6,1.0}') = 'float4:{0.3,1.0}'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_asof_join_pos(ts1 timeseries, ts2 timeseries) returns timeseries</code></td>
+<td>Gets positions of elements in sorted timeseries <code>ts2</code> closest to the elements in sorted timeseries<code>ts1</code>. For example <code>cs_asof_join_pos('int4:{4,9}', 'int4:{1,3,6,10}') = 'int8:{1,3}'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_join(ts1 timeseries, ts2 timeseries, vals timeseries) returns timeseries</code></td>
+<td>Gets elements from <code>vals</code> timeseries which corresponds to elements of sorted timeseries <code>ts2</code> matching elements of sorted timeseries <code>ts1</code>. For example <code>cs_join_pos('int4:{0,2,3,8,10}', 'int4:{1,3,6,10}', 'float4:{0.1,0.3,0.6,1.0}') = 'int8:{0.3,1.0}'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_join_pos(ts1 timeseries, ts2 timeseries) returns timeseries</code></td>
+<td>Gets positions of elements in sorted timeseries <code>ts2</code> matching elements in sorted timeseries<code>ts1</code>. For example <code>cs_join_pos('int4:{0,2,3,8,10}', 'int4:{1,3,6,10}') = 'int8:{1,3}'</code>.</td>
+</tr>
+<tr>
+<td><code>function cs_cut(str bytea, format cstring) returns record</code></td>
+<td>Splits binary string into components. This function is reverse to <code>cs_cat</code> which may be needed to construct
+combined group-by key for aggregate functions. <code>format</code> string describes types of component. Type is specified by one letter followed by field length. Below is list of supported types:
+<table>
+<tr><th>Format specification</th><th>PostgreSQL type</th></tr>
+<tr><td>i1</th><td>"char"</td></tr>
+<tr><td>i2</th><td>int2</td></tr>
+<tr><td>i4</th><td>int4</td></tr>
+<tr><td>i8</th><td>int8</td></tr>
+<tr><td>f4</th><td>float4</td></tr>
+<tr><td>f8</th><td>float8</td></tr>
+<tr><td>d4</th><td>date</td></tr>
+<tr><td>t8</th><td>time</td></tr>
+<tr><td>T8</th><td>timestamp</td></tr>
+<tr><td>cN</th><td>char(N)</td></tr>
+</table>
+For example format string <code>'i4f4c10'</code> corresponds to a row with one integer, one float and one character component with length 10.</td>
+</tr>
+<tr>
+<td><code>function cs_as(str bytea, type_name cstring) returns record</code></td>
+<td>Yet another function splitting binary string into components. This function is reverse to <code>cs_cat</code> which may be needed to construct combined group-by key for aggregate functions. Parameter <code>type_name</code> specifies composite type which components will be fetched from the input string. Below is example of using this function:
+<pre>
+create type char16 as (body char(16));
+select agg_val,cs_as(group_by,'char16') from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+</pre>
+In this example group-by consists of just one key of <code>char(16)</code> type.
+It is also possible to print it without <code>cs_as</code>:
+<pre>
+select agg_val,encode(btrim(group_by, E'\\000'::bytea), 'escape') from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+</pre>
+Please notice that <code>cs_as</code> functions returns type <code>record</code> and PostgreSQL doesn't allow to convert it to composite type.
+So you can not write:
+<pre>
+select agg_val,cs_as(group_by,'char16')::char16 from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+</pre>
+And as far as PostgreSQL has no information about columns, you can not use <code>(cs_as(...)).*</code> clause to extract columns of the row.
+But you can create function returning proper type and bind it to <code>cs_as</code> C implementation:
+<pre>
+create function to_char16(body bytea, type_name cstring default 'char16') returns char16 as '$libdir/imcs', 'cs_as' language C stable strict;
+select agg_val,(to_char16(group_by)).* from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+</pre>
+But please be careful: nobody will check that this function really returns declared type.
+</td>
+</tr>
+</table>
+</p>
+
+<h2><a name="operators">Operators</a></h2>
+<p>
+IMCS provides standard SQL operators for <code>timeseries</code> type plus some specific operators for timeseries processing.
+The following table contains mapping between operators and corresponding timeseries functions:
+</p>
+<p>
+<table border>
+<tr><th>Operator</th><th>IMCS function</th><th>Description</th></tr>
+<tr><td>a + b</td><td>cs_add</td><td>Adds elements of two timeseries</td></tr>
+<tr><td>a - b</td><td>cs_sub</td><td>Subtracts elements of two timeseries</td></tr>
+<tr><td>a * b</td><td>cs_mul</td><td>Multiplies elements of two timeseries</td></tr>
+<tr><td>a / b</td><td>cs_div</td><td>Divides elements of two timeseries</td></tr>
+<tr><td>a % b</td><td>cs_mod</td><td>Divides by modulo elements of two timeseries</td></tr>
+<tr><td>a ^ b</td><td>cs_pow</td><td>Raises to power</td></tr>
+<tr><td>a ~ b</td><td>cs_corr</td><td>Correlation of two timeseries</td></tr>
+<tr><td>a ? b</td><td>cs_filter</td><td>Filters elements of right timeseries according to condition specified by left timeseries</td></tr>
+<tr><td>a ?</td><td>cs_filter_pos</td><td>Returns position of elements for which condition is true</td></tr>
+<tr><td>a +* b</td><td>cs_wsum</td><td>Weighted sum of two timeseries</td></tr>
+<tr><td>a // b</td><td>cs_wavg</td><td>Weighted average of two timeseries, for example <code>Volume//Price</code> is volume weighted average price (VWAP)</td></tr>
+<tr><td>a &amp; b</td><td>cs_and</td><td>Bitwise AND (can be also used for boolean timeseries)</td></tr>
+<tr><td>a | b</td><td>cs_or</td><td>Bitwise OR (can be also used for boolean timeseries)</td></tr>
+<tr><td>a # b</td><td>cs_xor</td><td>Bitwise XOR (can be also used for boolean timeseries)</td></tr>
+<tr><td>a || b</td><td>cs_cat</td><td>Concatenates elements of two timeseries</td></tr>
+<tr><td>a = b</td><td>cs_eq</td><td>Checks if element if left timeseries is equal to element of right timeseries</td></tr>
+<tr><td>str ~~ pattern</td><td>cs_ilike</td><td>Finds elements of character timeseries matching specified pattern</td></tr>
+<tr><td>a &lt&gt; b</td><td>cs_ne</td><td>Checks if element if left timeseries is not equal to element of right timeseries</td></tr>
+<tr><td>a &lt; b</td><td>cs_lt</td><td>Checks if element if left timeseries is less than element of right timeseries</td></tr>
+<tr><td>a &lt;= b</td><td>cs_le</td><td>Checks if element if left timeseries is less than or equal to element of right timeseries</td></tr>
+<tr><td>a &gt; b</td><td>cs_gt</td><td>Checks if element if left timeseries is greater than element of right timeseries</td></tr>
+<tr><td>a &gt;= b</td><td>cs_ge</td><td>Checks if element if left timeseries is greater than or equal to element of right timeseries</td></tr>
+<tr><td>a -&gt; b</td><td>cs_asof_join_pos</td><td>Finds positions of elements in second sorted timeseries closest to the elements of first sorted timeseries</td></tr>
+<tr><td>a &lt;-&gt; b</td><td>cs_join_pos</td><td>Finds positions of elements in second sorted timeseries equal to the elements of first sorted timeseries</td></tr>
+<tr><td>a &lt;&lt; n</td><td>cs_cut_head</td><td>Skips first <code>n</code> elements of timeseries</td></tr>
+<tr><td>a &gt;&gt; n</td><td>cs_cut_tail</td><td>Skips last <code>n</code> elements of timeseries</td></tr>
+<tr><td>-a</td><td>cs_neg</td><td>Negates elements of timeseries</td></tr>
+<tr><td>!a</td><td>cs_not</td><td>Logical NOT</td></tr>
+<tr><td>~a</td><td>cs_bit_not</td><td>Bitwise NOT</td></tr>
+<tr><td>@a</td><td>cs_abs</td><td>Absolute values of timeseries elements</td></tr>
+</table>
+</p><p>
+Please notice that operators <code>&amp; | #</code> in PostgreSQL have precedence different from precedence of standard SQL <code>AND OR</code> operators. Please always use parenthesis.
+</p><p>
+Binary operators accept not only <i>timeseries</i> <b>OP</b> <i>timeseries</i> operands.
+Also it is possible to pass as right parameter one of 
+<ol>
+<li>Numeric constant (integer or floating point): <code>select Price*2.0 from Quote_get()</code></li>
+<li>Date, time or timestamp: <code>select Day=date('11-Nov-2013') from Quote_get()</code></li>
+<li>String literal (1): <code>select Close*'{2.0,2.1,2.2}'::text from Quote_get('11-Nov-2013', '13-Nov-2013')</code></li>
+<li>String literal (2): <code>select Close*'float4:{2.0,2.1,2.2}' from Quote_get('11-Nov-2013', '13-Nov-2013')</code></li>
+</ol>
+</p>
+<p>
+In first two cases constant timeseries (timeseries containing the same value) is implicitly created for right operand using <code>cs_const</code> function.
+In third case timeseries is created from string literal using <code>cs_parse</code> function.
+And in the last case conversion to <code>timeseries</code> type is implicitly made by PostgreSQL using input function of 
+this type.
+</p>
+
+<h2><a name="projection">Projection issues</a></h2>
+<p>
+There are several functions in IMCS API returning a row or a set of rows: <code>cs_hash_*, cs_project*, cs_as</code>.
+PostgreSQL provides two ways of decomposition of compound type into columns:
+<ol>
+<li><code>select (foo()).*</code></li>
+<li><code>select * from foo()</code></li>
+</ol>
+Unfortunately case 1) is implemented very inefficiently: a function is called as many times as there are columns in a returned row
+(see <a href="http://stackoverflow.com/questions/18369778/how-to-avoid-multiple-function-evals-with-the-func-syntax-in-an-sql-query">discussion of this question at StackOverlow</a>).
+For example <code>cs_hash_sum</code> function has two output parameters: <code>sum</code> and <code>groups</code>.
+Output parameters are actually returned in PostgreSQL as anonymous row. So if we write:
+<pre>
+    select (cs_project_agg(cs_hash_sum(Close,Day%7))).* from Quote_get('IBM');
+</pre>
+then PostgreSQL will call function <code>cs_hash_sum</code> twice. It means that aggregation will be performed twice: 
+we will have to do double amount of work. I failed to find a way to make PostgreSQL to avoid these redundant calls.
+But this problem is solvable.
+</p><p>
+First of all it is possible to avoid <code>(...).*</code> construction and access composite type attributes explicitly:
+<pre>
+    select (q.p).agg_val,(q.p).group_by from (select cs_project_agg(cs_hash_sum(Close,Day % 7)) p from Quote_get('IBM')) q;
+</pre>
+In this case PostgreSQL generally will not perform redundant calls. To guarantee that multiple evaluation won't be performed you can use the OFFSET 0 hack or abuse PostgreSQL's failure to optimise across CTE boundaries:
+<pre>
+    select (q.p).agg_val,(q.p).group_by from (select cs_project_agg(cs_hash_sum(Close,Day % 7)) p from Quote_get('IBM') <b>offset 0</b>) q;
+</pre>
+But IMCS also tries to provide workaround for <code>(cs_project(...)).*</code> construction: <code>cs_project</code> and <code>cs_project_agg</code> functions can cache their results, avoiding redundant calculations. Unfortunately there are some 
+restrictions. For example it is not possible to use <code>cs_project</code> more than once in one query. You can disable such caching for the particular invocation by setting 
+<code>disable_caching</code> optional parameter to <code>false</code>. Or completely disable caching by setting <code>imcs.project_caching</code> configuration parameter to true.
+</p><p>
+And concerning case 2) calling function in FROM list: it is possible if function doesn't depend on other data sources at the same query layer.
+For example in IMCS <code>cs_hash_sum</code> accepts timeseries arguments which are provided by <code>Quote_get</code>.
+So we can write:
+<pre>
+    select (p).* from Quote_get('IBM') q,cs_project_agg(cs_hash_sum(q.Close,q.Day%7)) p;
+</pre>
+But it works only in PostgreSQL 9.3 which supports <i>lateral joins</i>.
+A <i>lateral join</i> enables a subquery in the FROM part of a SELECT to reference columns from preceding items in the FROM list. 
+Also function calls in PostgreSQL 9.3 can now directly reference columns from preceding FROM items, even without the LATERAL keyword.
+This is why query above correctly works with PostgreSQL 9.3 and higher (function is called only once) and generates
+<code>function expression in FROM cannot refer to other relations of same query level</code> error in previous PostgreSQL versions.
+</p><p>
+Also using projection function in FROM list allows to specify alias and describe columns:
+<pre>
+    select (s).* from Quote_get('IBM') q,cs_project(cs_hash_sum(q.Close,q.Day%7)) s(sum float8,group_by integer);
+</pre>
+<p></p>
+Conclusion:
+<ol>
+<li>Avoid using of <code>(cs_hash_AGG(...)).*</code> construction to eliminate redundant calculations.</li>
+<li>Better use IMCS with PostgreSQL 9.3 and build queries using lateral joins.</li>
+</ol>
+</p>
+
+<h2><a name="impletemtation">Implementation details</a></h2>
+<p>
+Timeseries are stored in shared memory as B-Tree pages. This B-Tree provides fast access to timeseries element by position 
+(for all types) or by value (only for timestamp). There is separate B-Tree for each timeseries. PostgreSQL hash is used to locate
+timeseries by identifier. Hash key includes name of the source table, name of the corresponding field and optionally identifier of timeseries. For example for <code>Quote</code> table identifier of timeseries may be <code>'quote-close-IBM'</code>.
+Size of B-Tree pages is determined by <code>"imcs.page_size"</code> configuration parameter. Default value is 4kb.
+</p><p>
+IMCS uses RW (read-write) lock to synchronize access to columnar store. It means that multiple read-only queries can be performed  concurrently, 
+but adding or removing timeseries elements is possible only in exclusive mode. Lock is set when timeseries is accessed first time. If <code>imcs.serializable</code> configuration parameter is true (default), then lock is hold till the end of transaction. Such locking policy provides serializable isolation level for timeseries.
+If <code>imcs.serializable</code> is false, then lock is released at the end of query execution. It corresponds to "read committed" isolation level.
+</p><p>
+Right now IMCS doesn't  provide any compression of timeseries elements. It can be done in the future.
+But IMCS is first of all oriented on financial data (trading systems). And here duplicates are not so often.
+Even if value of some stock option is quite durable (variation about few cents per year), small fluctuations of this option during a days normally occur. Our experiments show that RLE encoding cause only degrade of performance in case
+of standard queries on securities data. 
+</p><p>
+Most of <code>cs_*</code> functions are not actually performing any executions. Instead of it, they are constructing pipe of operators (or expression tree). A unit of exchanging data between operators is a tile (vector). So operators are performing vector operations to reduce interpretation cost. Size of a tile should be large enough to minimize overhead of organizing work of the pipe.
+But it should fit in L1 CPU cache to keep processing speed high. Default size of the tile is 128. 
+</p><p>
+IMCS is able to execute some operations in parallel. Now it is done for grand and hash aggregates, top-N functions (all operators where size of output is smaller than size of input). IMCS maintains pool of threads. Number of threads in the pool can be specified using <code>"imcs.n_threads"</code> configuration parameter. By default (zero value of this parameters), number of threads is detected automatically based on number of CPUs (cores) in the system.
+IMCS clones expression subtree and splits into segments timeseries accessed in the leave nodes of this tree (timeseries stored in columnar store). Number of segments corresponds to number of threads. So each thread is processing its own part of timeseries.
+Then results are merged using operator-specific merge function. Merge requires synchronization, so only one thread can perform merge at each moment of time.
+</p><p>
+Please notice that PostgreSQL is not able to parallelize execution of SQL query. Certainly it is possible to manually split query into several subqueries and execute them concurrently. But it is not trivial and not convenient. The fact that IMCS can overcome this limitation is very important for OLAP queries.
+</p>
+
+<h2><a name="installation">Installation and tuning</a></h2>
+<p>
+As far as IMCS is using PostgreSQL shared memory, it should be loaded via shared_preload_libraries.
+Please add <code>'$libdir/imcs'</code> to <code>shared_preload_libraries</code> in <code>postgresql.conf</code> file:
+
+<pre>
+    shared_preload_libraries = '$libdir/imcs'		# (change requires restart)
+</pre>
+
+Size of shared memory used by IMCS can be specified using <code>imcs.shmem_size</code> parameter.
+At most systems maximal size of System V shared memory is limited by quite small constant. So you may also need to alter system 
+configuration (please refer to OS manual about how to do it). PostgreSQL 9.3 uses <code>mmap</code> instead of  System V shared memory, 
+so there should be no problem with system quotas. But there is yet another limitation in Linux: it is not able to create shared memory segment larger 
+than 256Gb with standard 4Kb pages. And now servers with 1Tb memory is not something very exotic. To utilize all available memory in this case it is possible to create multiple shared memory segments. But PostgreSQL is not able to do it. Another solution is to increase page size. Linux supports
+ <a href="https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt">huge pages</a>. Unfortunately PostgreSQL still doesn't provide any way of using huge pages: you need to patch PostgreSQL source: add <code>MAP_HUGETLB</code> to <code>PG_MMAP_FLAGS</code> define in sysv_shmem.c:
+<pre>
+    #define PG_MMAP_FLAGS			(MAP_HUGETLB|MAP_SHARED|MAP_ANONYMOUS|MAP_HASSEMAPHORE)
+</pre>
+IMCS distributive contains smarter patch <code>sysv_shmem.patch</code> for PostgreSQL 9.3.1 which sets MAP_HUGETLB flag only if size of shared memory segment is larger than 256Gb and only if MAP_HUGETLB is defined (since Linux 2.6.32).
+</p><p>
+Below is list of all IMCS configuration parameters:
+</p>
+<p>
+<table border>
+<tr><th>Parameter name</th><th>Description</th><th>Default value</th><th>Recommendations</th></tr>
+<tr><td><code>imcs.shmem_size</code></td><td>Size of shared memory (Mb) used by columnar store.</td><td>8*1024 (8Gb)</td><td>Make it large enough to fit all data requiring vertical representation. It can not be increased without restart of the server.</td></tr>
+<tr><td><code>imcs.n_timeseries</code></td><td>Estimation for number of timeseries</td><td>10000</td><td>This value is needed for PostgreSQL hash implementation. Too small value may cause large number of collisions.</td></tr>
+<tr><td><code>imcs.n_threads</code></td><td>Number of threads in thread pool for concurrent execution of a query</td><td>0 - autodetect number of CPUs</td><td>Usually number of threads should be equal to number of physical execution units in the system. Please notice that in case of using hyperthreading number of reported CPUs is twice large than real number of cores. Set this parameter to 1 to disable concurrent execution</td></tr>
+<tr><td><code>imcs.page_size</code></td><td>Size of B-Tree page size in bytes</td><td>4096</td><td>As far as B-Tree is stored in memory, it is not so critical to use large pages. But small page may increase per-element storage overhead.</td></tr>
+<tr><td><code>imcs.tile_size</code></td><td>Size of tile or vector that is used to organize vector operations</td><td>128</td><td>The larger tile is, the less influence of interpretation overhead. But best performance can be achieved only if tile fits in CPU L1 cache. Please notice that some operators have two or more parameters, so more than one tile can be calculated at each stage of operator's pipe processing. Also memory may be needed for other purposes, so to reduce probability of cache misses, keep this value reasonably small.</td></tr>
+<tr><td><code>imcs.substitute_nulls</code></td><td>Substitutes NULLs with 0 while loading data in columnar store</td><td>false</td><td>By default attempt to insert NULL value will cause an error. When value of this option is set to <code>true</code>, IMCS doesn't report an error and stores zero instead of NULL.</td></tr>
+<tr><td><code>imcs.autoload</code></td><td>Automatically loads data in columnar store when it is accessed first time by any query</td><td>true</td><td>Loading data from large table can take substantial amount of time and so increase execution time of the query initiated this load. It can confuse an user which expects this query to complete very fast. In such case explicit load of data after server restart can be more desirable (it can be completed before receiving any user's query).</td></tr>
+<tr><td><code>imcs.serializable</code></td><td>Hold lock till the end of transaction</td><td>true</td><td>Such locking policy provides serializable isolation level for columnar store. If this parameter is set to false, then lock is released at the end of query execution. It corresponds to "read committed" isolation level.</td></tr>
+<tr><td><code>imcs.trace</code></td><td>Trace IMCS commands</td><td>false</td><td>Sends information about executed IMCS command to client and PostgreSQL server log (<code>NOTICE</code> log level).</td></tr>
+<tr><td><code>imcs.output_string_limit</code></td><td>Limit for length of timeseries string representation</td><td>1024</td><td>Trying to print result of query returning larger timeseries can cause memory overflow or at least produce a lot of screens of hardly readable text. Setting this limit allows to restrict size of printed timeseries: only part of timeseries elements will be printed and then "..." indicates that timeseries was truncated.
+Setting this parameter to 0 disables this limitation.</td></tr>
+<tr><td><code>imcs.project_caching</code></td><td>Cache <code>cs_project</code> results to avoid redundant calculations in <code>(cs_project(...)).*</code> expression.</td><td>true</td><td>Caching can cause incorrect behavior in some cases: when <code>cs_project</code> is used twice in the same query. In this case disable it: everything should work correctly, may be only with some performance penalty in case of using <code>(cs_project(...)).*</code> construction. Also it is possible to disable caching for each particular <code>cs_project</code> invocation by assigning false to optional <code>disable_caching</code> parameter. Please read more in section <a href="#projection">Projection issues</a>.</td></tr>
+</table>
+</p><p>
+So steps of using IMCS extension are the following:
+<ol>
+<li>Change PostgreSQL configuration file <code>postgresql.conf</code> by adding IMCS to list of preloaded libraries and specifying maximal size of IMCS storage.</li>
+<li>Install IMCS extension (read PostgreSQL documentation about installation of extensions).</li>
+<li>Create extension using <code>create extension imcs</code> command (you need to have superuser permissions for it).</li>
+<li>Generate interface functions using <code>cs_create</code> function.</li>
+<li>If data is already present in the database, load it in columnar store using <code><b>TABLE</b>_load()</code> function.</li>
+<li>You should either enable autoload (<code>imcs.autoload</code> configuration property), either manually call <code><b>TABLE</b>_load()</code>  each time you restart the server.</li>
+</ol>
+</p>
+
+<h2><a name="performance">Performance comparison</a></h2>
+<p>
+Consider the following definition of <code>Quote</code> table:
+
+<pre>
+create table Quote (Symbol char(10), Day date, Open real, High real, Low real, Close real, Volume integer);
+</pre>
+
+Let's populate it with NYSE data for ten years (about 6 million records).
+
+<pre>
+\copy Quote from 'NYSE_2003-2013.csv' with csv header;
+</pre>
+
+This load is completed at my system in 2.5 minutes.
+Now lets create vertical representation of this table:
+
+<pre>
+create extension imcs;
+select cs_create('Quote', 'Day', 'Symbol');
+select Quote_load(); 
+</pre>
+
+Loading data in columnar store takes at my computer just 15 seconds.
+If we call <code>cs_create</code> prior to loading data in Quote table, then 
+time of importing data from CSV file will increase from 2.5 minutes to 6.5 minutes. It is 
+because of using trigger to propagate inserts to in-memory columnar store.
+</p><p>
+Now let's calculate volume-weighted  price for IBM for the period from 2010 till 2013:
+
+<pre>
+select cs_wavg(Volume, Close) as VWAP from Quote_get('IBM', date('01-Jan-2010'), date('01-Jan-2013'));
+</pre>
+
+Query execution time is 10 milliseconds.
+Now do the same thing with standard SQL:
+
+<pre>
+select sum(Close*Volume)/sum(Volume) from Quote where Symbol='IBM' and Day between date('01-Jan-2010') and date('01-Jan-2013');
+</pre>
+It takes 750 milliseconds.
+</p><p>
+Now let calculate VWAP for all symbols.
+To simplify it we will first create table containing information about all symbols.
+Actually this data is usually available and contains much more information than just symbol name.
+But here we need just symbol name:
+
+<pre>
+create table Securities (Symbol char(10));
+insert into Securities select distinct Symbol from Quote;
+create view SecurityQuotes as select (Quote_get(Symbol)).* from Securities;
+</pre>
+
+Now we are ready to execute query:
+
+<pre>
+select Symbol,cs_sum(Close*Volume) / cs_sum(Volume) as VWAP from SecurityQuotes;
+</pre>
+
+Time is about 500 milliseconds. Now do the same using standard SQL:
+
+<pre>
+select Symbol,sum(Close*Volume)/sum(Volume) as VWAP from Quote group by Symbol;
+</pre>
+
+Result is returned after 2243 milliseconds.
+</p><p>
+Now let's test filter queries with projection back to horizontal representation.
+The following query finds all dates for 'ABB' symbol when close price was more than 1% large than open price for the particular quarter:
+
+<pre>
+select (Quote_project(abb.*,cs_filter_pos(Close>Open*1.01))).* from Quote_get('ABB', '01-Jan-2010', '31-Mar-2010') abb;
+</pre>
+
+It returns 14 results in 12 milliseconds. Now do the same using SQL:
+
+<pre>
+select * from Quote where Symbol='ABB' and Day between date('01-Jan-2010') and date('31-Mar-2010') and Close>Open*1.01;
+</pre>
+
+The same result in 640 milliseconds.
+</p><p>
+Actually timeseries in this example are not long enough: size of timeseries for each symbol is about 2608 elements.
+Let's now investigate use case with single large timeseries:
+
+<pre>
+select Quote_drop();
+select cs_create('Quote', 'Day');
+select Quote_load();
+</pre>
+
+Load is completed twice faster than in case of Quote table: 7.5 seconds.
+Now let's execute VWAP for this timeseries:
+
+<pre>
+select Volume//Close as VWAP from Quote_get();
+</pre>
+
+Query is completed at my system in 10 milliseconds.
+The same query using SQL:
+
+<pre>
+select sum(Close*Volume)/sum(Volume) as VWAP from Quote;
+</pre>
+
+One second (one thousand milliseconds). So IMCS query is 100 times faster.
+</p><p>
+Now perform filter query for large timeseries:
+
+<pre>
+select cs_count((Close>Open*1.1)?) from Quote_get();
+select count(*) from Quote where Close>Open*1.1;
+</pre>
+
+Ratio of the query execution times is once again 100: 6.274 msec vs. 768.251 msec.
+<p></p>
+Now consider real use case wth one timeseries and large enough records. There are about 10 million records with ~40 columns.
+Database size is about 5Gb. Queries perform groupping by various combinations of fields and cacluate aggregates for some characterestics.
+For example:
+<pre>
+select trader,desk,office,sum(score*volenquired)/sum(volenquired) from DbItem group by trader,desk,office;
+</pre>
+Execution of this query takes 320 seconds. IMCS analog:
+<pre>
+select agg_val,cs_cut(group_by,'c22c30c10') from 
+    (select (cs_project_agg(ss1.*)).* from 
+          (select (s1).sum/(s2).sum,(s1).groups from DbItem_get() q, 
+               cs_hash_sum(q.score*q.volenquired, q.trader||q.desk||q.office) s1,  
+                cs_hash_sum(q.volenquired, q.trader||q.desk||q.office) s2) ss1) ss2;
+</pre>
+takes ... 144 milliseconds. The ratio is more than 2 thousands times. But this is the result with default PostgreSQL parameters (only "shared_buffers" was increased to hold all database in memory). If we also increase "work_mem" from default 1Mb to 1Gb, then times of the query is reduced to 33 seconds for first execution and 7 seconds for subsequent executions.
+<p></p>
+So summarizing these results: IMCS provides about 5-10 times increase of performance for relatively small timeseries (thousands elements)
+and 100 times faster speed for large timeseries (millions elements) on standard desktop with quad core processor. For SMP server with larger number of cores this ratio is expected to be even higher.
+</p>
+
+<h2><a name="license">License</a></h2>
+
+<p>
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the Software), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+</p><p>
+<b>
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR OF THIS SOFTWARE BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+</b>
+</p><p>
+Please send any feedbacks, complaints, bug reports, change requests to the author <a href="mailto:knizhnik@garret.ru">Konstantin Knizhnik</a>. Latest version of this software can be obtained from the site <a href="http://www.garret.ru">http://www.garret.ru</a>.
+
+</body>
+</html>

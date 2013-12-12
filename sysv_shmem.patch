@@ -1,0 +1,39 @@
+--- src/backend/port/sysv_shmem.c.orig	2013-11-19 16:45:58.825487864 +0400
++++ src/backend/port/sysv_shmem.c	2013-11-19 16:45:44.485488312 +0400
+@@ -61,6 +61,8 @@
+ #define MAP_FAILED ((void *) -1)
+ #endif
+ 
++#define LINUX_SHMEM_LIMIT (256LL*1024*1024*1024)
++
+ 
+ unsigned long UsedShmemSegID = 0;
+ void	   *UsedShmemSegAddr = NULL;
+@@ -369,10 +371,17 @@
+ 	IpcMemoryId shmid;
+ 	struct stat statbuf;
+ 	Size		sysvsize = size;
++    int         mmapFlags = PG_MMAP_FLAGS;
+ 
+ 	/* Room for a header? */
+ 	Assert(size > MAXALIGN(sizeof(PGShmemHeader)));
+ 
++#ifdef MAP_HUGETLB
++    if (size > LINUX_SHMEM_LIMIT) { 
++        mmapFlags |= MAP_HUGETLB;
++    }
++#endif
++
+ 	/*
+ 	 * As of PostgreSQL 9.3, we normally allocate only a very small amount of
+ 	 * System V shared memory, and only for the purposes of providing an
+@@ -410,8 +419,7 @@
+ 		 * out to be false, we might need to add a run-time test here and do
+ 		 * this only if the running kernel supports it.
+ 		 */
+-		AnonymousShmem = mmap(NULL, size, PROT_READ | PROT_WRITE, PG_MMAP_FLAGS,
+-							  -1, 0);
++		AnonymousShmem = mmap(NULL, size, PROT_READ | PROT_WRITE, mmapFlags, -1, 0);
+ 		if (AnonymousShmem == MAP_FAILED)
+ 			ereport(FATAL,
+ 					(errmsg("could not map anonymous shared memory: %m"),

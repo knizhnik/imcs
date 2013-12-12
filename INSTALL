@@ -1,0 +1,6 @@
+ Install PostgreSQL from source code in PGSQLSRC and execute following commands:
+ 
+ % cd PGSQLSRC/contrib
+ % tar xzvf imcs.tgz
+ % cd imcs
+ % ./install.sh

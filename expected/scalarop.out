@@ -1,0 +1,24 @@
+select cs_wsum(Volume,Close) from Quote_get('IBM');
+     cs_wsum      
+------------------
+ 55480.0006866455
+(1 row)
+
+select cs_wavg(Volume,Close) from Quote_get('IBM');
+     cs_wavg      
+------------------
+ 36.9866668294271
+(1 row)
+
+select cs_corr(High,Low) from Quote_get('IBM');
+      cs_corr      
+-------------------
+ 0.999654253859527
+(1 row)
+
+select cs_cov(High,Low) from Quote_get('IBM');
+    cs_cov     
+---------------
+ 201.174396875
+(1 row)
+

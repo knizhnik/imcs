@@ -1,0 +1,282 @@
+select Open+Close from Quote_get('IBM');
+              ?column?              
+------------------------------------
+ float4:{20.7,40.4,60.7,80.7,100.7}
+(1 row)
+
+select Open-Close from Quote_get('IBM');
+                  ?column?                   
+---------------------------------------------
+ float4:{-0.3,0,0.299999,0.299999,-0.299999}
+(1 row)
+
+select Open*Close from Quote_get('IBM');
+                 ?column?                  
+-------------------------------------------
+ float4:{107.1,408.04,921.1,1628.1,2535.1}
+(1 row)
+
+select Open/Close from Quote_get('IBM');
+                   ?column?                   
+----------------------------------------------
+ float4:{0.971429,1,1.00993,1.00746,0.994059}
+(1 row)
+
+select Open%Close from Quote_get('IBM');
+                ?column?                
+----------------------------------------
+ float4:{10.2,0,0.299999,0.299999,50.2}
+(1 row)
+
+select Open^Close from Quote_get('IBM');
+                               ?column?                               
+----------------------------------------------------------------------
+ float8:{3.89316e+10,2.33399e+26,6.69663e+44,4.16575e+64,7.68313e+85}
+(1 row)
+
+select Close+*Volume from Quote_get('IBM');
+     ?column?     
+------------------
+ 55480.0006866455
+(1 row)
+
+select Volume//Close from Quote_get('IBM');
+     ?column?     
+------------------
+ 36.9866668294271
+(1 row)
+
+select Open~Close from Quote_get('IBM');
+     ?column?     
+------------------
+ 0.99982502975582
+(1 row)
+
+select (Open>Close)?Day from Quote_get('IBM');
+           ?column?           
+------------------------------
+ date:{11-04-2013,11-05-2013}
+(1 row)
+
+select (Open>Close)? from Quote_get('IBM');
+  ?column?  
+------------
+ int8:{2,3}
+(1 row)
+
+select -Open from Quote_get('IBM');
+                ?column?                
+----------------------------------------
+ float4:{-10.2,-20.2,-30.5,-40.5,-50.2}
+(1 row)
+
+select Open>Close from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{0,0,1,1,0}
+(1 row)
+
+select Open>=Close from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{0,1,1,1,0}
+(1 row)
+
+select Open<Close from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{1,0,0,0,1}
+(1 row)
+
+select Open<=Close from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{1,1,0,0,1}
+(1 row)
+
+select Open=Close from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{0,1,0,0,0}
+(1 row)
+
+select Open<>Close from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{1,0,1,1,1}
+(1 row)
+
+select (Open>=Close) & (High<>Low) from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{0,0,1,1,0}
+(1 row)
+
+select (Open>Close) | (High=Low) from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{0,1,1,1,0}
+(1 row)
+
+select (Open=Close) # (High=Low) from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{0,0,0,0,0}
+(1 row)
+
+select !(Open=Close) from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{1,0,1,1,1}
+(1 row)
+
+select ~Volume from Quote_get('IBM');
+            ?column?             
+---------------------------------
+ int4:{-101,-201,-301,-401,-501}
+(1 row)
+
+select Volume & 1 from Quote_get('IBM');
+     ?column?     
+------------------
+ int4:{0,0,0,0,0}
+(1 row)
+
+select Volume | 1 from Quote_get('IBM');
+          ?column?          
+----------------------------
+ int4:{101,201,301,401,501}
+(1 row)
+
+select Volume # -1 from Quote_get('IBM');
+            ?column?             
+---------------------------------
+ int4:{-101,-201,-301,-401,-501}
+(1 row)
+
+select @(Open-Close) from Quote_get('IBM');
+                 ?column?                  
+-------------------------------------------
+ float4:{0.3,0,0.299999,0.299999,0.299999}
+(1 row)
+
+select Day,Open||Close from Quote_get('IBM', date('01-Nov-2013'), date('03-Nov-2013'));
+             day              |     ?column?      
+------------------------------+-------------------
+ date:{11-01-2013,11-02-2013} | bpchar8:{33#A,AA}
+(1 row)
+
+select cs_maxof(Open,Close) from Quote_get('IBM');
+             cs_maxof              
+-----------------------------------
+ float4:{10.5,20.2,30.5,40.5,50.5}
+(1 row)
+
+select cs_minof(Open,Close) from Quote_get('IBM');
+             cs_minof              
+-----------------------------------
+ float4:{10.2,20.2,30.2,40.2,50.2}
+(1 row)
+
+select cs_norm(Close) from Quote_get('IBM');
+                        cs_norm                        
+-------------------------------------------------------
+ float8:{0.140355,0.270015,0.403686,0.537357,0.675038}
+(1 row)
+
+select Close*'{2.0,2.1,2.2}'::text from Quote_get('IBM', '1-Nov-2013', '4-Nov-2013');
+        ?column?         
+-------------------------
+ float4:{21,42.42,66.44}
+(1 row)
+
+select Close*'float4:{2.0,2.1,2.2}' from Quote_get('IBM', '1-Nov-2013', '4-Nov-2013');
+        ?column?         
+-------------------------
+ float4:{21,42.42,66.44}
+(1 row)
+
+select Day=date('1-Nov-2013') from Quote_get('IBM');
+     ?column?     
+------------------
+ char:{1,0,0,0,0}
+(1 row)
+
+select Volume*2 from Quote_get('ABB');
+     ?column?     
+------------------
+ int4:{1200,1400}
+(1 row)
+
+select cs_parse('{1,2,3,4}','int4')+cs_const(3.14,'float4');
+           ?column?           
+------------------------------
+ float4:{4.14,5.14,6.14,7.14}
+(1 row)
+
+select cs_parse('{1,2,3,4}','int4')+10;
+      ?column?      
+--------------------
+ int4:{11,12,13,14}
+(1 row)
+
+select cs_parse('{1,2,3,4}', 'int4')+'{10,20,30,40}'::text;
+      ?column?      
+--------------------
+ int4:{11,22,33,44}
+(1 row)
+
+select cs_parse('{11-Nov-2013,12-Nov-2013,30-Nov-2013}', 'date');
+                cs_parse                 
+-----------------------------------------
+ date:{11-11-2013,11-12-2013,11-30-2013}
+(1 row)
+
+select cs_concat('int4:{1,2,3}','int4:{4,5,6}');
+     cs_concat      
+--------------------
+ int4:{1,2,3,4,5,6}
+(1 row)
+
+select cs_parse('{1,2,3,4,5}', 'int4') << 1;
+    ?column?    
+----------------
+ int4:{2,3,4,5}
+(1 row)
+
+select cs_parse('{1,2,3,4,5}', 'int4') >> 2;
+   ?column?   
+--------------
+ int4:{1,2,3}
+(1 row)
+
+select cs_parse('{1,2,3,4,5}', 'int4') << 10;
+ ?column? 
+----------
+ int4:{}
+(1 row)
+
+select cs_parse('{1,2,3,4,5}', 'int4') >> 10;
+ ?column? 
+----------
+ int4:{}
+(1 row)
+
+select cs_like('bpchar8:{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', '%abc%');
+       cs_like        
+----------------------
+ char:{0,0,0,1,1,0,0}
+(1 row)
+
+select cs_ilike('bpchar8:{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', '%abc%');
+       cs_ilike       
+----------------------
+ char:{1,1,0,1,1,0,0}
+(1 row)
+
+select cs_parse('{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', 'bpchar', 8) ~~ '%abc%';
+       ?column?       
+----------------------
+ char:{1,1,0,1,1,0,0}
+(1 row)
+

@@ -1,0 +1,17 @@
+select Quote_count('IBM');
+select Quote_first('IBM');
+select Quote_last('IBM');
+select cs_sum(Volume) from Quote_get('IBM');
+select cs_max(Close) from Quote_get(array['ABB','IBM'], date('03-Nov-2013'), date('05-Nov-2013'));
+select cs_min(Close) from Quote_get(array['ABB','IBM']);
+select cs_count(Day) from Quote_get('IBM');
+select cs_approxdc(Volume/200) from Quote_get('IBM');
+select cs_avg(Volume) from Quote_get('IBM');
+select cs_prd(High - Low) from Quote_get('IBM');
+select cs_var(Open) from Quote_get('IBM');
+select cs_dev(Close) from Quote_get('IBM');
+select cs_sum('int4:{1,2,3}');
+select cs_sum(Close) from Quote_concat(array['ABB','IBM']);
+select cs_sum(cs_limit(cs_filter_pos(cs_const(1, 'char')), 0, 3));
+select cs_sum(cs_cum_sum(cs_limit(cs_const(1, 'int4'), 0, 3)));
+select cs_median(Close) from Quote_get(array['ABB','IBM']);

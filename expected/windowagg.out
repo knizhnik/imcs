@@ -1,0 +1,73 @@
+select cs_window_max(Close,3) from Quote_get('IBM');
+           cs_window_max           
+-----------------------------------
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(1 row)
+
+select cs_window_min(Close,3) from Quote_get('IBM');
+        cs_window_min        
+-----------------------------
+ float4:{0,0,10.5,20.2,30.2}
+(1 row)
+
+select cs_window_sum(Close,3) from Quote_get('IBM');
+           cs_window_sum            
+------------------------------------
+ float8:{10.5,30.7,60.9,90.6,120.9}
+(1 row)
+
+select cs_window_avg(Close,3) from Quote_get('IBM');
+            cs_window_avg            
+-------------------------------------
+ float8:{3.5,10.2333,20.3,30.2,40.3}
+(1 row)
+
+select cs_window_var(Close,3) from Quote_get('IBM');
+                 cs_window_var                 
+-----------------------------------------------
+ float8:{24.5,68.0422,64.6867,66.6667,68.6867}
+(1 row)
+
+select cs_window_dev(Close,3) from Quote_get('IBM');
+                  cs_window_dev                  
+-------------------------------------------------
+ float8:{4.94975,8.24877,8.0428,8.16497,8.28774}
+(1 row)
+
+--- Leave only elements corresponding to entire window
+select cs_limit(cs_window_max(Close,3), 2) from Quote_get('IBM');
+        cs_limit         
+-------------------------
+ float4:{30.2,40.2,50.5}
+(1 row)
+
+select cs_window_min(Close,3) << 2 from Quote_get('IBM');
+        ?column?         
+-------------------------
+ float4:{10.5,20.2,30.2}
+(1 row)
+
+select cs_window_sum(Close,3) << 2 from Quote_get('IBM');
+         ?column?         
+--------------------------
+ float8:{60.9,90.6,120.9}
+(1 row)
+
+select cs_window_avg(Close,3) << 2 from Quote_get('IBM');
+        ?column?         
+-------------------------
+ float8:{20.3,30.2,40.3}
+(1 row)
+
+select cs_window_var(Close,3) << 2 from Quote_get('IBM');
+             ?column?             
+----------------------------------
+ float8:{64.6867,66.6667,68.6867}
+(1 row)
+
+select cs_window_dev(Close,3) << 2 from Quote_get('IBM');
+            ?column?             
+---------------------------------
+ float8:{8.0428,8.16497,8.28774}
+(1 row)
+

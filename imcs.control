@@ -1,0 +1,5 @@
+# imcs extension
+comment = 'In-Memory Columnar Store'
+default_version = '1.1'
+module_pathname = '$libdir/imcs'
+relocatable = true

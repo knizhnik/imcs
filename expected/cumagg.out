@@ -1,0 +1,42 @@
+select cs_cum_max(Close) from Quote_get('IBM');
+            cs_cum_max             
+-----------------------------------
+ float4:{10.5,20.2,30.2,40.2,50.5}
+(1 row)
+
+select cs_cum_min(Close) from Quote_get('IBM');
+            cs_cum_min             
+-----------------------------------
+ float4:{10.5,10.5,10.5,10.5,10.5}
+(1 row)
+
+select cs_cum_sum(Close) from Quote_get('IBM');
+             cs_cum_sum              
+-------------------------------------
+ float8:{10.5,30.7,60.9,101.1,151.6}
+(1 row)
+
+select cs_cum_avg(Close) from Quote_get('IBM');
+              cs_cum_avg               
+---------------------------------------
+ float8:{10.5,15.35,20.3,25.275,30.32}
+(1 row)
+
+select cs_cum_prd(Close) from Quote_get('IBM');
+                   cs_cum_prd                   
+------------------------------------------------
+ float8:{10.5,212.1,6405.42,257498,1.30036e+07}
+(1 row)
+
+select cs_cum_var(Close) from Quote_get('IBM');
+                 cs_cum_var                 
+--------------------------------------------
+ float8:{0,23.5225,64.6867,122.767,200.022}
+(1 row)
+
+select cs_cum_dev(Close) from Quote_get('IBM');
+              cs_cum_dev              
+--------------------------------------
+ float8:{0,4.85,8.0428,11.08,14.1429}
+(1 row)
+

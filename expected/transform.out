@@ -1,0 +1,134 @@
+select cs_cast(Volume, 'float4') from Quote_get('IBM');
+           cs_cast            
+------------------------------
+ float4:{100,200,300,400,500}
+(1 row)
+
+select cs_iif(Volume>10, Open, Close) from Quote_get('IBM');
+              cs_iif               
+-----------------------------------
+ float4:{10.2,20.2,30.5,40.5,50.2}
+(1 row)
+
+select cs_if(Open<Close, cs_parse('{1,2,3,4,5}', 'char'), cs_parse('{10,20,30,40,50}', 'char')) from Quote_get('IBM');
+        cs_if        
+---------------------
+ char:{1,10,20,30,2}
+(1 row)
+
+select cs_thin(Close, 1, 2) from Quote_get('IBM');
+      cs_thin       
+--------------------
+ float4:{20.2,40.2}
+(1 row)
+
+select cs_limit(Close, 1, 3) from Quote_get('IBM');
+        cs_limit         
+-------------------------
+ float4:{20.2,30.2,40.2}
+(1 row)
+
+select cs_head(Close, 2) from Quote_get('IBM');
+      cs_head       
+--------------------
+ float4:{10.5,20.2}
+(1 row)
+
+select cs_tail(Close, 2) from Quote_get('IBM');
+      cs_tail       
+--------------------
+ float4:{40.2,50.5}
+(1 row)
+
+select cs_filter(Open > Close, Day) from Quote_get('IBM');
+          cs_filter           
+------------------------------
+ date:{11-04-2013,11-05-2013}
+(1 row)
+
+select Quote_project(q.*, cs_filter_pos(High > Low*1.01)) from Quote_get('IBM', null, date('05-Nov-2013')) q;
+            quote_project             
+--------------------------------------
+ (IBM,11-01-2013,10.2,11,10,10.5,100)
+ (IBM,11-04-2013,30.5,31,30,30.2,300)
+ (IBM,11-05-2013,40.5,41,40,40.2,400)
+(3 rows)
+
+select cs_unique(Volume/200) from Quote_get('IBM');
+  cs_unique   
+--------------
+ int4:{0,1,2}
+(1 row)
+
+select cs_reverse(Day) from Quote_get('IBM');
+                          cs_reverse                           
+---------------------------------------------------------------
+ date:{11-06-2013,11-05-2013,11-04-2013,11-02-2013,11-01-2013}
+(1 row)
+
+select cs_diff(Close) from Quote_get('IBM');
+           cs_diff            
+------------------------------
+ float4:{10.5,9.7,10,10,10.3}
+(1 row)
+
+select cs_project(q.*) from (select Day,cs_maxof(Open,Close) from Quote_get('IBM', date('02-Nov-2013'))) q;
+    cs_project     
+-------------------
+ (11-02-2013,20.2)
+ (11-04-2013,30.5)
+ (11-05-2013,40.5)
+ (11-06-2013,50.5)
+(4 rows)
+
+select cs_map(Volume, cs_top_max_pos(Close, 1)) from Quote_get('IBM');
+   cs_map   
+------------
+ int4:{500}
+(1 row)
+
+select cs_union(ibm.Day, abb.Day) from Quote_get('ABB') as abb, Quote_get('IBM') as ibm;
+                                 cs_union                                 
+--------------------------------------------------------------------------
+ date:{11-01-2013,11-02-2013,11-03-2013,11-04-2013,11-05-2013,11-06-2013}
+(1 row)
+
+create function mul2(x float) returns float as $$ begin return x*2; end; $$ language plpgsql strict immutable;
+select cs_call(Close, 'mul2'::regproc) from Quote_get('IBM');
+            cs_call             
+--------------------------------
+ float8:{21,40.4,60.4,80.4,101}
+(1 row)
+
+select cs_call(Close, 'sin'::regproc) from Quote_get('IBM');
+                        cs_call                         
+--------------------------------------------------------
+ float8:{-0.879696,0.975821,-0.937691,0.59776,0.232374}
+(1 row)
+
+select cs_to_int4_array('int4:{1,2,3,4,5}');
+ cs_to_int4_array 
+------------------
+ {1,2,3,4,5}
+(1 row)
+
+select cs_to_float4_array('int4:{1,2,3,4,5}');
+ERROR:  Type of sequence element int4 doesn't match with function cs_to_float4_array return type
+select cs_sum(cs_from_array(array[1,2,3,4,5]));
+ cs_sum 
+--------
+     15
+(1 row)
+
+select cs_to_bpchar_array('bpchar10:{Hello,World,!}');
+ cs_to_bpchar_array 
+--------------------
+ {Hello,World,!}
+(1 row)
+
+select cs_from_array(array['Hello','World','!'], 10);
+      cs_from_array       
+--------------------------
+ bpchar10:{Hello,World,!}
+(1 row)
+

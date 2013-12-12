@@ -1,0 +1,115 @@
+select cs_project(q.*) from (select cs_cast(Day, 'timestamp') from Quote_get('ABB')) q;
+          cs_project          
+------------------------------
+ ("Sun Nov 03 00:00:00 2013")
+ ("Wed Nov 06 00:00:00 2013")
+(2 rows)
+
+select cs_year(Day) from Quote_get('ABB');
+     cs_year      
+------------------
+ int4:{2013,2013}
+(1 row)
+
+select cs_month(Day) from Quote_get('ABB');
+   cs_month   
+--------------
+ int4:{11,11}
+(1 row)
+
+select cs_mday(Day) from Quote_get('ABB');
+  cs_mday   
+------------
+ int4:{3,6}
+(1 row)
+
+select cs_wday(Day) from Quote_get('ABB');
+  cs_wday   
+------------
+ int4:{0,3}
+(1 row)
+
+select cs_week(Day) from Quote_get('ABB');
+    cs_week     
+----------------
+ int4:{722,722}
+(1 row)
+
+select cs_quarter(Day) from Quote_get('ABB');
+ cs_quarter 
+------------
+ int4:{4,4}
+(1 row)
+
+select cs_year(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+     cs_year      
+------------------
+ int8:{2013,2013}
+(1 row)
+
+select cs_month(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+   cs_month   
+--------------
+ int8:{11,11}
+(1 row)
+
+select cs_mday(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+  cs_mday   
+------------
+ int8:{3,6}
+(1 row)
+
+select cs_wday(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+  cs_wday   
+------------
+ int8:{0,3}
+(1 row)
+
+select cs_week(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+    cs_week     
+----------------
+ int8:{722,722}
+(1 row)
+
+select cs_quarter(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+ cs_quarter 
+------------
+ int8:{4,4}
+(1 row)
+
+select cs_hour(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+  cs_hour   
+------------
+ int8:{0,0}
+(1 row)
+
+select cs_minute(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+ cs_minute  
+------------
+ int8:{0,0}
+(1 row)
+
+select cs_second(cs_cast(Day, 'timestamp')) from Quote_get('ABB');
+ cs_second  
+------------
+ int8:{0,0}
+(1 row)
+
+select cs_cast(cs_const(date '2013-10-11', 'date'), 'timestamp');
+                 cs_cast                  
+------------------------------------------
+ timestamp:{Fri Oct 11 00:00:00 2013,...}
+(1 row)
+
+select cs_const(timestamp '2013-10-11 10:00', 'timestamp');
+                 cs_const                 
+------------------------------------------
+ timestamp:{Fri Oct 11 10:00:00 2013,...}
+(1 row)
+
+select cs_cast(cs_const(timestamp '2013-10-11 10:00', 'timestamp'), 'date');
+        cs_cast        
+-----------------------
+ date:{10-11-2013,...}
+(1 row)
+
