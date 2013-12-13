@@ -696,6 +696,9 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
 	bool found;
     bool autoload = imcs_autoload;
 
+    if (id == NULL) { 
+        return NULL;
+    }
     if (imcs == NULL) { 
         ereport(ERROR, (errcode(ERRCODE_LOCK_NOT_AVAILABLE), errmsg("Colunmar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list")));
     }
