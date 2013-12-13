@@ -25,11 +25,11 @@ PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 else
-subdir = contrib/ts
+subdir = contrib/imcs
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
 distrib: clean
-	cd .. ; tar cvzf imcs-1.01.tar.gz imcs
+	cd .. ; tar --exclude=.svn -chvzf imcs-1.01.tar.gz imcs
