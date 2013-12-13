@@ -66,7 +66,7 @@ declare
     is_view bool;
 begin
     table_name:=lower(table_name);
-    select oid,relkind='v' into relid,is_view from pg_class where relname=table_name;
+    select oid,relkind='v' or relkind='m' into relid,is_view from pg_class where relname=table_name;
     if relid is null then 
          raise exception 'Table % is not found',table_name;
     end if;
