@@ -5,7 +5,7 @@
 
 create type timeseries;
 
-create type cs_elem_type as enum ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'float4', 'float8', 'bpchar');
+create type cs_elem_type as enum ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'float4', 'float8', 'bpchar', 'varchar');
 
 create type cs_sort_order as enum ('asc', 'desc');
 
@@ -22,6 +22,7 @@ begin
     when 'float4' then return 7;
     when 'float8' then return 8;
     when 'bpchar' then return 9;
+    when 'varchar' then return 9;
     end case;
 end;
 $$ language plpgsql;
@@ -282,6 +283,9 @@ begin
         attr_len := meta.attlen;
         if (attr_len < 0) then -- char(N) type 
             attr_len := meta.atttypmod - 4; -- atttypmod = N + VARHDRSZ
+            if (attr_len < 0) then 
+                raise exception 'Size is not specified for attribute %',meta.attname;              
+            end if;
         end if;
         if (meta.attname = timestamp_id) then
             is_timestamp := true;

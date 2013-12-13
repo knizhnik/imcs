@@ -3409,6 +3409,7 @@ static imcs_elem_typeid_t imcs_oid_to_typeid(int oid)
       case FLOAT8OID:
         return TID_double;
       case BPCHAROID:
+      case VARCHAROID:
       case TEXTOID:
         return TID_char;
       default:
@@ -3427,6 +3428,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     int table_name_len = strlen(table_name);
     int i, n_attrs;
     int64 n_records = 0;
+    Oid* attr_type_oid;
     imcs_elem_typeid_t* attr_type;
     int* attr_size;
     char** attr_name;
@@ -3454,7 +3456,8 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         elog(ERROR, "Select failed with status %d", rc);
     }
     n_attrs = SPI_processed;
-    attr_type = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
+    attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
+    attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
     attr_size = (int*)palloc(n_attrs*sizeof(int));
     attr_name = (char**)palloc(n_attrs*sizeof(char*));
     cs_id_prefix = (char**)palloc(n_attrs*sizeof(char*));
@@ -3467,10 +3470,14 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         HeapTuple spi_tuple = SPI_tuptable->vals[i];
         TupleDesc spi_tupdesc = SPI_tuptable->tupdesc;
         attr_name[i] = SPI_getvalue(spi_tuple, spi_tupdesc, 1);
-        attr_type[i] = imcs_oid_to_typeid(DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 2, &isnull)));
+        attr_type_oid[i] = DatumGetObjectId(SPI_getbinval(spi_tuple, spi_tupdesc, 2, &isnull));
+        attr_type[i] = imcs_oid_to_typeid(attr_type_oid[i]);
         attr_size[i] = DatumGetInt16(SPI_getbinval(spi_tuple, spi_tupdesc, 3, &isnull));
         if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
             attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
+            if (attr_size[i] < 0) {
+                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Size of attribute %s is not statically known", attr_name[i])))); 
+            }
         }
         cs_id_prefix_len[i] = table_name_len + strlen(attr_name[i]) + 1;
         cs_id_prefix[i] = (char*)palloc(cs_id_prefix_len[i]+1);
@@ -3516,8 +3523,10 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                 t = DatumGetTextP(values[id_attnum-1]);
                 id = (char*)VARDATA(t);
                 id_len = VARSIZE(t) - VARHDRSZ;
-                while (id_len != 0 && id[id_len-1] == ' ') { 
-                    id_len -= 1;
+                if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
+                    while (id_len != 0 && id[id_len-1] == ' ') { 
+                        id_len -= 1;
+                    }
                 }
             }
             for (i = 0; i < n_attrs; i++) {
@@ -3575,8 +3584,10 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                             t = DatumGetTextP(values[i]);
                             str = (char*)VARDATA(t);
                             len = VARSIZE(t) - VARHDRSZ;
-                            while (len != 0 && str[len-1] == ' ') { 
-                                len -= 1;
+                            if (attr_type_oid[i] == BPCHAROID) { 
+                                while (len != 0 && str[len-1] == ' ') { 
+                                    len -= 1;
+                                }
                             }
                             imcs_append_char(ts, str, len);
                         }
