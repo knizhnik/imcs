@@ -1,0 +1,87 @@
+In-Memory Columnar Store for PostgreSQL
+
+Columnar store manager stores data tables as sections of columns of data rather than as rows of data.
+Most of traditional DBMS-es  store data in rows ("horizontally"): all record attributes are stored together.
+Such approach allows to load the whole record using one read operation which usually leads to better performance for OLTP 
+queries (which access or update single records). But OLAP queries are mostly performing operations on individual columns, 
+for example calculating sum or average of some column. In this case vertical data representation, when data for each column 
+is stored independently, is more efficient. There are several DBMS-es in marker which are based on vertical model: Vertica, 
+SciDB,... Also most of mainstream commercial databases also provide OLAP extensions based on vertical storage:
+Blue Acceleration for DB2, Oracle Database In-Memory Option, Microsoft SQL server column store...
+
+Columnar store or vertical representation of data allows to achieve better performance in comparison with classical horizontal representation due to three factors:
+* Reducing size of fetched data: only columns involved in query are accessed.
+* Vector operations. Applying an operator to set of values (tile) makes it possible to minimize interpretation cost.
+Also SIMD instructions of modern processors accelerate execution of vector operations.
+* Compression of data. Certainly compression can also be used for all the records, but independent compression of each column can give much better results without significant extra CPU overhead. For example such simple compression algorithm like RLE 
+(run-length-encoding) allows not only to reduce used space, but also minimize number of performed operations.
+
+Modern servers usually have large amount of operating memory. Server with terabyte of RAM is not something very exotic now, 
+especially in financial world. So volumes of RAM which few years ago are available only at supercomputers can now met in configurations 
+of standard  servers... Certainly there are databases which requires petabyte and more memory, which still can not fit in RAM.
+But size of most databases is comparable with size of available RAM, which allows to keep all data in memory.
+It requires special algorithms for main-memory databases. For example it is possible to configure size of buffers (disk cache) 
+in traditional database to be large enough to fit the complete database in memory. But still algorithms oriented on work with disk 
+and optimized to reduce number of IO operations will be inefficient for in-memory data and have to do a lot of redundant work.
+
+IMCS provides columnar store for PostgreSQL.
+There is some specific of PostgreSQL which affects design of IMCS:
+
+* PostgreSQL is not able to parallelize execution of an individual query. It may be normal for OLTP where larger number of simples
+queries are usually executed concurrently. For for OLAP situation is quite opposite: there is small number of queries but execution of 
+each query may take significant amount of time.
+* PostgreSQL has multiversion concurrency control (MVCC). It allows to execute larger number of queries concurrently,
+but adds significant space and CPU overhead. As it was mentioned above, in case of OLAP we rarely need concurrent execution of multiple queries, but it is important to make execution of single complex query as fast as possible and so minimize locking overhead.
+* MVCC nature of PostgreSQL makes it difficult to work with large updatable objects (because MVCC requires cloning of an object 
+for each update). So it is not possible to efficiently work with columnar store data using standard PostgreSQL data model.
+
+Taken in account all above we decided to 
+* Store MVCC data in PostgreSQL shared memory (to allow access to it from all PostgreSQL server processes).
+* Provide own executor for columnar store functions allowing to use vector operations and execute them concurrently by multiple thread.
+* Do not touch standard PostgreSQL query executor and optimizer.
+
+So IMCS is implemented as standard PostgreSQL extension, providing set of special functions and operators for columnar data.
+Some of these functions and operators are analog of standard SQL operators. For example binary and unary arithmetic operators,
+comparisons, match string operations, sorting, aggregation, inserting/deleting data.
+But there are a number of sophisticated analytic operators, for example finding extremum, crosses with zero, building histogram, 
+calculating ranks, percentiles, ... IMCS provides extended set of aggregates which are required for financial application, 
+like calculation of split-adjusted price, volume-weighted average price, moving average... All this aggregates can be calculated in parallel, utilizing all available CPU cores.
+
+IMCS is first of all oriented on work with timeseries. Timeseries is sequence of usually small fixed size elements ordered by some 
+timestamp. Operations with timeseries rarely access some particular timeseries element, instead of it them operate either with whole 
+timeseries either with some time interval. Such specific of timeseries operation requires special index for timeseries, 
+which is different from traditional database indexes.  Such index should not provide efficient way of locating arbitrary timeseries 
+element. Instead of it this index should be able to efficiently extract range of timeseries elements. 
+
+Our experiments show that IMCS provides 10-100 times improvement in performance comparing with standard SQL queries.
+The larger size of manipulated data is, the large is advantage in performance. If for timeseries with thousands elements improvement
+is about ten times, for timeseries with millions elements advantage in performance is more than 100 times.
+
+IMCS is integrated with standard SQL model, providing functions to switch from horizontal to vertical representation and vice versa.
+So IMCS usage pattern is the following: 
+
+* You should first of all choose which tables in your database requires vertical representation. If you wan to have vertical representation only for subset of table columns, then create a view.
+* IMCS generates PL/pgSQL functions to work with vertical representation of this table.
+* Data is loaded in PostgreSQL table in standard way (imported from CSV file, inserted using SQL,...).
+* Either automatically using trigger, either explicitly calling IMCS load function, this data is inserted in columnar store.
+* You query this data using IMCS functions and operators. Result of such query can be a tuple with timeseries. Or alternatively it is 
+possible to flip this result back to horizontal representation, so you will get standard SQL set of tuples. In the last case it is possible
+to continue processing of results using standard SQL queries. Also you can convert timeseries to PostgreSQL array which may be useful
+to deal with timeseries from programming languages which API already supports arrays.
+
+Advantages and disadvantages of IMCS approach:
+
++ Fast execution based on vector operations
++ Parallel execution of query (for some operations)
++ No changes in PostgreSQL core (just standard extension)
++ No MVCC overhead (MURSIW isolation level)
++ No disk IO (in-memory store)
++ Optimized for timeseries (massive operations with time slices)
+
+- Requires special queries (standard SQL queries can not be executed for IMCS data)
+- Need to reload data on server restart
+- Size of database is limited by size of RAM
+- Maintaining alternative representation of data requires extra memory and CPU.
+- Less level of concurrency for execution of multiple queries (it is not possible for example to append and query some table at the same time)
+- Not able to perform joins, index searches (only by timestamp)
+- Supports only fixed size string types
