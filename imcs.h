@@ -59,6 +59,7 @@ typedef enum
     TID_int64,
     TID_time,
     TID_timestamp,
+    TID_money,
     TID_float,
     TID_double,
     TID_char

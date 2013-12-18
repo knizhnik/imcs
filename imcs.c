@@ -72,10 +72,12 @@ static ExecutorEnd_hook_type prev_ExecutorEnd = NULL;
 
 static int imcs_command_profile[imcs_cmd_last_command];
 
-static Oid imcs_elem_type_to_oid[] = {CHAROID, INT2OID, INT4OID, DATEOID, INT8OID, TIMEOID, TIMESTAMPOID, FLOAT4OID, FLOAT8OID, BPCHAROID};
+static Oid imcs_elem_type_to_oid[] = {CHAROID, INT2OID, INT4OID, DATEOID, INT8OID, TIMEOID, TIMESTAMPOID, CASHOID, FLOAT4OID, FLOAT8OID, BPCHAROID};
 
-const char const* imcs_type_mnems[] = {"char", "int2", "int4", "date", "int8", "time", "timestamp", "float4", "float8", "bpchar"};
-static const int imcs_type_mnem_lens[] = {4, 4, 4, 4, 4, 4, 8, 6, 6, 6};
+const char const* imcs_type_mnems[] = {"char", "int2", "int4", "date", "int8", "time", "timestamp", "money", "float4", "float8", "bpchar"};
+static const int imcs_type_mnem_lens[] = {4, 4, 4, 4, 4, 4, 8, 5, 6, 6, 6};
+
+static const int imcs_type_sizeof[] = {1,2,4,4,8,8,8,8,4,8,0};
 
 static const char const* imcs_command_mnem[] = 
 {
@@ -1097,6 +1099,7 @@ static void imcs_shmem_startup(void)
       case TID_int64:                                                   \
       case TID_time:                                                    \
       case TID_timestamp:                                               \
+      case TID_money:                                                   \
         result = imcs_##func##_int64 params;                            \
         break;                                                          \
       case TID_float:                                                   \
@@ -1148,6 +1151,7 @@ static void imcs_shmem_startup(void)
       case TID_int64:                                                   \
       case TID_time:                                                    \
       case TID_timestamp:                                               \
+      case TID_money:                                                   \
         imcs_##func##_int64 params;                                     \
         break;                                                          \
       case TID_float:                                                   \
@@ -1177,6 +1181,7 @@ static void imcs_shmem_startup(void)
       case TID_int64:                               \
       case TID_time:                                \
       case TID_timestamp:                           \
+      case TID_money:                               \
         result = imcs_##func##_int64 params;        \
         break;                                      \
       case TID_float:                               \
@@ -1435,6 +1440,7 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
           case TID_int64:                                               \
           case TID_time:                                                \
           case TID_timestamp:                                           \
+          case TID_money:                                               \
           {                                                             \
               int64 val = 0;                                            \
               if (imcs_next_int64(result, &val)) {                      \
@@ -1631,6 +1637,14 @@ static int64 imcs_timestamp2time(int64 timestamp)
 }
 
 
+static double imcs_money2double(double money) { 
+    return money/100.0;
+}
+
+static double imcs_double2money(double money) { 
+    return round(money*100.0);
+}
+
 
 imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type) 
 {
@@ -1647,6 +1661,18 @@ imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type)
     } else if (elem_type == TID_date && input->elem_type == TID_timestamp) { 
         IMCS_TRACE(cast);
         result = imcs_int32_from_int64(imcs_func_int64(input, imcs_timestamp2date));
+    } else if (elem_type == TID_money && input->elem_type == TID_double) { 
+        IMCS_TRACE(cast);
+        result = imcs_int64_from_double(imcs_func_double(input, imcs_double2money));
+    } else if (elem_type == TID_money && input->elem_type == TID_float) { 
+        IMCS_TRACE(cast);
+        result = imcs_int64_from_double(imcs_func_double(imcs_double_from_float(input), imcs_double2money));
+    } else if (elem_type == TID_double && input->elem_type == TID_money) { 
+        IMCS_TRACE(cast);
+        result = imcs_func_double(imcs_double_from_int64(input), imcs_money2double);
+    } else if (elem_type == TID_float && input->elem_type == TID_money) { 
+        IMCS_TRACE(cast);
+        result = imcs_float_from_double(imcs_func_double(imcs_double_from_int64(input), imcs_money2double));
     } else if (imcs_underlying_type[elem_type] == imcs_underlying_type[input->elem_type]) { 
         result = imcs_clone_iterator(input);
     } else { 
@@ -1664,6 +1690,7 @@ imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type)
           case TID_int64:                                       
           case TID_time:                                
           case TID_timestamp:                           
+          case TID_money:                           
             IMCS_APPLY(int64_from, input->elem_type, (input));
             break;                                              
           case TID_float:                                       
@@ -1693,8 +1720,6 @@ Datum columnar_store_initialized(PG_FUNCTION_ARGS)
     PG_RETURN_BOOL(is_initialized);
 }
     
-static const int imcs_type_sizeof[] = {1,2,4,4,8,8,8,4,8,0};
-
 Datum columnar_store_get(PG_FUNCTION_ARGS)                              
 {                                                                       
     char const* cs_id = PG_GETARG_CSTRING(0);                           
@@ -1896,6 +1921,9 @@ Datum cs_parse_tid(PG_FUNCTION_ARGS)
       case TID_timestamp:
         result = imcs_adt_parse_int64(str, imcs_new_adt_parser(TIMESTAMPOID, fcinfo));
         break;
+      case TID_money:
+        result = imcs_adt_parse_int64(str, imcs_new_adt_parser(CASHOID, fcinfo));
+        break;
       default:        
         IMCS_APPLY_CHAR(parse, elem_type, (str, elem_size));
     }
@@ -1930,6 +1958,7 @@ Datum cs_const_num(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:
       case TID_timestamp:
+      case TID_money:
         result = imcs_const_int64((int64)val);        
         break;
       case TID_float:
@@ -1969,6 +1998,7 @@ Datum cs_const_dt(PG_FUNCTION_ARGS)
         /* no break */
       case TID_int64:
       case TID_timestamp:
+      case TID_money:
         result = imcs_const_int64(val);        
         break;
       case TID_float:
@@ -2044,9 +2074,13 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
       case TID_timestamp:
         result = imcs_adt_parse_int64(str+n, imcs_new_adt_parser(TIMESTAMPOID, fcinfo));
         break;
+      case TID_money:
+        result = imcs_adt_parse_int64(str+n, imcs_new_adt_parser(CASHOID, fcinfo));
+        break;
       default:
         IMCS_APPLY_CHAR(parse, elem_type, (str+n, elem_size));
     }
+    result->elem_type = elem_type;
     PG_RETURN_POINTER(result);
 }
 
@@ -2249,6 +2283,7 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       }
       case TID_time:
       case TID_timestamp:
+      case TID_money:
       {
           Oid type_out;
           bool is_varlena;
@@ -2257,6 +2292,10 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
           while (imcs_next_int64(input, &val)) { 
               char* str = OidOutputFunctionCall(type_out, Int64GetDatum(val));
               size_t len = strlen(str);
+              char* comma = strchr(str, ',');
+              if (comma != NULL) { 
+                  len += 2;
+              }
               if (used + len + OUTPUT_BUF_RESERVE > allocated) { 
                   if (allocated >= output_limit) { 
                       truncated = true;
@@ -2268,7 +2307,13 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   buf = new_buf;
               }
               buf[used++] = sep;
-              memcpy(buf+used, str, len);
+              if (comma != NULL) { 
+                  buf[used] = '"';
+                  memcpy(buf+used+1, str, len-2);
+                  buf[used+len-1] = '"';
+              } else { 
+                  memcpy(buf+used, str, len);
+              }
               pfree(str);
               used += len;
               sep = ',';
@@ -2323,6 +2368,7 @@ Datum cs_receive_function(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
       {
           int64* arr = (int64*)imcs_alloc(sizeof(int64)*count);
           for (i = 0; i < count; i++) { 
@@ -2395,6 +2441,7 @@ Datum cs_send_function(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
       {
           int64 val;
           while (imcs_next_int64(input, &val)) {
@@ -2771,6 +2818,7 @@ Datum cs_stretch(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         IMCS_APPLY(stretch_int64, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       default:
@@ -2793,6 +2841,7 @@ Datum cs_stretch0(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         IMCS_APPLY(stretch0_int64, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       default:
@@ -2814,6 +2863,7 @@ Datum cs_asof_join(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         IMCS_APPLY(asof_join_int64, vals->elem_type, (ts1, ts2, vals));
         break;
       default:
@@ -2835,6 +2885,7 @@ Datum cs_asof_join_pos(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         result = imcs_asof_join_pos_int64(ts1, ts2);
         break;
       default:
@@ -2856,6 +2907,7 @@ Datum cs_join(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         IMCS_APPLY(join_int64, vals->elem_type, (ts1, ts2, vals));
         break;
       default:
@@ -2877,6 +2929,7 @@ Datum cs_join_pos(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         result = imcs_join_pos_int64(ts1, ts2);
         break;
       default:
@@ -2939,6 +2992,7 @@ Datum cs_empty(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
       { 
           int64 val;
           has_next = imcs_next_int64(input, &val);
@@ -3116,6 +3170,7 @@ Datum cs_project(PG_FUNCTION_ARGS)
             case TID_int64:
             case TID_time:                                
             case TID_timestamp:                           
+            case TID_money:                           
                 { 
                     int64 val;
                     if (!imcs_next_int64(usrfctx->iterators[i], &val)) { 
@@ -3303,6 +3358,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
           { 
               int64 val;
               if (!imcs_next_int64(usrfctx->iterators[0], &val)) { 
@@ -3359,6 +3415,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         if (!imcs_next_int64(usrfctx->iterators[1], (int64*)dst)) { 
             SRF_RETURN_DONE(funcctx);      
         }
@@ -3404,6 +3461,8 @@ static imcs_elem_typeid_t imcs_oid_to_typeid(int oid)
         return TID_time;
       case TIMESTAMPOID:
         return TID_timestamp;
+      case CASHOID:
+        return TID_money;
       case FLOAT4OID:
         return TID_float;
       case FLOAT8OID:
@@ -3569,6 +3628,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                       case TID_int64:
                       case TID_time:
                       case TID_timestamp:
+                      case TID_money:                           
                         imcs_append_int64(ts, DatumGetInt64(values[i]));
                         break;
                       case TID_float:
@@ -3656,6 +3716,13 @@ Datum cs_cut(PG_FUNCTION_ARGS)
           case 'D':
             elem_type = TID_date;
             if (elem_size != 4)  { 
+                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+            }    
+            break;
+          case 'm':
+          case 'M':
+            elem_type = TID_money;
+            if (elem_size != 8)  { 
                 ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
             }    
             break;
@@ -3792,6 +3859,7 @@ Datum cs_as(PG_FUNCTION_ARGS)
               case INT8OID:
               case TIMEOID:
               case TIMESTAMPOID:
+              case CASHOID:
                 values[i] = Int64GetDatum(value.val_int64);
                 break;
               case FLOAT4OID:
@@ -4093,6 +4161,7 @@ Datum cs_call(PG_FUNCTION_ARGS)
       case TID_int64:                                       
       case TID_time:                                
       case TID_timestamp:                           
+      case TID_money:                           
         IMCS_APPLY(int64_call, arg_elem_type, (input, funcid));
         break;                                              
       case TID_float:                                       
@@ -4157,6 +4226,7 @@ Datum cs_to_array(PG_FUNCTION_ARGS)
       case TID_time:
       case TID_timestamp:
       case TID_int64:
+      case TID_money:                           
         while (input->next(input)) { 
             for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
                 body[i] = Int64GetDatum(input->tile.arr_int64[j]);
@@ -4250,6 +4320,7 @@ static const imcs_iterator_next_t imcs_from_array_next[] =
     imcs_from_array_int16_next, 
     imcs_from_array_int32_next, 
     imcs_from_array_int32_next, 
+    imcs_from_array_int64_next, 
     imcs_from_array_int64_next, 
     imcs_from_array_int64_next, 
     imcs_from_array_int64_next, 

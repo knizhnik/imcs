@@ -5,7 +5,7 @@
 
 create type timeseries;
 
-create type cs_elem_type as enum ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'float4', 'float8', 'bpchar', 'varchar');
+create type cs_elem_type as enum ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'money', 'float4', 'float8', 'bpchar', 'varchar');
 
 create type cs_sort_order as enum ('asc', 'desc');
 
@@ -19,10 +19,11 @@ begin
     when 'int8' then return 4;
     when 'time' then return 5;
     when 'timestamp' then return 6;
-    when 'float4' then return 7;
-    when 'float8' then return 8;
-    when 'bpchar' then return 9;
-    when 'varchar' then return 9;
+    when 'money' then return 7;
+    when 'float4' then return 8;
+    when 'float8' then return 9;
+    when 'bpchar' then return 10;
+    when 'varchar' then return 10;
     end case;
 end;
 $$ language plpgsql;

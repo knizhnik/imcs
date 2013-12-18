@@ -21,3 +21,8 @@ select cs_to_float4_array('int4:{1,2,3,4,5}');
 select cs_sum(cs_from_array(array[1,2,3,4,5]));
 select cs_to_bpchar_array('bpchar10:{Hello,World,!}');
 select cs_from_array(array['Hello','World','!'], 10);
+select cs_parse('{100.99,99.01,"$1,000,000"}', 'money');
+select cs_cast(cs_parse('{100.99,99.01,1000000}', 'money') * 2, 'money');
+select cs_cast('float4:{100.99,99.01,1000000}', 'money');
+select cs_cast('money:{100.99,99.01,"1,000,000"}', 'float8');
+

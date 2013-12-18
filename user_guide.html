@@ -63,7 +63,7 @@ to increase speed of some queries more than 100 times comparing with standard Po
 To make access to timeseries as convenient as possible, IMCS provides generator of access functions. You should specify name of source table or view (from which data will be imported), name of timestamp field (this is a main key by which timeseries elements are accessed) and 
 optionally timeseries identifier. The last one needs some explanations. In some cases all data from the table should be placed in a single timeseries. For example assume that we collect data about phone calls (date, duration, caller, callee,...). It will be a single timeseries. But for example in trading systems there are separate data (ticks) associated with each symbol. So we have separate timeseries for ABB, GOOG, IBM, YHOO,... In this case securities identifier (symbol) can be considered as identifier of timeseries.
 </p><p>
-IMCS supports the following element type for timeseries: <code>"char", int2, int4, date, int8, time, timestamp, float4, float8, bpchar</code>.
+IMCS supports the following element type for timeseries: <code>"char", int2, int4, date, int8, time, timestamp, money, float4, float8, bpchar</code>.
 All timeseries elements should have the same size, so only fixed size character types are supported: for example <code>char(10)</code>, but not <code>varchar</code>. Also IMCS is not able to represent NULL values. It is not enforced that fields of the source table were declared as <code>NOT NULL</code>, but attempt to insert NULL value in timeseries will cause error (or optionally NULL can be substituted with zero). Please use default values instead of NULLs.
 </p><p>
 Given all this information IMCS generates corresponding types and functions for loading/appending/accessing this timeseries.
@@ -605,11 +605,11 @@ Functions performing various transformations of input timeseries.
 <tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
 <tr>
 <td><code>function cs_cast(input timeseries, elem_type cs_elem_type) returns timeseries</code></td>
-<td>Casts timeseries elements to the specified type defined in cs_elem_type enum: ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'float4', 'float8', 'bpchar'). Explicit casts are rarely needed, in most cases IMCS performs implicit type conversion.</td>
+<td>Casts timeseries elements to the specified type defined in cs_elem_type enum: ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'money', 'float4', 'float8', 'bpchar'). Explicit casts are rarely needed, in most cases IMCS performs implicit type conversion.</td>
 </tr>
 <tr>
 <td><code>function cs_to_<b>TYPE</b>_array(timeseries) returns <b>TYPE</b>[]</code></td>
-<td>Converts timeseries to array. <b>TYPE</b> should be one of <code>"char", int2, int4, date, int8, time, timestamp, float4, float8, bpchar</code> and should match element type of the converted timeseries. Please notice that array is constructed in memory and large timeseries can cause memory overflow.</td>
+<td>Converts timeseries to array. <b>TYPE</b> should be one of <code>"char", int2, int4, date, int8, time, timestamp, money, float4, float8, bpchar</code> and should match element type of the converted timeseries. Please notice that array is constructed in memory and large timeseries can cause memory overflow.</td>
 </tr>
 <tr>
 <td><code>function cs_from_array(anyarray, elem_size integer default 0) returns timeseries</code></td>
@@ -1089,6 +1089,7 @@ combined group-by key for aggregate functions. <code>format</code> string descri
 <tr><td>d4</th><td>date</td></tr>
 <tr><td>t8</th><td>time</td></tr>
 <tr><td>T8</th><td>timestamp</td></tr>
+<tr><td>m8</th><td>money</td></tr>
 <tr><td>cN</th><td>char(N)</td></tr>
 </table>
 For example format string <code>'i4f4c10'</code> corresponds to a row with one integer, one float and one character component with length 10.</td>

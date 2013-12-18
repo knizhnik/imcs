@@ -43,7 +43,7 @@ static const uint32 imcs_prime_numbers[MAX_PRIME_NUMBERS] =
     4294967291U     /* 28 */
 };
 
-const imcs_elem_typeid_t imcs_underlying_type[] = {TID_int8, TID_int16, TID_int32, TID_int32, TID_int64, TID_int64, TID_int64, TID_float, TID_double, TID_char};
+const imcs_elem_typeid_t imcs_underlying_type[] = {TID_int8, TID_int16, TID_int32, TID_int32, TID_int64, TID_int64, TID_int64, TID_int64, TID_float, TID_double, TID_char};
 
 #define IMCS_CHECK_TYPE(arg_type, expected_type)                        \
     if (imcs_underlying_type[arg_type] != expected_type) {              \
@@ -455,15 +455,30 @@ static bool imcs_parse_char_next(imcs_iterator_h iterator)
     size_t elem_size  = iterator->elem_size;
     imcs_parse_context_t* ctx = (imcs_parse_context_t*)iterator->context; 
     char const* ptr = ctx->cur;                                         
-    for (i = 0; i < this_tile_size && *ptr != '}' && *ptr != '0'; i++) { 
+    for (i = 0; i < this_tile_size && *ptr != '}' && *ptr != '\0'; i++) { 
         size_t n = 0; 
         char* dst = &iterator->tile.arr_char[i*elem_size];
-        while (*ptr != ',' && *ptr != '}' && *ptr != '0') {
-            if (n == elem_size) { 
-                ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+        if (*ptr == '\'' || *ptr == '"') { 
+            char quote = *ptr++;
+            while (*ptr != quote) { 
+                if (*ptr == '\0') { 
+                    ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), (errmsg("unterminated string literal %s", ctx->cur)))); 
+                }
+                if (n == elem_size) { 
+                    ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+                }
+                *dst++ = *ptr++;
+                n += 1;
             }
-            *dst++ = *ptr++;
-            n += 1;
+            ptr += 1;
+        } else { 
+            while (*ptr != ',' && *ptr != '}' && *ptr != '\0') {
+                if (n == elem_size) { 
+                    ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+                }
+                *dst++ = *ptr++;
+                n += 1;
+            }
         }
         memset(dst, 0, elem_size - n);
         if (*ptr == ',') ptr += 1;                                      
@@ -508,20 +523,33 @@ static bool imcs_adt_parse_##TYPE##_next(imcs_iterator_h iterator)      \
     imcs_adt_parse_context_t* ctx = (imcs_adt_parse_context_t*)iterator->context; \
     char* ptr = ctx->cur;                                               \
     char ch = *ptr;                                                     \
-    for (i = 0; i < this_tile_size && ch != '}' && ch != '\0'; i++) {   \
-        char* sep = strchr(ptr, ',');                                   \
+    for (i = 0; i < this_tile_size && ch != '}' && ch != '\0'; ptr += (ch != '\0'), i++) { \
         Datum datum;                                                    \
-        if (sep == NULL) {                                              \
-            sep = strchr(ptr, '}');                                     \
-            if (sep == NULL) {                                          \
-                sep = ptr + strlen(ptr);                                \
+        if (*ptr == '\'' || *ptr == '"') {                              \
+            char quote = *ptr++;                                        \
+            char* end = strchr(ptr, quote);                             \
+            if (end == NULL) {                                          \
+                ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), (errmsg("unterminated string literal %s", ptr-1)))); \
             }                                                           \
+            *end = '\0';                                                \
+            datum = ctx->parser->parse(ctx->parser, ptr);               \
+            *end++ = quote;   /* needed for reset */                    \
+            ptr = end;                                                  \
+            ch = *ptr;                                                  \
+        } else {                                                        \
+            char* sep = strchr(ptr, ',');                               \
+            if (sep == NULL) {                                          \
+                sep = strchr(ptr, '}');                                 \
+                if (sep == NULL) {                                      \
+                    sep = ptr + strlen(ptr);                            \
+                }                                                       \
+            }                                                           \
+            ch = *sep;                                                  \
+            *sep = '\0';                                                \
+            datum = ctx->parser->parse(ctx->parser, ptr);               \
+            *sep = ch; /* needed for reset */                           \
+            ptr = sep;                                                  \
         }                                                               \
-        ch = *sep;                                                      \
-        *sep = '\0';                                                    \
-        datum = ctx->parser->parse(ctx->parser, ptr);                   \
-        *sep = ch; /* needed for reset */                               \
-        ptr = sep+(ch != '\0');                                         \
         iterator->tile.arr_##TYPE[i] = DatumGet##POSIX_TYPE(datum);     \
     }                                                                   \
     ctx->cur = ptr;                                                     \
