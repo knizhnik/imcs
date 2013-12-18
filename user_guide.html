@@ -224,21 +224,29 @@ If parameter <code>positions</code> is omitted, then all timeseries elements are
 So this function is opposite to <code><b>TABLE</b>_get()</code>: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. It is possible to use this function only if number of columns returned by <b>TABLE</b>_get()</code>
 and element types of corresponding timeseries are not changed. For example it is possible to run query like this:
 <pre>
-    select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* from Quote_get('ABB', date('01-Jan-2010'), date('31-Mar-2010')) abb;
-    select (Quote_project(abb.*)).* from (select Symbol,Day,cs_maxof(Open,Close),High,Low,cs_minof(Open,Close),Volume from Quote_get('ABB')) abb;
+    select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* 
+    from Quote_get('ABB', date('01-Jan-2010'), date('31-Mar-2010')) abb;
+
+    select (Quote_project(abb.*)).* 
+    from (select Symbol,Day,cs_maxof(Open,Close),High,Low,cs_minof(Open,Close),Volume 
+          from Quote_get('ABB')) abb;
 </pre>
 but not
 <pre>
-    select (Quote_project(abb.*)).* from (select Symbol,cs_maxof(Open,Close) from Quote_get('ABB')) abb;
+    select (Quote_project(abb.*)).* from (select Symbol,cs_maxof(Open,Close) 
+        from Quote_get('ABB')) abb;
 </pre>
 In the last case it is possible to use <code>cs_project()</code> function:
 <pre>
-    select cs_project(abb.*) from (select Symbol,cs_maxof(Open,Close) from Quote_get('ABB')) abb;
+    select cs_project(abb.*) from (select Symbol,cs_maxof(Open,Close) 
+                                   from Quote_get('ABB')) abb;
 </pre>
 Please notice that we can not use <code>().*</code> clause in this case because <code>cs_project</code> returns anonymous row.
 But in PostgreSQL 9.3 we can use <i>lateral join</i>:
 <pre>
-    select p.* from (select Symbol,cs_maxof(Open,Close) from Quote_get('ABB')) abb, cs_project(abb.*) p(symbol char(10), max real);
+    select p.* from (select Symbol,cs_maxof(Open,Close) 
+                     from Quote_get('ABB')) abb, 
+                          cs_project(abb.*) p(symbol char(10), max real);
 </pre>
 Please find more information about projection of timeseries, problems with <code>(...).*</code> construction in PostgreSQL and 
 purpose of <code>disable_caching</code> parameter in section <a href="#projection">Projection issues</a>.
@@ -651,7 +659,10 @@ To specify function cast function name to <code>regproc</code> or function proto
 Please notice that <code>sin</code> is taken here only as example. There is special <code>cs_sin</code> in IMCS API.
 But you can specify here name of any function, including plpgsql function:
 <pre>
-    create function mul2(x real) returns real as $$ begin return x*2; end; $$ language plpgsql strict immutable;
+    create function mul2(x real) returns real as 
+    $$ begin return x*2; end; $$ 
+    language plpgsql strict immutable;
+
     select cs_call(Close, 'mult2'::regproc) from Quote_get('IBM');
 </pre></td>
 </tr>
@@ -1099,23 +1110,29 @@ For example format string <code>'i4f4c10'</code> corresponds to a row with one i
 <td>Yet another function splitting binary string into components. This function is reverse to <code>cs_cat</code> which may be needed to construct combined group-by key for aggregate functions. Parameter <code>type_name</code> specifies composite type which components will be fetched from the input string. Below is example of using this function:
 <pre>
 create type char16 as (body char(16));
-select agg_val,cs_as(group_by,'char16') from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+select agg_val,cs_as(group_by,'char16') 
+from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
 </pre>
 In this example group-by consists of just one key of <code>char(16)</code> type.
 It is also possible to print it without <code>cs_as</code>:
 <pre>
-select agg_val,encode(btrim(group_by, E'\\000'::bytea), 'escape') from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+select agg_val,encode(btrim(group_by, E'\\000'::bytea), 'escape') 
+from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
 </pre>
 Please notice that <code>cs_as</code> functions returns type <code>record</code> and PostgreSQL doesn't allow to convert it to composite type.
 So you can not write:
 <pre>
-select agg_val,cs_as(group_by,'char16')::char16 from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+select agg_val,cs_as(group_by,'char16')::char16 
+from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
 </pre>
 And as far as PostgreSQL has no information about columns, you can not use <code>(cs_as(...)).*</code> clause to extract columns of the row.
 But you can create function returning proper type and bind it to <code>cs_as</code> C implementation:
 <pre>
-create function to_char16(body bytea, type_name cstring default 'char16') returns char16 as '$libdir/imcs', 'cs_as' language C stable strict;
-select agg_val,(to_char16(group_by)).* from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+create function to_char16(body bytea, type_name cstring default 'char16') 
+returns char16 as '$libdir/imcs', 'cs_as' language C stable strict;
+
+select agg_val,(to_char16(group_by)).* 
+from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
 </pre>
 But please be careful: nobody will check that this function really returns declared type.
 </td>
@@ -1129,7 +1146,7 @@ IMCS provides standard SQL operators for <code>timeseries</code> type plus some 
 The following table contains mapping between operators and corresponding timeseries functions:
 </p>
 <p>
-<table border>
+<table border width='100%'>
 <tr><th>Operator</th><th>IMCS function</th><th>Description</th></tr>
 <tr><td>a + b</td><td>cs_add</td><td>Adds elements of two timeseries</td></tr>
 <tr><td>a - b</td><td>cs_sub</td><td>Subtracts elements of two timeseries</td></tr>
