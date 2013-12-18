@@ -224,29 +224,33 @@ If parameter <code>positions</code> is omitted, then all timeseries elements are
 So this function is opposite to <code><b>TABLE</b>_get()</code>: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. It is possible to use this function only if number of columns returned by <b>TABLE</b>_get()</code>
 and element types of corresponding timeseries are not changed. For example it is possible to run query like this:
 <pre>
-    select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* 
-    from Quote_get('ABB', date('01-Jan-2010'), date('31-Mar-2010')) abb;
+  select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* 
+  from Quote_get('ABB',date('01-Jan-2010'),date('31-Mar-2010'))abb;
 
-    select (Quote_project(abb.*)).* 
-    from (select Symbol,Day,cs_maxof(Open,Close),High,Low,cs_minof(Open,Close),Volume 
-          from Quote_get('ABB')) abb;
+  select (Quote_project(abb.*)).* 
+  from (select Symbol,Day,cs_maxof(Open,Close),
+               High,Low,cs_minof(Open,Close),Volume 
+        from Quote_get('ABB')) abb;
 </pre>
 but not
 <pre>
-    select (Quote_project(abb.*)).* from (select Symbol,cs_maxof(Open,Close) 
+  select (Quote_project(abb.*)).* 
+  from (select Symbol,cs_maxof(Open,Close) 
         from Quote_get('ABB')) abb;
 </pre>
 In the last case it is possible to use <code>cs_project()</code> function:
 <pre>
-    select cs_project(abb.*) from (select Symbol,cs_maxof(Open,Close) 
-                                   from Quote_get('ABB')) abb;
+  select cs_project(abb.*) 
+  from (select Symbol,cs_maxof(Open,Close) 
+        from Quote_get('ABB')) abb;
 </pre>
 Please notice that we can not use <code>().*</code> clause in this case because <code>cs_project</code> returns anonymous row.
 But in PostgreSQL 9.3 we can use <i>lateral join</i>:
 <pre>
-    select p.* from (select Symbol,cs_maxof(Open,Close) 
-                     from Quote_get('ABB')) abb, 
-                          cs_project(abb.*) p(symbol char(10), max real);
+  select p.* 
+  from (select Symbol,cs_maxof(Open,Close) 
+        from Quote_get('ABB')) abb, 
+             cs_project(abb.*) p(symbol char(10), max real);
 </pre>
 Please find more information about projection of timeseries, problems with <code>(...).*</code> construction in PostgreSQL and 
 purpose of <code>disable_caching</code> parameter in section <a href="#projection">Projection issues</a>.
@@ -653,17 +657,21 @@ Optional <code>elem_size</code> parameter is needed only for text array, it shou
 <td>Calls specified function for all elements of <code>input</code> timeseries.
 To specify function cast function name to <code>regproc</code> or function prototype (name and argument types) to <code>recprocedure</code>:
 <pre>
-    select cs_call(Close, 'sin'::regproc) from Quote_get('IBM');
-    select cs_call(Close, 'sin(float)'::regprocedure) from Quote_get('IBM');
+  select cs_call(Close,'sin'::regproc) 
+  from Quote_get('IBM');
+
+  select cs_call(Close,'sin(float)'::regprocedure) 
+  from Quote_get('IBM');
 </pre>
 Please notice that <code>sin</code> is taken here only as example. There is special <code>cs_sin</code> in IMCS API.
 But you can specify here name of any function, including plpgsql function:
 <pre>
-    create function mul2(x real) returns real as 
-    $$ begin return x*2; end; $$ 
-    language plpgsql strict immutable;
+  create function mul2(x real) returns real as 
+  $$ begin return x*2; end; $$ 
+  language plpgsql strict immutable;
 
-    select cs_call(Close, 'mult2'::regproc) from Quote_get('IBM');
+  select cs_call(Close, 'mult2'::regproc) 
+  from Quote_get('IBM');
 </pre></td>
 </tr>
 <tr>
@@ -1109,30 +1117,36 @@ For example format string <code>'i4f4c10'</code> corresponds to a row with one i
 <td><code>function cs_as(str bytea, type_name cstring) returns record</code></td>
 <td>Yet another function splitting binary string into components. This function is reverse to <code>cs_cat</code> which may be needed to construct combined group-by key for aggregate functions. Parameter <code>type_name</code> specifies composite type which components will be fetched from the input string. Below is example of using this function:
 <pre>
-create type char16 as (body char(16));
-select agg_val,cs_as(group_by,'char16') 
-from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+  create type char16 as (body char(16));
+  select agg_val,cs_as(group_by,'char16') 
+  from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* 
+        from DbItem_get()) agg;
 </pre>
 In this example group-by consists of just one key of <code>char(16)</code> type.
 It is also possible to print it without <code>cs_as</code>:
 <pre>
-select agg_val,encode(btrim(group_by, E'\\000'::bytea), 'escape') 
-from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+  select agg_val,encode(btrim(group_by,E'\\000'::bytea),'escape') 
+  from(select(cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* 
+       from DbItem_get()) agg;
 </pre>
 Please notice that <code>cs_as</code> functions returns type <code>record</code> and PostgreSQL doesn't allow to convert it to composite type.
 So you can not write:
 <pre>
-select agg_val,cs_as(group_by,'char16')::char16 
-from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+  select agg_val,cs_as(group_by,'char16')::char16 
+  from(select(cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* 
+       from DbItem_get()) agg;
 </pre>
 And as far as PostgreSQL has no information about columns, you can not use <code>(cs_as(...)).*</code> clause to extract columns of the row.
 But you can create function returning proper type and bind it to <code>cs_as</code> C implementation:
 <pre>
-create function to_char16(body bytea, type_name cstring default 'char16') 
-returns char16 as '$libdir/imcs', 'cs_as' language C stable strict;
+  create function to_char16(body bytea, 
+                            type_name cstring default 'char16') 
+  returns char16 as '$libdir/imcs', 'cs_as' 
+  language C stable strict;
 
-select agg_val,(to_char16(group_by)).* 
-from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* from DbItem_get()) agg;
+  select agg_val,(to_char16(group_by)).* 
+  from (select (cs_project_agg(cs_hash_sum(volenquired,fxvenue))).* 
+        from DbItem_get()) agg;
 </pre>
 But please be careful: nobody will check that this function really returns declared type.
 </td>
@@ -1211,7 +1225,7 @@ Unfortunately case 1) is implemented very inefficiently: a function is called as
 For example <code>cs_hash_sum</code> function has two output parameters: <code>sum</code> and <code>groups</code>.
 Output parameters are actually returned in PostgreSQL as anonymous row. So if we write:
 <pre>
-    select (cs_project_agg(cs_hash_sum(Close,Day%7))).* from Quote_get('IBM');
+  select (cs_project_agg(cs_hash_sum(Close,Day%7))).* from Quote_get('IBM');
 </pre>
 then PostgreSQL will call function <code>cs_hash_sum</code> twice. It means that aggregation will be performed twice: 
 we will have to do double amount of work. I failed to find a way to make PostgreSQL to avoid these redundant calls.
@@ -1219,11 +1233,14 @@ But this problem is solvable.
 </p><p>
 First of all it is possible to avoid <code>(...).*</code> construction and access composite type attributes explicitly:
 <pre>
-    select (q.p).agg_val,(q.p).group_by from (select cs_project_agg(cs_hash_sum(Close,Day % 7)) p from Quote_get('IBM')) q;
+  select (q.p).agg_val,(q.p).group_by 
+  from (select cs_project_agg(cs_hash_sum(Close,Day%7)) p from Quote_get('IBM')) q;
 </pre>
 In this case PostgreSQL generally will not perform redundant calls. To guarantee that multiple evaluation won't be performed you can use the OFFSET 0 hack or abuse PostgreSQL's failure to optimise across CTE boundaries:
 <pre>
-    select (q.p).agg_val,(q.p).group_by from (select cs_project_agg(cs_hash_sum(Close,Day % 7)) p from Quote_get('IBM') <b>offset 0</b>) q;
+  select (q.p).agg_val,(q.p).group_by 
+  from (select cs_project_agg(cs_hash_sum(Close,Day%7)) p 
+        from Quote_get('IBM') <b>offset 0</b>) q;
 </pre>
 But IMCS also tries to provide workaround for <code>(cs_project(...)).*</code> construction: <code>cs_project</code> and <code>cs_project_agg</code> functions can cache their results, avoiding redundant calculations. Unfortunately there are some 
 restrictions. For example it is not possible to use <code>cs_project</code> more than once in one query. You can disable such caching for the particular invocation by setting 
@@ -1233,7 +1250,7 @@ And concerning case 2) calling function in FROM list: it is possible if function
 For example in IMCS <code>cs_hash_sum</code> accepts timeseries arguments which are provided by <code>Quote_get</code>.
 So we can write:
 <pre>
-    select (p).* from Quote_get('IBM') q,cs_project_agg(cs_hash_sum(q.Close,q.Day%7)) p;
+  select (p).* from Quote_get('IBM') q,cs_project_agg(cs_hash_sum(q.Close,q.Day%7)) p;
 </pre>
 But it works only in PostgreSQL 9.3 which supports <i>lateral joins</i>.
 A <i>lateral join</i> enables a subquery in the FROM part of a SELECT to reference columns from preceding items in the FROM list. 
@@ -1243,7 +1260,8 @@ This is why query above correctly works with PostgreSQL 9.3 and higher (function
 </p><p>
 Also using projection function in FROM list allows to specify alias and describe columns:
 <pre>
-    select (s).* from Quote_get('IBM') q,cs_project(cs_hash_sum(q.Close,q.Day%7)) s(sum float8,group_by integer);
+  select (s).* from Quote_get('IBM') q,
+  cs_project(cs_hash_sum(q.Close,q.Day%7)) s(sum float8,group_by integer);
 </pre>
 <p></p>
 Conclusion:
@@ -1285,7 +1303,7 @@ As far as IMCS is using PostgreSQL shared memory, it should be loaded via shared
 Please add <code>'$libdir/imcs'</code> to <code>shared_preload_libraries</code> in <code>postgresql.conf</code> file:
 
 <pre>
-    shared_preload_libraries = '$libdir/imcs'		# (change requires restart)
+  shared_preload_libraries = '$libdir/imcs' # (change requires restart)
 </pre>
 
 Size of shared memory used by IMCS can be specified using <code>imcs.shmem_size</code> parameter.
@@ -1295,7 +1313,7 @@ so there should be no problem with system quotas. But there is yet another limit
 than 256Gb with standard 4Kb pages. And now servers with 1Tb memory is not something very exotic. To utilize all available memory in this case it is possible to create multiple shared memory segments. But PostgreSQL is not able to do it. Another solution is to increase page size. Linux supports
  <a href="https://www.kernel.org/doc/Documentation/vm/hugetlbpage.txt">huge pages</a>. Unfortunately PostgreSQL still doesn't provide any way of using huge pages: you need to patch PostgreSQL source: add <code>MAP_HUGETLB</code> to <code>PG_MMAP_FLAGS</code> define in sysv_shmem.c:
 <pre>
-    #define PG_MMAP_FLAGS			(MAP_HUGETLB|MAP_SHARED|MAP_ANONYMOUS|MAP_HASSEMAPHORE)
+  #define PG_MMAP_FLAGS	(MAP_HUGETLB|MAP_SHARED|MAP_ANONYMOUS|MAP_HASSEMAPHORE)
 </pre>
 IMCS distributive contains smarter patch <code>sysv_shmem.patch</code> for PostgreSQL 9.3.1 which sets MAP_HUGETLB flag only if size of shared memory segment is larger than 256Gb and only if MAP_HUGETLB is defined (since Linux 2.6.32).
 </p><p>
@@ -1334,22 +1352,29 @@ So steps of using IMCS extension are the following:
 Consider the following definition of <code>Quote</code> table:
 
 <pre>
-create table Quote (Symbol char(10), Day date, Open real, High real, Low real, Close real, Volume integer);
+  create table Quote (
+    Symbol char(10), 
+    Day date, 
+    Open real, 
+    High real, 
+    Low real, 
+    Close real, 
+    Volume integer);
 </pre>
 
 Let's populate it with NYSE data for ten years (about 6 million records).
 
 <pre>
-\copy Quote from 'NYSE_2003-2013.csv' with csv header;
+  \copy Quote from 'NYSE_2003-2013.csv' with csv header;
 </pre>
 
 This load is completed at my system in 2.5 minutes.
 Now lets create vertical representation of this table:
 
 <pre>
-create extension imcs;
-select cs_create('Quote', 'Day', 'Symbol');
-select Quote_load(); 
+  create extension imcs;
+  select cs_create('Quote', 'Day', 'Symbol');
+  select Quote_load(); 
 </pre>
 
 Loading data in columnar store takes at my computer just 15 seconds.
@@ -1360,14 +1385,16 @@ because of using trigger to propagate inserts to in-memory columnar store.
 Now let's calculate volume-weighted  price for IBM for the period from 2010 till 2013:
 
 <pre>
-select cs_wavg(Volume, Close) as VWAP from Quote_get('IBM', date('01-Jan-2010'), date('01-Jan-2013'));
+  select cs_wavg(Volume, Close) as VWAP 
+  from Quote_get('IBM', date('01-Jan-2010'), date('01-Jan-2013'));
 </pre>
 
 Query execution time is 10 milliseconds.
 Now do the same thing with standard SQL:
 
 <pre>
-select sum(Close*Volume)/sum(Volume) from Quote where Symbol='IBM' and Day between date('01-Jan-2010') and date('01-Jan-2013');
+  select sum(Close*Volume)/sum(Volume) 
+  from Quote where Symbol='IBM' and Day between date('01-Jan-2010') and date('01-Jan-2013');
 </pre>
 It takes 750 milliseconds.
 </p><p>
@@ -1377,21 +1404,23 @@ Actually this data is usually available and contains much more information than 
 But here we need just symbol name:
 
 <pre>
-create table Securities (Symbol char(10));
-insert into Securities select distinct Symbol from Quote;
-create view SecurityQuotes as select (Quote_get(Symbol)).* from Securities;
+  create table Securities (Symbol char(10));
+  insert into Securities select distinct Symbol from Quote;
+  create view SecurityQuotes as select (Quote_get(Symbol)).* from Securities;
 </pre>
 
 Now we are ready to execute query:
 
 <pre>
-select Symbol,cs_sum(Close*Volume) / cs_sum(Volume) as VWAP from SecurityQuotes;
+  select Symbol,cs_sum(Close*Volume) / cs_sum(Volume) as VWAP 
+  from SecurityQuotes;
 </pre>
 
 Time is about 500 milliseconds. Now do the same using standard SQL:
 
 <pre>
-select Symbol,sum(Close*Volume)/sum(Volume) as VWAP from Quote group by Symbol;
+  select Symbol,sum(Close*Volume)/sum(Volume) as VWAP 
+  from Quote group by Symbol;
 </pre>
 
 Result is returned after 2243 milliseconds.
@@ -1400,13 +1429,15 @@ Now let's test filter queries with projection back to horizontal representation.
 The following query finds all dates for 'ABB' symbol when close price was more than 1% large than open price for the particular quarter:
 
 <pre>
-select (Quote_project(abb.*,cs_filter_pos(Close>Open*1.01))).* from Quote_get('ABB', '01-Jan-2010', '31-Mar-2010') abb;
+  select (Quote_project(abb.*,cs_filter_pos(Close>Open*1.01))).* 
+  from Quote_get('ABB', '01-Jan-2010', '31-Mar-2010') abb;
 </pre>
 
 It returns 14 results in 12 milliseconds. Now do the same using SQL:
 
 <pre>
-select * from Quote where Symbol='ABB' and Day between date('01-Jan-2010') and date('31-Mar-2010') and Close>Open*1.01;
+  select * from Quote where Symbol='ABB' 
+  and Day between date('01-Jan-2010') and date('31-Mar-2010') and Close>Open*1.01;
 </pre>
 
 The same result in 640 milliseconds.
@@ -1415,23 +1446,23 @@ Actually timeseries in this example are not long enough: size of timeseries for 
 Let's now investigate use case with single large timeseries:
 
 <pre>
-select Quote_drop();
-select cs_create('Quote', 'Day');
-select Quote_load();
+  select Quote_drop();
+  select cs_create('Quote', 'Day');
+  select Quote_load();
 </pre>
 
 Load is completed twice faster than in case of Quote table: 7.5 seconds.
 Now let's execute VWAP for this timeseries:
 
 <pre>
-select Volume//Close as VWAP from Quote_get();
+  select Volume//Close as VWAP from Quote_get();
 </pre>
 
 Query is completed at my system in 10 milliseconds.
 The same query using SQL:
 
 <pre>
-select sum(Close*Volume)/sum(Volume) as VWAP from Quote;
+  select sum(Close*Volume)/sum(Volume) as VWAP from Quote;
 </pre>
 
 One second (one thousand milliseconds). So IMCS query is 100 times faster.
@@ -1439,8 +1470,8 @@ One second (one thousand milliseconds). So IMCS query is 100 times faster.
 Now perform filter query for large timeseries:
 
 <pre>
-select cs_count((Close>Open*1.1)?) from Quote_get();
-select count(*) from Quote where Close>Open*1.1;
+  select cs_count((Close>Open*1.1)?) from Quote_get();
+  select count(*) from Quote where Close>Open*1.1;
 </pre>
 
 Ratio of the query execution times is once again 100: 6.274 msec vs. 768.251 msec.
@@ -1449,15 +1480,16 @@ Now consider real use case wth one timeseries and large enough records. There ar
 Database size is about 5Gb. Queries perform groupping by various combinations of fields and cacluate aggregates for some characterestics.
 For example:
 <pre>
-select trader,desk,office,sum(score*volenquired)/sum(volenquired) from DbItem group by trader,desk,office;
+  select trader,desk,office,sum(score*volenquired)/sum(volenquired) 
+  from DbItem group by trader,desk,office;
 </pre>
 Execution of this query takes 320 seconds. IMCS analog:
 <pre>
-select agg_val,cs_cut(group_by,'c22c30c10') from 
+  select agg_val,cs_cut(group_by,'c22c30c10') from 
     (select (cs_project_agg(ss1.*)).* from 
-          (select (s1).sum/(s2).sum,(s1).groups from DbItem_get() q, 
-               cs_hash_sum(q.score*q.volenquired, q.trader||q.desk||q.office) s1,  
-                cs_hash_sum(q.volenquired, q.trader||q.desk||q.office) s2) ss1) ss2;
+       (select (s1).sum/(s2).sum,(s1).groups from DbItem_get() q, 
+          cs_hash_sum(q.score*q.volenquired, q.trader||q.desk||q.office) s1,  
+          cs_hash_sum(q.volenquired, q.trader||q.desk||q.office) s2) ss1) ss2;
 </pre>
 takes ... 144 milliseconds. The ratio is more than 2 thousands times. But this is the result with default PostgreSQL parameters (only "shared_buffers" was increased to hold all database in memory). If we also increase "work_mem" from default 1Mb to 1Gb, then times of the query is reduced to 33 seconds for first execution and 7 seconds for subsequent executions.
 <p></p>
