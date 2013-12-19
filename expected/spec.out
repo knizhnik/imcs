@@ -73,3 +73,12 @@ select cs_join('date:{1-Nov-2013,2-Nov-2013,03-Nov-2013,04-Nov-2013}', Day, Clos
  float4:{10.5,20.2,30.2}
 (1 row)
 
+select (Quote_project(Quote_get('IBM'), Quote_join('IBM', 'date:{2-Nov-2013,4-Nov-2013,03-Nov-2013,01-Nov-2013}'))).*;
+ symbol |    day     | open | high | low  | close | volume 
+--------+------------+------+------+------+-------+--------
+ IBM    | 11-02-2013 | 20.2 | 20.2 | 20.2 |  20.2 |    200
+ IBM    | 11-04-2013 | 30.5 |   31 |   30 |  30.2 |    300
+ IBM    | 11-04-2013 | 30.5 |   31 |   30 |  30.2 |    300
+ IBM    | 11-01-2013 | 10.2 |   11 |   10 |  10.5 |    100
+(4 rows)
+

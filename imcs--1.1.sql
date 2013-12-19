@@ -45,6 +45,7 @@ declare
     create_insert_trigger_func text;
     create_delete_trigger_func text;
     create_truncate_trigger_func text;
+    create_join_func text;
     create_first_func text;
     create_last_func text;
     create_count_func text;
@@ -132,6 +133,7 @@ begin
             drop function '||table_name||'_delete('||id_type||','||timestamp_type||','||timestamp_type||');
             drop function '||table_name||'_first('||id_type||');
             drop function '||table_name||'_last('||id_type||');
+            drop function '||table_name||'_join('||id_type||',timeseries);
             drop function '||table_name||'_count('||id_type||');';
     else 
         create_drop_func := create_drop_func||'
@@ -141,6 +143,7 @@ begin
             drop function '||table_name||'_delete('||timestamp_type||','||timestamp_type||');
             drop function '||table_name||'_first();
             drop function '||table_name||'_last();
+            drop function '||table_name||'_join(timeseries);
             drop function '||table_name||'_count();';
     end if;
     create_drop_func := create_drop_func||'
@@ -300,6 +303,8 @@ begin
                 create_count_func := 'create function '||table_name||'_count('||timeseries_id||' '||id_type||') returns bigint as $$ begin
                     return columnar_store_count(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,'||attr_tid||','||attr_len|| 
                     '); end; $$ language plpgsql strict stable';
+                create_join_func := 'create function '||table_name||'_join('||timeseries_id||' '||id_type||',ts timeseries) returns timeseries
+                        as $$ begin return columnar_store_join_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,'||attr_tid||','||attr_len||',ts); end; $$ language plpgsql strict stable';
             else
                 create_first_func := 'create function '||table_name||'_first() returns '||timestamp_type||
                     ' as $$ begin return columnar_store_first_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
@@ -310,6 +315,8 @@ begin
                 create_count_func := 'create function '||table_name||'_count() returns bigint as $$ begin 
                     return columnar_store_count('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
                     '); end; $$ language plpgsql strict stable';
+                create_join_func := 'create function '||table_name||'_join(ts timeseries) returns timeseries
+                        as $$ begin return columnar_store_join_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||',ts); end; $$ language plpgsql strict stable';
             end if;
         elsif (meta.attname = timeseries_id) then
             create_type := create_type||sep||timeseries_id||' '||id_type;
@@ -371,6 +378,7 @@ begin
     execute create_delete_head_func;    
     execute create_first_func;
     execute create_last_func;
+    execute create_join_func;
     execute create_count_func;
     execute create_project_func;
     execute create_truncate_func;
@@ -434,6 +442,16 @@ create function columnar_store_last_time(id cstring, field_type integer, field_s
 create function columnar_store_last_timestamp(id cstring, field_type integer, field_size integer) returns timestamp as 'MODULE_PATHNAME','columnar_store_last_int64' language C strict stable;
 create function columnar_store_last_float4(id cstring, field_type integer, field_size integer) returns float4 as 'MODULE_PATHNAME','columnar_store_last_float' language C strict stable;
 create function columnar_store_last_float8(id cstring, field_type integer, field_size integer) returns float8 as 'MODULE_PATHNAME','columnar_store_last_double' language C strict stable;
+
+create function columnar_store_join_char(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int8' language C strict stable;
+create function columnar_store_join_int2(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int16' language C strict stable;
+create function columnar_store_join_int4(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int32' language C strict stable;
+create function columnar_store_join_int8(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
+create function columnar_store_join_date(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int32' language C strict stable;
+create function columnar_store_join_time(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
+create function columnar_store_join_timestamp(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
+create function columnar_store_join_float4(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_float' language C strict stable;
+create function columnar_store_join_float8(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_double' language C strict stable;
 
 create function columnar_store_count(id cstring, field_type integer, field_size integer) returns bigint as 'MODULE_PATHNAME' language C strict stable;
 

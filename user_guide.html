@@ -176,6 +176,45 @@ This function returns number of added timeseries elements.</td>
 If you need to delete all data in columnar store, better use <code>cs_delete_all()</code> function.
 </td>
 </tr>
+<tr>
+<td><code>function <b>TABLE</b>_project(input <b>TABLE</b>_timeseries input, positions timeseries default null,disable_caching bool default false) returns setof <b>TABLE</b></td>
+<td>Makes horizontal projection of timeseries. Optional <code>positions</code> parameter specifies positions of selected timeseries elements.
+If parameter <code>positions</code> is omitted, then all timeseries elements are transformed to horizontal representation. 
+So this function is opposite to <code><b>TABLE</b>_get()</code>: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. It is possible to use this function only if number of columns returned by <b>TABLE</b>_get()</code>
+and element types of corresponding timeseries are not changed. For example it is possible to run query like this:
+<pre>
+  select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* 
+  from Quote_get('ABB',date('01-Jan-2010'),date('31-Mar-2010'))abb;
+
+  select (Quote_project(abb.*)).* 
+  from (select Symbol,Day,cs_maxof(Open,Close),
+               High,Low,cs_minof(Open,Close),Volume 
+        from Quote_get('ABB')) abb;
+</pre>
+but not
+<pre>
+  select (Quote_project(abb.*)).* 
+  from (select Symbol,cs_maxof(Open,Close) 
+        from Quote_get('ABB')) abb;
+</pre>
+In the last case it is possible to use <code>cs_project()</code> function:
+<pre>
+  select cs_project(abb.*) 
+  from (select Symbol,cs_maxof(Open,Close) 
+        from Quote_get('ABB')) abb;
+</pre>
+Please notice that we can not use <code>().*</code> clause in this case because <code>cs_project</code> returns anonymous row.
+But in PostgreSQL 9.3 we can use <i>lateral join</i>:
+<pre>
+  select p.* 
+  from (select Symbol,cs_maxof(Open,Close) 
+        from Quote_get('ABB')) abb, 
+             cs_project(abb.*) p(symbol char(10), max real);
+</pre>
+Please find more information about projection of timeseries, problems with <code>(...).*</code> construction in PostgreSQL and 
+purpose of <code>disable_caching</code> parameter in section <a href="#projection">Projection issues</a>.
+</td>
+</tr>
 </table>
 </p>
 
@@ -218,43 +257,8 @@ most frequent case of deleting elements from timeseries: it correponds to shifti
 deteriorated are thrown away. This function returns number of deleted elements.</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_project(input <b>TABLE</b>_timeseries input, positions timeseries default null,disable_caching bool default false) returns setof <b>TABLE</b></td>
-<td>Makes horizontal projection of timeseries. Optional <code>positions</code> parameter specifies positions of selected timeseries elements.
-If parameter <code>positions</code> is omitted, then all timeseries elements are transformed to horizontal representation. 
-So this function is opposite to <code><b>TABLE</b>_get()</code>: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. It is possible to use this function only if number of columns returned by <b>TABLE</b>_get()</code>
-and element types of corresponding timeseries are not changed. For example it is possible to run query like this:
-<pre>
-  select (Quote_project(abb.*,cs_top_max_pos(Close, 10))).* 
-  from Quote_get('ABB',date('01-Jan-2010'),date('31-Mar-2010'))abb;
-
-  select (Quote_project(abb.*)).* 
-  from (select Symbol,Day,cs_maxof(Open,Close),
-               High,Low,cs_minof(Open,Close),Volume 
-        from Quote_get('ABB')) abb;
-</pre>
-but not
-<pre>
-  select (Quote_project(abb.*)).* 
-  from (select Symbol,cs_maxof(Open,Close) 
-        from Quote_get('ABB')) abb;
-</pre>
-In the last case it is possible to use <code>cs_project()</code> function:
-<pre>
-  select cs_project(abb.*) 
-  from (select Symbol,cs_maxof(Open,Close) 
-        from Quote_get('ABB')) abb;
-</pre>
-Please notice that we can not use <code>().*</code> clause in this case because <code>cs_project</code> returns anonymous row.
-But in PostgreSQL 9.3 we can use <i>lateral join</i>:
-<pre>
-  select p.* 
-  from (select Symbol,cs_maxof(Open,Close) 
-        from Quote_get('ABB')) abb, 
-             cs_project(abb.*) p(symbol char(10), max real);
-</pre>
-Please find more information about projection of timeseries, problems with <code>(...).*</code> construction in PostgreSQL and 
-purpose of <code>disable_caching</code> parameter in section <a href="#projection">Projection issues</a>.
-</td>
+<td><code>function <b>TABLE</b>_join(other timeseries) returns timeseries</code></td>
+<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp is greater or equal than correspodent element of joined timeseries.</td>
 </tr>
 </table>
 </p>
@@ -310,10 +314,8 @@ most frequent case of deleting elements from timeseries: it correponds to shifti
 deteriorated are thrown away. This function returns number of deleted elements.</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_project(input <b>TABLE</b>_timeseries input, positions timeseries default null,disable_caching bool default false) returns setof <b>TABLE</b></td>
-<td>Makes horizontal projection of timeseries. Optional <code>positions</code> parameter specifies positions of timeseries elements.
-If skipped, then all timeseries elements are transformed to horizontal representation. 
-So this function is opposite to  <b>TABLE</b>_get: <code>get</code> transforms horizontal representation to vertical and <code>project</code> does backward transformation. See comments to <code>project</code> function in the previous section.</td>
+<td><code>function <b>TABLE</b>_join(id <b>TIMESERIES_ID_TYPE</b>, other timeseries) returns timeseries</code></td>
+<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp is greater or equal than correspodent element of joined timeseries.</td>
 </tr>
 </table>
 </p>

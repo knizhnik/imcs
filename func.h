@@ -100,6 +100,7 @@
     imcs_iterator_h imcs_xor_##TYPE(imcs_iterator_h left, imcs_iterator_h right); \
     imcs_iterator_h imcs_asof_join_pos_##TYPE(imcs_iterator_h left, imcs_iterator_h right); \
     imcs_iterator_h imcs_join_pos_##TYPE(imcs_iterator_h left, imcs_iterator_h right);\
+    imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h join_with); \
     imcs_iterator_h imcs_rank_##TYPE(imcs_iterator_h, imcs_order_t order); \
     imcs_iterator_h imcs_dense_rank_##TYPE(imcs_iterator_h, imcs_order_t order); \
     imcs_iterator_h imcs_sort_##TYPE(imcs_iterator_h, imcs_order_t order); \

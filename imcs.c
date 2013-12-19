@@ -275,6 +275,12 @@ PG_FUNCTION_INFO_V1(columnar_store_last_int32);
 PG_FUNCTION_INFO_V1(columnar_store_last_int64);
 PG_FUNCTION_INFO_V1(columnar_store_last_float);
 PG_FUNCTION_INFO_V1(columnar_store_last_double);
+PG_FUNCTION_INFO_V1(columnar_store_join_int8);
+PG_FUNCTION_INFO_V1(columnar_store_join_int16);
+PG_FUNCTION_INFO_V1(columnar_store_join_int32);
+PG_FUNCTION_INFO_V1(columnar_store_join_int64);
+PG_FUNCTION_INFO_V1(columnar_store_join_float);
+PG_FUNCTION_INFO_V1(columnar_store_join_double);
 PG_FUNCTION_INFO_V1(cs_used_memory);
 PG_FUNCTION_INFO_V1(cs_delete_all);
 PG_FUNCTION_INFO_V1(cs_parse_tid);
@@ -458,6 +464,12 @@ Datum columnar_store_last_int32(PG_FUNCTION_ARGS);
 Datum columnar_store_last_int64(PG_FUNCTION_ARGS);
 Datum columnar_store_last_float(PG_FUNCTION_ARGS);
 Datum columnar_store_last_double(PG_FUNCTION_ARGS);
+Datum columnar_store_join_int8(PG_FUNCTION_ARGS);
+Datum columnar_store_join_int16(PG_FUNCTION_ARGS);
+Datum columnar_store_join_int32(PG_FUNCTION_ARGS);
+Datum columnar_store_join_int64(PG_FUNCTION_ARGS);
+Datum columnar_store_join_float(PG_FUNCTION_ARGS);
+Datum columnar_store_join_double(PG_FUNCTION_ARGS);
 Datum cs_used_memory(PG_FUNCTION_ARGS);
 Datum cs_delete_all(PG_FUNCTION_ARGS);
 Datum cs_parse_tid(PG_FUNCTION_ARGS);
@@ -1885,6 +1897,28 @@ IMCS_BOUNDARY(int32,INT32,last);
 IMCS_BOUNDARY(int64,INT64,last);
 IMCS_BOUNDARY(float,FLOAT4,last);
 IMCS_BOUNDARY(double,FLOAT8,last);
+
+#define IMCS_JOIN(TYPE)                                                 \
+Datum columnar_store_join_##TYPE(PG_FUNCTION_ARGS)                      \
+{                                                                       \
+    char const* cs_id = PG_GETARG_CSTRING(0);                           \
+    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1); \
+    int elem_size = PG_GETARG_INT32(2);                                 \
+    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, true, elem_size, false); \
+    imcs_iterator_h join_with = (imcs_iterator_h)PG_GETARG_POINTER(3);  \
+    if (ts == NULL) {                                                   \
+        PG_RETURN_NULL();                                               \
+    } else {                                                            \
+        PG_RETURN_POINTER(imcs_join_unsorted_##TYPE(ts, join_with));    \
+    }                                                                   \
+}
+
+IMCS_JOIN(int8);
+IMCS_JOIN(int16);
+IMCS_JOIN(int32);
+IMCS_JOIN(int64);
+IMCS_JOIN(float);
+IMCS_JOIN(double);
 
 static Datum imcs_parse_adt(imcs_adt_parser_t* parser, char* value)
 {

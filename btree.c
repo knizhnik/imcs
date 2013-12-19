@@ -150,7 +150,7 @@ static bool imcs_map_next(imcs_iterator_h iterator)
         imcs_page_t* pg;
         if (next_pos - prev_page_pos >= prev_page_size) { 
             if (!imcs_subseq_page(iterator, ctx->stack[0].page, next_pos, 0)) { 
-                return false;
+                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid position in timeseries"))); 
             }
             prev_page_pos = next_pos - ctx->stack[ctx->stack_size-1].pos;
         }
@@ -282,7 +282,7 @@ void imcs_append_##TYPE(imcs_timeseries_t* ts, TYPE val)                \
         ts->count += 1;                                                 \
     }                                                                   \
 }                                                                       \
-static bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val, imcs_boundary_kind_t boundary, int level) \
+bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val, imcs_boundary_kind_t boundary, int level) \
 {                                                                       \
     int i, l, r, n_items;                                               \
     imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; \
