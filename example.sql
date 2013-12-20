@@ -84,7 +84,7 @@ select cs_map(Day, cs_top_max_pos(cs_diff0(Day), 5)),cs_top_max(cs_diff0(Day), 5
 select cs_count(cs_unique(cs_sort(Close))) from Quote_get();
 --- Time: 866.869 ms
 
- select cs_quantile(Close,5) from Quote_get();
+select cs_quantile(Close,5) from Quote_get();
 --- Time: 810.362 ms
 
 --- Delete all records

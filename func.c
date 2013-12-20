@@ -6135,17 +6135,11 @@ imcs_iterator_h imcs_ilike(imcs_iterator_h input, char const* pattern)
     return result;                                                      
 }
 
-typedef struct imcs_join_timestamp_context_t_ 
-{
-    imcs_iterator_context_t sarch_ctx;
-    imcs_timeseries_t* ts;
-} imcs_join_timestamp_context_t;
-
 #define IMCS_JOIN_TS_DEF(TYPE)                                          \
-static bool imcs_join_unsorted_##TYPE##_next(imcs_iterator_h iterator) \
+static bool imcs_join_unsorted_##TYPE##_next(imcs_iterator_h iterator)  \
 {                                                                       \
     size_t i, tile_size;                                                \
-    imcs_page_t* root_page = ((imcs_join_timestamp_context_t*)iterator->context)->ts->root_page; \
+    imcs_page_t* root_page = ((imcs_iterator_context_t*)iterator->context)->stack[0].page; \
     imcs_pos_t next_pos = iterator->next_pos;                           \
     if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
         return false;                                                   \
@@ -6165,14 +6159,14 @@ static bool imcs_join_unsorted_##TYPE##_next(imcs_iterator_h iterator) \
                                                                         \
 imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h input) \
 {                                                                       \
-    imcs_iterator_h result = imcs_new_iterator(sizeof(int64), sizeof(imcs_join_timestamp_context_t)); \
-    imcs_join_timestamp_context_t* ctx = (imcs_join_timestamp_context_t*)result->context; \
+    imcs_iterator_h result = imcs_new_iterator(sizeof(int64), sizeof(imcs_iterator_context_t)); \
+    imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)result->context; \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     result->elem_type = TID_int64;                                      \
     result->opd[0] = imcs_operand(input);                               \
     result->next = imcs_join_unsorted_##TYPE##_next;                    \
     result->flags = FLAG_CONTEXT_FREE;                                  \
-    ctx->ts = ts;                                                       \
+    ctx->stack[0].page = ts->root_page;                                 \
     return result;                                                      \
 }
 
