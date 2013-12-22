@@ -879,6 +879,8 @@ create function cs_window_avg(timeseries, window_size integer) returns timeserie
 create function cs_window_sum(timeseries, window_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_window_var(timeseries, window_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_window_dev(timeseries, window_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_window_ema(timeseries, window_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_window_atr(timeseries, window_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_hash_count(group_by timeseries, out count timeseries, out groups timeseries) returns record  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_hash_dup_count(input timeseries, group_by timeseries, out count timeseries, out groups timeseries, min_occurrences integer default 1) returns record  as 'MODULE_PATHNAME' language C stable strict;

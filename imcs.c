@@ -169,6 +169,8 @@ static const char const* imcs_command_mnem[] =
     "window_sum", 
     "window_var", 
     "window_dev", 
+    "window_ema", 
+    "window_atr", 
     "hash_count", 
     "hash_dup_count", 
     "hash_max", 
@@ -381,6 +383,8 @@ PG_FUNCTION_INFO_V1(cs_window_avg);
 PG_FUNCTION_INFO_V1(cs_window_sum);
 PG_FUNCTION_INFO_V1(cs_window_var);
 PG_FUNCTION_INFO_V1(cs_window_dev);
+PG_FUNCTION_INFO_V1(cs_window_ema);
+PG_FUNCTION_INFO_V1(cs_window_atr);
 PG_FUNCTION_INFO_V1(cs_hash_count);
 PG_FUNCTION_INFO_V1(cs_hash_dup_count);
 PG_FUNCTION_INFO_V1(cs_hash_max);
@@ -570,6 +574,8 @@ Datum cs_window_avg(PG_FUNCTION_ARGS);
 Datum cs_window_sum(PG_FUNCTION_ARGS);
 Datum cs_window_var(PG_FUNCTION_ARGS);
 Datum cs_window_dev(PG_FUNCTION_ARGS);
+Datum cs_window_ema(PG_FUNCTION_ARGS);
+Datum cs_window_atr(PG_FUNCTION_ARGS);
 Datum cs_hash_count(PG_FUNCTION_ARGS);
 Datum cs_hash_dup_count(PG_FUNCTION_ARGS);
 Datum cs_hash_max(PG_FUNCTION_ARGS);
@@ -2763,6 +2769,8 @@ IMCS_INTERVAL_OP(window_sum)
 IMCS_INTERVAL_OP(window_avg)
 IMCS_INTERVAL_OP(window_var)
 IMCS_INTERVAL_OP(window_dev)
+IMCS_INTERVAL_OP(window_ema)
+IMCS_INTERVAL_OP(window_atr)
 
 
 Datum cs_hash_count(PG_FUNCTION_ARGS)

@@ -1540,7 +1540,7 @@ typedef struct imcs_agg_context_t_
 #define IMCS_WINDOW_AGG_DEF(TYPE, AGG_TYPE, MNEM, NEXT, INIT)           \
 static bool imcs_##MNEM##_##TYPE##_next(imcs_iterator_h iterator)       \
 {                                                                       \
-    size_t i, tile_size;                                                \
+size_t i, tile_size;                                                    \
     imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;   \
     if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
         return false;                                                   \
@@ -1667,6 +1667,34 @@ IMCS_WINDOW_AGG_DEF(int32, double, window_dev, IMCS_WINDOW_DEV_NEXT, 0)
 IMCS_WINDOW_AGG_DEF(int64, double, window_dev, IMCS_WINDOW_DEV_NEXT, 0)
 IMCS_WINDOW_AGG_DEF(float, double, window_dev, IMCS_WINDOW_DEV_NEXT, 0)
 IMCS_WINDOW_AGG_DEF(double, double, window_dev, IMCS_WINDOW_DEV_NEXT, 0)
+
+
+#define IMCS_WINDOW_EMA_NEXT(TYPE, AGG_TYPE, result, acc, hist, val)    \
+    if (iterator->next_pos == 0) {                                      \
+        result = acc = val;                                             \
+    } else {                                                            \
+        double p = 2.0 / (ctx->interval + 1);                           \
+        result = acc = val*p + acc * (1 - p);                           \
+    } 
+
+IMCS_WINDOW_AGG_DEF(int8, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(int16, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(int32, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(int64, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(float, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(double, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
+
+#define IMCS_WINDOW_ATR_NEXT(TYPE, AGG_TYPE, result, acc, hist, val)   \
+   size_t n = iterator->next_pos < ctx->interval ? iterator->next_pos+1 : ctx->interval; \
+   result = acc = (acc * (n-1) + val) / n
+
+IMCS_WINDOW_AGG_DEF(int8, double, window_atr, IMCS_WINDOW_ATR_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(int16, double, window_atr, IMCS_WINDOW_ATR_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(int32, double, window_atr, IMCS_WINDOW_ATR_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(int64, double, window_atr, IMCS_WINDOW_ATR_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(float, double, window_atr, IMCS_WINDOW_ATR_NEXT, 0)
+IMCS_WINDOW_AGG_DEF(double, double, window_atr, IMCS_WINDOW_ATR_NEXT, 0)
+
 
 #define IMCS_CUMULATIVE_AGG_DEF(TYPE, AGG_TYPE, MNEM, INIT, NEXT)       \
 static bool imcs_##MNEM##_##TYPE##_next(imcs_iterator_h iterator)       \

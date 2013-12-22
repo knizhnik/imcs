@@ -906,6 +906,18 @@ Aggregation is done for window - N subsequent elements of timeseries where N is 
 <td><code>function cs_window_dev(input timeseries, window_size integer) returns timeseries</code></td>
 <td>Standard deviation of each window. Parameter <code>window_size</code> specifies size of window.</td>
 </tr>
+<tr>
+<td><code>function cs_window_ema(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Exponential Moving Average (EMA) indicator with <code>window_size</code> period.
+Coefficient of weighting decrease <code>p=2/(window_size + 1)</code>. 
+Formula: <code>EMA[0] = input[0], EMA[i] = input[i]*p + EMA[i-1]*(1-p)</code>.
+</tr>
+<tr>
+<td><code>function cs_window_atr(input timeseries, window_size integer) returns timeseries</code></td>
+<td>Average True Range (ATR) indicator with <code>window_size</code> period.
+Formula: <code>ATR[i] = (ATR[i-1]*(n-1) + TR[i])/n, where n=min(i+1, window_size)</code>.
+First <code>window_size-1</code> elements of result can be skipped to get correct ATR sequence.
+</tr>
 </table>
 </p>
 

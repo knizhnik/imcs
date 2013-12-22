@@ -74,6 +74,8 @@
     imcs_iterator_h imcs_window_avg_##TYPE(imcs_iterator_h input, size_t interval); \
     imcs_iterator_h imcs_window_var_##TYPE(imcs_iterator_h input, size_t interval); \
     imcs_iterator_h imcs_window_dev_##TYPE(imcs_iterator_h input, size_t interval); \
+    imcs_iterator_h imcs_window_ema_##TYPE(imcs_iterator_h input, size_t interval); \
+    imcs_iterator_h imcs_window_atr_##TYPE(imcs_iterator_h input, size_t interval); \
     void imcs_hash_max_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
     void imcs_hash_min_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
     void imcs_hash_sum_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \

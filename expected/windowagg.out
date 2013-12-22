@@ -71,3 +71,17 @@ select cs_window_dev(Close,3) << 2 from Quote_get('IBM');
  float8:{8.0428,8.16497,8.28774}
 (1 row)
 
+--- 2-days EMA (Exponential Moving Average)
+select cs_window_ema(Close,3) from Quote_get('IBM');
+               cs_window_ema                
+--------------------------------------------
+ float8:{10.5,15.35,22.775,31.4875,40.9938}
+(1 row)
+
+--- 2-days ATR (Average True Range)
+select cs_window_atr(cs_maxof(High-Low,cs_concat('float4:{0}',cs_maxof(cs_abs((High<<1) - Close), cs_abs((Low<<1) - Close)))), 3) << 2 from Quote_get('IBM');
+             ?column?             
+----------------------------------
+ float8:{7.16667,8.37778,9.18518}
+(1 row)
+

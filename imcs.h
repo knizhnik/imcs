@@ -189,6 +189,8 @@ enum imcs_commands
     imcs_cmd_window_sum, 
     imcs_cmd_window_var, 
     imcs_cmd_window_dev, 
+    imcs_cmd_window_ema, 
+    imcs_cmd_window_atr, 
     imcs_cmd_hash_count, 
     imcs_cmd_hash_dup_count, 
     imcs_cmd_hash_max, 

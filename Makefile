@@ -32,4 +32,4 @@ include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
 distrib: clean
-	cd .. ; tar --exclude=.svn -chvzf imcs-1.01.tar.gz imcs
+	cd .. ; tar --exclude=.svn -chvzf imcs-1.02.tar.gz imcs
