@@ -1,0 +1,13 @@
+--- Release version 1.01 (09.12.2013) -------------------------------------
+
+Initial version
+
+--- Release version 1.02 (21.12.2013) -------------------------------------
+
+1. Add support of MONEY type
+2. Add support of VARCHAR type
+3. Implement join by timestamp 
+4. Correctly handle NULL in TABLE_get(id) function
+5. Correctly handle materialized views
+6. Fix bug in autoload
+7. Add EMA and ATR indicators
