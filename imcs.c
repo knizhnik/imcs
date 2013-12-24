@@ -1517,9 +1517,6 @@ typedef struct {
 /* Checks that all operators in subtree are reentrant and have the same boundaries */
 static bool imcs_parallel_execution_possible_for_operator(imcs_iterator_h iterator, imcs_visitor_context_t* ctx) 
 { 
-    if (imcs_thread_pool == NULL) { 
-        imcs_thread_pool = imcs_create_thread_pool(n_threads);
-    }
     if (iterator == NULL) { 
         return true;
     }
@@ -1611,6 +1608,9 @@ static imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator)
     if (n_threads == 1 || iterator->merge == NULL) {                  
         return iterator;
     }    
+    if (imcs_thread_pool == NULL) { 
+        imcs_thread_pool = imcs_create_thread_pool(n_threads);
+    }
     ctx.interval = IMCS_INFINITY;                    
     if (imcs_parallel_execution_possible_for_operator(iterator->opd[0], &ctx) 
         && imcs_parallel_execution_possible_for_operator(iterator->opd[1], &ctx) 
