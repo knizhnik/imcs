@@ -3576,7 +3576,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         attr_size[i] = DatumGetInt16(SPI_getbinval(spi_tuple, spi_tupdesc, 3, &isnull));
         if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
             attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
-            if (attr_size[i] < 0) {
+            if (attr_size[i] < 0 && id_attnum != i+1) {
                 ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Size of attribute %s is not statically known", attr_name[i])))); 
             }
         }
@@ -3614,6 +3614,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
             HeapTuple spi_tuple = SPI_tuptable->vals[0];
             TupleDesc spi_tupdesc = SPI_tuptable->tupdesc;
             char* id = NULL;
+            char* id_cstr = NULL;
             int id_len = 0;
             n_records += 1;
             heap_deform_tuple(spi_tuple, spi_tupdesc, values, nulls);
@@ -3621,12 +3622,17 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                 if (nulls[id_attnum-1]) {
                     ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("Timseries identifier can not be NULL"))));
                 }
-                t = DatumGetTextP(values[id_attnum-1]);
-                id = (char*)VARDATA(t);
-                id_len = VARSIZE(t) - VARHDRSZ;
-                if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
-                    while (id_len != 0 && id[id_len-1] == ' ') { 
-                        id_len -= 1;
+                if (attr_type[id_attnum-1] != TID_char) { 
+                    id = id_cstr = SPI_getvalue(spi_tuple, spi_tupdesc, id_attnum);
+                    id_len = strlen(id);
+                } else { 
+                    t = DatumGetTextP(values[id_attnum-1]);
+                    id = (char*)VARDATA(t);
+                    id_len = VARSIZE(t) - VARHDRSZ;
+                    if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
+                        while (id_len != 0 && id[id_len-1] == ' ') { 
+                            id_len -= 1;
+                        }
                     }
                 }
             }
@@ -3698,6 +3704,9 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                         Assert(false);
                     }
                 }
+            }
+            if (id_cstr != NULL) { 
+                pfree(id_cstr);
             }
             SPI_freetuple(spi_tuple);
             SPI_freetuptable(SPI_tuptable);

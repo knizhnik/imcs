@@ -5,7 +5,7 @@
 
 create type timeseries;
 
-create type cs_elem_type as enum ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'money', 'float4', 'float8', 'bpchar', 'varchar');
+create type cs_elem_type as enum ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'money', 'float4', 'float8', 'bpchar', 'varchar', 'text');
 
 create type cs_sort_order as enum ('asc', 'desc');
 
@@ -24,6 +24,7 @@ begin
     when 'float8' then return 9;
     when 'bpchar' then return 10;
     when 'varchar' then return 10;
+    when 'text' then return 10;
     end case;
 end;
 $$ language plpgsql;
@@ -170,7 +171,7 @@ begin
         declare
             search_result timeseries;
         begin
-            search_result:=columnar_store_search_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,from_ts,till_ts,'||timestamp_tid||');';
+            search_result:=columnar_store_search_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,from_ts,till_ts,'||timestamp_tid||');';
     else
         create_delete_head_func := 'create function '||table_name||'_delete(till_ts '||timestamp_type||' default null) returns bigint as $$ begin return '||table_name||'_delete(null,till_ts); end; $$ language plpgsql';
 
@@ -230,7 +231,7 @@ begin
             begin
                 for i in reverse array_upper(ids, 1)..array_lower(ids, 1) loop 
                     id := ids[i];
-                    search_result:=columnar_store_search_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||id)::cstring,from_ts,till_ts,'||timestamp_tid||');
+                    search_result:=columnar_store_search_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||id::text)::cstring,from_ts,till_ts,'||timestamp_tid||');
                     if (search_result is null) then
                         continue;
                     end if;';
@@ -248,7 +249,7 @@ begin
         begin
             search_result:=columnar_store_search_'||timestamp_type||'(';
     if (timeseries_id is not null) then 
-        create_get_func := create_get_func||'('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring';
+        create_get_func := create_get_func||'('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring';
     else
         create_get_func := create_get_func||''''||table_name||'-'||timestamp_id||'''';
     end if;
@@ -287,7 +288,7 @@ begin
         attr_len := meta.attlen;
         if (attr_len < 0) then -- char(N) type 
             attr_len := meta.atttypmod - 4; -- atttypmod = N + VARHDRSZ
-            if (attr_len < 0) then 
+            if (attr_len < 0 and meta.attname <> timeseries_id) then 
                 raise exception 'Size is not specified for attribute %',meta.attname;              
             end if;
         end if;
@@ -295,16 +296,16 @@ begin
             is_timestamp := true;
             if (timeseries_id is not null) then 
                 create_first_func := 'create function '||table_name||'_first('||timeseries_id||' '||id_type||') returns '||timestamp_type||
-                   ' as $$ begin return columnar_store_first_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,'||attr_tid||','||attr_len||
+                   ' as $$ begin return columnar_store_first_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||
                    '); end; $$ language plpgsql strict stable';
                 create_last_func := 'create function '||table_name||'_last('||timeseries_id||' '||id_type||') returns '||timestamp_type||
-                        ' as $$ begin return columnar_store_last_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,'||attr_tid||','||attr_len||
+                        ' as $$ begin return columnar_store_last_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||
                         '); end; $$ language plpgsql strict stable';
                 create_count_func := 'create function '||table_name||'_count('||timeseries_id||' '||id_type||') returns bigint as $$ begin
-                    return columnar_store_count(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,'||attr_tid||','||attr_len|| 
+                    return columnar_store_count(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len|| 
                     '); end; $$ language plpgsql strict stable';
                 create_join_func := 'create function '||table_name||'_join('||timeseries_id||' '||id_type||',ts timeseries) returns timeseries
-                        as $$ begin return columnar_store_join_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||')::cstring,'||attr_tid||','||attr_len||',ts); end; $$ language plpgsql strict stable';
+                        as $$ begin return columnar_store_join_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||',ts); end; $$ language plpgsql strict stable';
             else
                 create_first_func := 'create function '||table_name||'_first() returns '||timestamp_type||
                     ' as $$ begin return columnar_store_first_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
@@ -330,15 +331,15 @@ begin
         sep:=',';
 
         if (timeseries_id is not null) then 
-            create_load_plsql_func := create_load_plsql_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||rec."'||timeseries_id||'")::cstring,rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
-            create_delete_func := create_delete_func||perf||'columnar_store_delete(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||')::cstring,search_result,'||attr_tid||','||is_timestamp||','||attr_len||')';
-            create_append_func := create_append_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||rec."'||timeseries_id||'")::cstring,rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
-            create_insert_trigger_func := create_insert_trigger_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||NEW."'||timeseries_id||'")::cstring,NEW."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
+            create_load_plsql_func := create_load_plsql_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||rec."'||timeseries_id||'"::text)::cstring,rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
+            create_delete_func := create_delete_func||perf||'columnar_store_delete(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,search_result,'||attr_tid||','||is_timestamp||','||attr_len||')';
+            create_append_func := create_append_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||rec."'||timeseries_id||'"::text)::cstring,rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
+            create_insert_trigger_func := create_insert_trigger_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||NEW."'||timeseries_id||'"::text)::cstring,NEW."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
             if (not is_timestamp) then
-          	    create_get_func := create_get_func||'result."'||meta.attname||'":=columnar_store_get(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||')::cstring,search_result,'||attr_tid||','||attr_len||'); '; 
-                create_concat_func := create_concat_func||'root."'||meta.attname||'":=cs_concat(columnar_store_get(('''||table_name||'-'||meta.attname||'-''||id)::cstring,search_result,'||attr_tid||','||attr_len||'), root."'||meta.attname||'"); '; 
+          	    create_get_func := create_get_func||'result."'||meta.attname||'":=columnar_store_get(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,search_result,'||attr_tid||','||attr_len||'); '; 
+                create_concat_func := create_concat_func||'root."'||meta.attname||'":=cs_concat(columnar_store_get(('''||table_name||'-'||meta.attname||'-''||id::text)::cstring,search_result,'||attr_tid||','||attr_len||'), root."'||meta.attname||'"); '; 
             end if;
-       	    create_span_func := create_span_func||'result."'||meta.attname||'":=columnar_store_span(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||')::cstring,from_pos,till_pos,'||attr_tid||','||is_timestamp||','||attr_len||'); ';        
+       	    create_span_func := create_span_func||'result."'||meta.attname||'":=columnar_store_span(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,from_pos,till_pos,'||attr_tid||','||is_timestamp||','||attr_len||'); ';        
         else
             create_load_plsql_func := create_load_plsql_func||perf||'columnar_store_append_'||meta.typname||'('''||table_name||'-'||meta.attname||''',rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
             create_delete_func := create_delete_func||perf||'columnar_store_delete('''||table_name||'-'||meta.attname||''',search_result,'||attr_tid||','||is_timestamp||','||attr_len||')';
