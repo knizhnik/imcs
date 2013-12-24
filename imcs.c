@@ -2126,8 +2126,20 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
 
 static bool imcs_is_unlimited(imcs_iterator_h iterator) 
 {
-    return (iterator->flags & FLAG_CONSTANT) 
-        || (iterator->opd[0] != NULL && imcs_is_unlimited(iterator->opd[0]));
+    int i;
+    int n_operands = 0;
+    if (iterator->flags & FLAG_CONSTANT) {
+        return true;
+    }
+    for (i = 0; i < 3; i++) {
+        if (iterator->opd[i] != NULL) { 
+            n_operands += 1;
+            if (!imcs_is_unlimited(iterator->opd[i])) {
+                return false;
+            }
+        }
+    }
+    return n_operands != 0;
 }
     
 Datum cs_output_function(PG_FUNCTION_ARGS)

@@ -332,7 +332,7 @@ Functions constructing constant timeseries (timeseries of repeated value) or tim
 Please notice that PostgreSQL allows implicit cast from string to the target type using this type input function, but in this case information about timeseries element type and size should be encoded in the string: <code>'int4:{1,2,3,4,5}'</code>.</td>
 </tr>
 <tr>
-<td><code>function cs_const(val float8, elem_type cs_elem_type) returns timeseries<code></td>
+<td><code>function cs_const(val float8, elem_type cs_elem_type default 'float8') returns timeseries<code></td>
 <td>Creates timeseries of numeric (integer or floating point) elements. Type of timeseries is specified by <code>elem_type</code> parameter.
 Should be one of: <code>'char', 'int2', 'int4', 'int8', 'float4', 'float8'</code>.</td>
 </tr>

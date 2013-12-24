@@ -49,8 +49,12 @@ select Symbol,sum(Close*Volume)/sum(Volume) as VWAP from Quote group by Symbol h
 select cs_sum(Close) from Quote_concat(array(select Symbol from Securities));
 --- Time: 76.167 ms
 
---- Calculate Average True Range indicator for last quater of ABB
+
+--- Average True Range (ATR) indicator with 14 days period for last quarter of ABB
 select cs_window_atr(cs_maxof(High-Low,cs_concat('float4:{0}',cs_maxof(cs_abs((High<<1) - Close), cs_abs((Low<<1) - Close)))), 14) << 13 from Quote_get('ABB', date('01-Jan-2010'), date('31-Mar-2010'));
+
+--- Relative Strength Index (RSI) indicator with 14 days period for last quarter of ABB
+select cs_const(100)-(cs_const(100)/(cs_const(1)+cs_window_ema(cs_maxof(cs_diff(Close), cs_const(0, 'float4')), 14)/cs_window_ema(cs_maxof(-cs_diff(Close), cs_const(0, 'float4')), 14))) from Quote_get('ABB', date('01-Jan-2010'), date('31-Mar-2010'));
 
 
 --- Now place all quotes in single timeseries (no symbol)

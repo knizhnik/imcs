@@ -12,3 +12,4 @@ Initial version
 6. Fix bug in autoload
 7. Add EMA and ATR indicators
 8. Support non-character timeseries ID
+9. Fix bug in infinite timeseries detection

@@ -493,7 +493,7 @@ create function cs_project_agg(anyelement, positions timeseries default null, di
 create function cs_parse(str text, elem_type cs_elem_type, elem_size integer default 0) returns timeseries as
 $$ begin return cs_parse_tid(str, cs_get_tid(elem_type), elem_size); end; $$ language plpgsql stable strict;
 
-create function cs_const(val float8, elem_type cs_elem_type) returns timeseries as
+create function cs_const(val float8, elem_type cs_elem_type default 'float8') returns timeseries as
 $$ begin return cs_const_num(val, cs_get_tid(elem_type)); end; $$ language plpgsql stable strict;
 
 create function cs_const(val timestamp, elem_type cs_elem_type) returns timeseries as
