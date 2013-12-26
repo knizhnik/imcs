@@ -1190,7 +1190,8 @@ The following table contains mapping between operators and corresponding timeser
 <tr><td>a &amp; b</td><td>cs_and</td><td>Bitwise AND (can be also used for boolean timeseries)</td></tr>
 <tr><td>a | b</td><td>cs_or</td><td>Bitwise OR (can be also used for boolean timeseries)</td></tr>
 <tr><td>a # b</td><td>cs_xor</td><td>Bitwise XOR (can be also used for boolean timeseries)</td></tr>
-<tr><td>a || b</td><td>cs_cat</td><td>Concatenates elements of two timeseries</td></tr>
+<tr><td>a || b</td><td>cs_cat</td><td>Concatenates correspondent elements of two timeseries</td></tr>
+<tr><td>a ||| b</td><td>cs_concat</td><td>Concatenates two timeseries</td></tr>
 <tr><td>a = b</td><td>cs_eq</td><td>Checks if element if left timeseries is equal to element of right timeseries</td></tr>
 <tr><td>str ~~ pattern</td><td>cs_ilike</td><td>Finds elements of character timeseries matching specified pattern</td></tr>
 <tr><td>a &lt&gt; b</td><td>cs_ne</td><td>Checks if element if left timeseries is not equal to element of right timeseries</td></tr>

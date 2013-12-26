@@ -507,8 +507,11 @@ $$ begin return cs_const_str(val, length(val)); end; $$ language plpgsql stable 
 
 create function cs_add(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_add_num(ts timeseries, val float8) returns timeseries 
+create function cs_add_seq_num(ts timeseries, val float8) returns timeseries 
 as $$ begin return cs_add(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_add_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_add(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_add_dt(ts timeseries, val timestamp) returns timeseries 
 as $$ begin return cs_add(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
@@ -517,26 +520,34 @@ create function cs_add_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_add(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator + (leftarg=timeseries, rightarg=timeseries, procedure=cs_add, commutator=+);
-create operator + (leftarg=timeseries, rightarg=float8, procedure=cs_add_num, commutator=+);
+create operator + (leftarg=timeseries, rightarg=float8, procedure=cs_add_seq_num, commutator=+);
+create operator + (leftarg=float8, rightarg=timeseries, procedure=cs_add_num_seq, commutator=+);
 create operator + (leftarg=timeseries, rightarg=text, procedure=cs_add_str, commutator=+);
 create operator + (leftarg=timeseries, rightarg=timestamp, procedure=cs_add_dt, commutator=+);
 
 create function cs_mul(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_mul_num(ts timeseries, val float8) returns timeseries 
+create function cs_mul_seq_num(ts timeseries, val float8) returns timeseries 
 as $$ begin return cs_mul(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_mul_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_mul(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_mul_str(ts timeseries, val text) returns timeseries 
 as $$ begin return cs_mul(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator * (leftarg=timeseries, rightarg=timeseries, procedure=cs_mul, commutator= *);
-create operator * (leftarg=timeseries, rightarg=float8, procedure=cs_mul_num, commutator= *);
+create operator * (leftarg=timeseries, rightarg=float8, procedure=cs_mul_seq_num, commutator= *);
+create operator * (leftarg=float8, rightarg=timeseries, procedure=cs_mul_num_seq, commutator= *);
 create operator * (leftarg=timeseries, rightarg=text, procedure=cs_mul_str, commutator= *);
 
 create function cs_sub(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_sub_num(ts timeseries, val float8) returns timeseries 
+create function cs_sub_seq_num(ts timeseries, val float8) returns timeseries 
 as $$ begin return cs_sub(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_sub_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_sub(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_sub_dt(ts timeseries, val timestamp) returns timeseries 
 as $$ begin return cs_sub(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
@@ -545,32 +556,41 @@ create function cs_sub_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_sub(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator - (leftarg=timeseries, rightarg=timeseries, procedure=cs_sub);
-create operator - (leftarg=timeseries, rightarg=float8, procedure=cs_sub_num);
+create operator - (leftarg=timeseries, rightarg=float8, procedure=cs_sub_seq_num);
+create operator - (leftarg=float8, rightarg=timeseries, procedure=cs_sub_num_seq);
 create operator - (leftarg=timeseries, rightarg=text, procedure=cs_sub_str);
 create operator - (leftarg=timeseries, rightarg=timestamp, procedure=cs_sub_dt);
 
 create function cs_div(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_div_num(ts timeseries, val float8) returns timeseries 
+create function cs_div_seq_num(ts timeseries, val float8) returns timeseries 
 as $$ begin return cs_div(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_div_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_div(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_div_str(ts timeseries, val text) returns timeseries 
 as $$ begin return cs_div(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator / (leftarg=timeseries, rightarg=timeseries, procedure=cs_div);
-create operator / (leftarg=timeseries, rightarg=float8, procedure=cs_div_num);
+create operator / (leftarg=timeseries, rightarg=float8, procedure=cs_div_seq_num);
+create operator / (leftarg=float8, rightarg=timeseries, procedure=cs_div_num_seq);
 create operator / (leftarg=timeseries, rightarg=text, procedure=cs_div_str);
 
 create function cs_mod(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_mod_num(ts timeseries, val float8) returns timeseries 
+create function cs_mod_seq_num(ts timeseries, val float8) returns timeseries 
 as $$ begin return cs_mod(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_mod_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_mod(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_mod_str(ts timeseries, val text) returns timeseries 
 as $$ begin return cs_mod(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator % (leftarg=timeseries, rightarg=timeseries, procedure=cs_mod);
-create operator % (leftarg=timeseries, rightarg=float8, procedure=cs_mod_num);
+create operator % (leftarg=timeseries, rightarg=float8, procedure=cs_mod_seq_num);
+create operator % (leftarg=float8, rightarg=timeseries, procedure=cs_mod_num_seq);
 create operator % (leftarg=timeseries, rightarg=text, procedure=cs_mod_str);
 
 create function cs_pow(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
@@ -623,10 +643,31 @@ create operator # (leftarg=timeseries, rightarg=text, procedure=cs_xor_str, comm
 
 create function cs_concat(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable;
 
+create function cs_concat_seq_num(ts timeseries, val float8) returns timeseries 
+as $$ begin return cs_concat(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_concat_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_concat(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
+
+create function cs_concat_dt(ts timeseries, val timestamp) returns timeseries 
+as $$ begin return cs_concat(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_concat_str(ts timeseries, val text) returns timeseries 
+as $$ begin return cs_concat(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
+
+create operator ||| (leftarg=timeseries, rightarg=timeseries, procedure=cs_concat, commutator= |||);
+create operator ||| (leftarg=timeseries, rightarg=float8, procedure=cs_concat_seq_num, commutator= |||);
+create operator ||| (leftarg=float8, rightarg=timeseries, procedure=cs_concat_num_seq, commutator= |||);
+create operator ||| (leftarg=timeseries, rightarg=timestamp, procedure=cs_concat_dt, commutator= |||);
+create operator ||| (leftarg=timeseries, rightarg=text, procedure=cs_concat_str, commutator= |||);
+
 create function cs_cat(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_cat_num(ts timeseries, val float8) returns timeseries 
+create function cs_cat_seq_num(ts timeseries, val float8) returns timeseries 
 as $$ begin return cs_cat(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+
+create function cs_cat_num_seq(val float8, ts timeseries) returns timeseries 
+as $$ begin return cs_cat(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_cat_dt(ts timeseries, val timestamp) returns timeseries 
 as $$ begin return cs_cat(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
@@ -635,7 +676,8 @@ create function cs_cat_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_cat(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator || (leftarg=timeseries, rightarg=timeseries, procedure=cs_cat, commutator= ||);
-create operator || (leftarg=timeseries, rightarg=float8, procedure=cs_cat_num, commutator= ||);
+create operator || (leftarg=timeseries, rightarg=float8, procedure=cs_cat_seq_num, commutator= ||);
+create operator || (leftarg=float8, rightarg=timeseries, procedure=cs_cat_num_seq, commutator= ||);
 create operator || (leftarg=timeseries, rightarg=timestamp, procedure=cs_cat_dt, commutator= ||);
 create operator || (leftarg=timeseries, rightarg=text, procedure=cs_cat_str, commutator= ||);
 
@@ -743,7 +785,16 @@ create operator > (leftarg=timeseries, rightarg=text, procedure=cs_gt_str, commu
 create operator > (leftarg=timeseries, rightarg=timestamp, procedure=cs_gt_dt, commutator= <);
 
 create function cs_maxof(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_maxof(ts timeseries,val float8) returns timeseries as $$
+begin return cs_maxof(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+create function cs_maxof(val float8,ts timeseries) returns timeseries as $$
+begin return cs_maxof(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
+
 create function cs_minof(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_minof(ts timeseries,val float8) returns timeseries as $$
+begin return cs_minof(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
+create function cs_minof(val float8, ts timeseries) returns timeseries as $$
+begin return cs_minof(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
 create function cs_neg(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create operator - (rightarg=timeseries, procedure=cs_neg);
