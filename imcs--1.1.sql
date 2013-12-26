@@ -134,7 +134,7 @@ begin
             drop function '||table_name||'_delete('||id_type||','||timestamp_type||','||timestamp_type||');
             drop function '||table_name||'_first('||id_type||');
             drop function '||table_name||'_last('||id_type||');
-            drop function '||table_name||'_join('||id_type||',timeseries);
+            drop function '||table_name||'_join('||id_type||',timeseries,integer);
             drop function '||table_name||'_count('||id_type||');';
     else 
         create_drop_func := create_drop_func||'
@@ -144,7 +144,7 @@ begin
             drop function '||table_name||'_delete('||timestamp_type||','||timestamp_type||');
             drop function '||table_name||'_first();
             drop function '||table_name||'_last();
-            drop function '||table_name||'_join(timeseries);
+            drop function '||table_name||'_join(timeseries,integer);
             drop function '||table_name||'_count();';
     end if;
     create_drop_func := create_drop_func||'
@@ -304,8 +304,8 @@ begin
                 create_count_func := 'create function '||table_name||'_count('||timeseries_id||' '||id_type||') returns bigint as $$ begin
                     return columnar_store_count(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len|| 
                     '); end; $$ language plpgsql strict stable';
-                create_join_func := 'create function '||table_name||'_join('||timeseries_id||' '||id_type||',ts timeseries) returns timeseries
-                        as $$ begin return columnar_store_join_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||',ts); end; $$ language plpgsql strict stable';
+                create_join_func := 'create function '||table_name||'_join('||timeseries_id||' '||id_type||',ts timeseries,direction integer default 1) returns timeseries
+                        as $$ begin return columnar_store_join_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||',ts,direction); end; $$ language plpgsql strict stable';
             else
                 create_first_func := 'create function '||table_name||'_first() returns '||timestamp_type||
                     ' as $$ begin return columnar_store_first_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
@@ -316,8 +316,8 @@ begin
                 create_count_func := 'create function '||table_name||'_count() returns bigint as $$ begin 
                     return columnar_store_count('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
                     '); end; $$ language plpgsql strict stable';
-                create_join_func := 'create function '||table_name||'_join(ts timeseries) returns timeseries
-                        as $$ begin return columnar_store_join_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||',ts); end; $$ language plpgsql strict stable';
+                create_join_func := 'create function '||table_name||'_join(ts timeseries,direction integer default 1) returns timeseries
+                        as $$ begin return columnar_store_join_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||',ts,direction); end; $$ language plpgsql strict stable';
             end if;
         elsif (meta.attname = timeseries_id) then
             create_type := create_type||sep||timeseries_id||' '||id_type;
@@ -444,15 +444,15 @@ create function columnar_store_last_timestamp(id cstring, field_type integer, fi
 create function columnar_store_last_float4(id cstring, field_type integer, field_size integer) returns float4 as 'MODULE_PATHNAME','columnar_store_last_float' language C strict stable;
 create function columnar_store_last_float8(id cstring, field_type integer, field_size integer) returns float8 as 'MODULE_PATHNAME','columnar_store_last_double' language C strict stable;
 
-create function columnar_store_join_char(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int8' language C strict stable;
-create function columnar_store_join_int2(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int16' language C strict stable;
-create function columnar_store_join_int4(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int32' language C strict stable;
-create function columnar_store_join_int8(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
-create function columnar_store_join_date(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int32' language C strict stable;
-create function columnar_store_join_time(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
-create function columnar_store_join_timestamp(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
-create function columnar_store_join_float4(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_float' language C strict stable;
-create function columnar_store_join_float8(id cstring, field_type integer, field_size integer, ts timeseries) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_double' language C strict stable;
+create function columnar_store_join_char(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int8' language C strict stable;
+create function columnar_store_join_int2(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int16' language C strict stable;
+create function columnar_store_join_int4(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int32' language C strict stable;
+create function columnar_store_join_int8(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
+create function columnar_store_join_date(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int32' language C strict stable;
+create function columnar_store_join_time(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
+create function columnar_store_join_timestamp(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_int64' language C strict stable;
+create function columnar_store_join_float4(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_float' language C strict stable;
+create function columnar_store_join_float8(id cstring, field_type integer, field_size integer, ts timeseries,direction integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_join_double' language C strict stable;
 
 create function columnar_store_count(id cstring, field_type integer, field_size integer) returns bigint as 'MODULE_PATHNAME' language C strict stable;
 
@@ -905,6 +905,8 @@ create function cs_sum(timeseries) returns float8  as 'MODULE_PATHNAME' language
 create function cs_prd(timeseries) returns float8  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_var(timeseries) returns float8  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_dev(timeseries) returns float8  as 'MODULE_PATHNAME' language C stable strict;
+create function cs_all(timeseries) returns bigint  as 'MODULE_PATHNAME' language C stable strict;
+create function cs_any(timeseries) returns bigint  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_median(timeseries) returns float8  as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_group_count(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
@@ -917,6 +919,8 @@ create function cs_group_var(input timeseries, group_by timeseries) returns time
 create function cs_group_dev(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_group_last(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_group_first(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_group_all(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_group_any(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_grid_max(timeseries, step integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_grid_min(timeseries, step integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
@@ -940,6 +944,8 @@ create function cs_hash_max(input timeseries, group_by timeseries, out max times
 create function cs_hash_min(input timeseries, group_by timeseries, out min timeseries, out groups timeseries) returns record  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_hash_avg(input timeseries, group_by timeseries, out avg timeseries, out groups timeseries) returns record  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_hash_sum(input timeseries, group_by timeseries, out sum timeseries, out groups timeseries) returns record  as 'MODULE_PATHNAME' language C stable strict;
+create function cs_hash_all(input timeseries, group_by timeseries, out sum timeseries, out groups timeseries) returns record  as 'MODULE_PATHNAME' language C stable strict;
+create function cs_hash_any(input timeseries, group_by timeseries, out sum timeseries, out groups timeseries) returns record  as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_top_max(timeseries, top integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_top_min(timeseries, top integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;

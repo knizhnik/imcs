@@ -103,3 +103,15 @@ select cs_median(Close) from Quote_get(array['ABB','IBM']);
  30.2000007629395
 (2 rows)
 
+select cs_all('int2:{2,3,6}');
+ cs_all 
+--------
+      2
+(1 row)
+
+select cs_any('char:{2,3,6}');
+ cs_any 
+--------
+      7
+(1 row)
+

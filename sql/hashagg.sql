@@ -9,3 +9,5 @@ select p.agg_val,cs_as(p.group_by,'PairOfInt') from (select (cs_project_agg(cs_h
 
 select cs_hash_count(cs_floor((High-Low)*10)) from Quote_get('IBM');
 select cs_hash_dup_count(cs_ceil((High-Low)*10), Day%3) from Quote_get('IBM');
+select cs_hash_all('int4:{3,1,6,7,0,3,6,5,2,3,7}','int8:{1,1,1,2,2,3,3,4,5,5,5}');
+select cs_hash_any('char:{3,1,6,7,0,3,6,5,2,3,7}','int2:{1,1,1,2,2,3,3,4,5,5,5}');

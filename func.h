@@ -49,6 +49,8 @@
     imcs_iterator_h imcs_max_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_min_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_sum_##TYPE(imcs_iterator_h input);             \
+    imcs_iterator_h imcs_any_##TYPE(imcs_iterator_h input);             \
+    imcs_iterator_h imcs_all_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_prd_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_avg_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_var_##TYPE(imcs_iterator_h input);             \
@@ -57,6 +59,8 @@
     imcs_iterator_h imcs_group_max_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_min_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_sum_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_group_any_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_group_all_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_avg_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_var_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_dev_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
@@ -79,6 +83,8 @@
     void imcs_hash_max_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
     void imcs_hash_min_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
     void imcs_hash_sum_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
+    void imcs_hash_any_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
+    void imcs_hash_all_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
     void imcs_hash_avg_##TYPE(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_top_max_##TYPE(imcs_iterator_h input, size_t top); \
     imcs_iterator_h imcs_top_min_##TYPE(imcs_iterator_h input, size_t top); \
@@ -102,7 +108,7 @@
     imcs_iterator_h imcs_xor_##TYPE(imcs_iterator_h left, imcs_iterator_h right); \
     imcs_iterator_h imcs_asof_join_pos_##TYPE(imcs_iterator_h left, imcs_iterator_h right); \
     imcs_iterator_h imcs_join_pos_##TYPE(imcs_iterator_h left, imcs_iterator_h right);\
-    imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h join_with); \
+    imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h join_with, int direction); \
     imcs_iterator_h imcs_rank_##TYPE(imcs_iterator_h, imcs_order_t order); \
     imcs_iterator_h imcs_dense_rank_##TYPE(imcs_iterator_h, imcs_order_t order); \
     imcs_iterator_h imcs_sort_##TYPE(imcs_iterator_h, imcs_order_t order); \

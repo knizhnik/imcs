@@ -50,6 +50,7 @@ const imcs_elem_typeid_t imcs_underlying_type[] = {TID_int8, TID_int16, TID_int3
         ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("unexpected timeseries data type %s instead of expected %s", imcs_type_mnems[arg_type], imcs_type_mnems[expected_type])))); \
     }                                                                   
 
+
 #define IMCS_MIN_int32 ((int32)1 << 31)
 #define IMCS_MIN_int64 ((int64)1 << 63)
 
@@ -1331,6 +1332,18 @@ IMCS_AGG_DEF(int64, int64, sum, IMCS_AGG_INIT, IMCS_SUM_ACCUMULATE, IMCS_AGG_RES
 IMCS_AGG_DEF(float, double, sum, IMCS_AGG_INIT, IMCS_SUM_ACCUMULATE, IMCS_AGG_RESULT)
 IMCS_AGG_DEF(double, double, sum, IMCS_AGG_INIT, IMCS_SUM_ACCUMULATE, IMCS_AGG_RESULT)
 
+#define IMCS_ALL_ACCUMULATE(agg, val) (agg & val)
+IMCS_AGG_DEF(int8, int8, all, IMCS_AGG_INIT, IMCS_ALL_ACCUMULATE, IMCS_AGG_RESULT)
+IMCS_AGG_DEF(int16, int16, all, IMCS_AGG_INIT, IMCS_ALL_ACCUMULATE, IMCS_AGG_RESULT)
+IMCS_AGG_DEF(int32, int32, all, IMCS_AGG_INIT, IMCS_ALL_ACCUMULATE, IMCS_AGG_RESULT)
+IMCS_AGG_DEF(int64, int64, all, IMCS_AGG_INIT, IMCS_ALL_ACCUMULATE, IMCS_AGG_RESULT)
+
+#define IMCS_ANY_ACCUMULATE(agg, val) (agg | val)
+IMCS_AGG_DEF(int8, int8, any, IMCS_AGG_INIT, IMCS_ANY_ACCUMULATE, IMCS_AGG_RESULT)
+IMCS_AGG_DEF(int16, int16, any, IMCS_AGG_INIT, IMCS_ANY_ACCUMULATE, IMCS_AGG_RESULT)
+IMCS_AGG_DEF(int32, int32, any, IMCS_AGG_INIT, IMCS_ANY_ACCUMULATE, IMCS_AGG_RESULT)
+IMCS_AGG_DEF(int64, int64, any, IMCS_AGG_INIT, IMCS_ANY_ACCUMULATE, IMCS_AGG_RESULT)
+
 #define IMCS_PRD_ACCUMULATE(agg, val) (agg * val)
 IMCS_AGG_DEF(int8, int64, prd, IMCS_AGG_INIT, IMCS_PRD_ACCUMULATE, IMCS_AGG_RESULT)
 IMCS_AGG_DEF(int16, int64, prd, IMCS_AGG_INIT, IMCS_PRD_ACCUMULATE, IMCS_AGG_RESULT)
@@ -1931,6 +1944,40 @@ IMCS_GROUP_AGG_DEF(int32, int64, group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_
 IMCS_GROUP_AGG_DEF(int64, int64, group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
 IMCS_GROUP_AGG_DEF(float, double, group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
 IMCS_GROUP_AGG_DEF(double, double, group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+#define IMCS_GROUP_ALL_ACCUMULATE(agg, val, count) (agg & val)
+IMCS_GROUP_AGG_DEF(int8, int8, group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_GROUP_AGG_DEF(int16, int16, group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_GROUP_AGG_DEF(int32, int32, group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_GROUP_AGG_DEF(int64, int64, group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+imcs_iterator_h imcs_group_all_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ALL is supported only for integer types")))); 
+    return NULL;
+}
+imcs_iterator_h imcs_group_all_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ALL is supported only for integer types")))); 
+    return NULL;
+}
+
+#define IMCS_GROUP_ANY_ACCUMULATE(agg, val, count) (agg | val)
+IMCS_GROUP_AGG_DEF(int8, int8, group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_GROUP_AGG_DEF(int16, int16, group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_GROUP_AGG_DEF(int32, int32, group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_GROUP_AGG_DEF(int64, int64, group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+imcs_iterator_h imcs_group_any_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ANY is supported only for integer types")))); 
+    return NULL;
+}
+imcs_iterator_h imcs_group_any_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ANY is supported only for integer types")))); 
+    return NULL;
+}
 
 #define IMCS_GROUP_AVG_RESULT(agg, count) (agg/count)
 IMCS_GROUP_AGG_DEF(int8, double, group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
@@ -5184,6 +5231,36 @@ IMCS_HASH_AGG_DEF(int64, int64, sum, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULAT
 IMCS_HASH_AGG_DEF(double, float, sum, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULATE, IMCS_HASH_AGG_RESULT)
 IMCS_HASH_AGG_DEF(double, double, sum, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULATE, IMCS_HASH_AGG_RESULT)
 
+#define IMCS_HASH_ANY_ACCUMULATE(acc, val) acc |= val
+IMCS_HASH_AGG_DEF(int8, int8, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+IMCS_HASH_AGG_DEF(int16, int16, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+IMCS_HASH_AGG_DEF(int32, int32, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+IMCS_HASH_AGG_DEF(int64, int64, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+
+void imcs_hash_any_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ANY is supported only for integer types")))); 
+}
+void imcs_hash_any_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ANY is supported only for integer types")))); 
+}
+
+#define IMCS_HASH_ALL_ACCUMULATE(acc, val) acc &= val
+IMCS_HASH_AGG_DEF(int8, int8, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+IMCS_HASH_AGG_DEF(int16, int16, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+IMCS_HASH_AGG_DEF(int32, int32, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+IMCS_HASH_AGG_DEF(int64, int64, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULATE, IMCS_HASH_AGG_RESULT)
+
+void imcs_hash_all_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ALL is supported only for integer types")))); 
+}
+void imcs_hash_all_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ALL is supported only for integer types")))); 
+}
+
 #define IMCS_HASH_AVG_RESULT(acc, count) acc/count
 IMCS_HASH_AGG_DEF(int64, int8, avg, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULATE, IMCS_HASH_AVG_RESULT)
 IMCS_HASH_AGG_DEF(int64, int16, avg, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULATE, IMCS_HASH_AVG_RESULT)
@@ -6167,25 +6244,37 @@ imcs_iterator_h imcs_ilike(imcs_iterator_h input, char const* pattern)
 static bool imcs_join_unsorted_##TYPE##_next(imcs_iterator_h iterator)  \
 {                                                                       \
     size_t i, tile_size;                                                \
-    imcs_page_t* root_page = ((imcs_iterator_context_t*)iterator->context)->stack[0].page; \
+    imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; \
+    imcs_page_t* root_page = ctx->stack[0].page;                        \
     imcs_pos_t next_pos = iterator->next_pos;                           \
     if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
         return false;                                                   \
     }                                                                   \
     tile_size = iterator->opd[0]->tile_size;                            \
-    for (i = 0; i < tile_size; i++) {                                   \
-        iterator->next_pos = 0;                                         \
-        if (!imcs_search_page_##TYPE(root_page, iterator, iterator->opd[0]->tile.arr_##TYPE[i], BOUNDARY_INCLUSIVE, 0)) { \
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no matching timestamp in timeseries"))); \
+    if (ctx->direction < 0) {                                           \
+        for (i = 0; i < tile_size; i++) {                               \
+            iterator->next_pos = 0;                                     \
+            if (!imcs_search_page_##TYPE(root_page, iterator, iterator->opd[0]->tile.arr_##TYPE[i], BOUNDARY_EXCLUSIVE, 0) || iterator->next_pos == 0) { \
+                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no matching timestamp in timeseries"))); \
+            }                                                           \
+            iterator->tile.arr_int64[i] = iterator->next_pos-1;         \
         }                                                               \
-        iterator->tile.arr_int64[i] = iterator->next_pos;               \
+    } else {                                                            \
+        int boundary = ctx->direction == 0 ? BOUNDARY_EXACT : BOUNDARY_INCLUSIVE; \
+        for (i = 0; i < tile_size; i++) {                               \
+            iterator->next_pos = 0;                                     \
+            if (!imcs_search_page_##TYPE(root_page, iterator, iterator->opd[0]->tile.arr_##TYPE[i], boundary, 0)) { \
+                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no matching timestamp in timeseries"))); \
+            }                                                           \
+            iterator->tile.arr_int64[i] = iterator->next_pos;           \
+        }                                                               \
     }                                                                   \
     iterator->tile_size = tile_size;                                    \
     iterator->next_pos = next_pos + tile_size;                          \
     return true;                                                        \
 }                                                                       \
                                                                         \
-imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h input) \
+imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h input, int direction) \
 {                                                                       \
     imcs_iterator_h result = imcs_new_iterator(sizeof(int64), sizeof(imcs_iterator_context_t)); \
     imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)result->context; \
@@ -6194,6 +6283,7 @@ imcs_iterator_h imcs_join_unsorted_##TYPE(imcs_timeseries_t* ts, imcs_iterator_h
     result->opd[0] = imcs_operand(input);                               \
     result->next = imcs_join_unsorted_##TYPE##_next;                    \
     result->flags = FLAG_CONTEXT_FREE;                                  \
+    ctx->direction = direction;                                         \
     ctx->stack[0].page = ts->root_page;                                 \
     return result;                                                      \
 }

@@ -293,7 +293,7 @@ bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val
     Assert(n_items > 0);                                                \
     l = 0;                                                              \
     r = n_items;                                                        \
-    if (boundary == BOUNDARY_INCLUSIVE)  {                              \
+    if (boundary == BOUNDARY_INCLUSIVE || boundary == BOUNDARY_EXACT)  { \
         while (l < r) {                                                 \
             int m = (l + r) >> 1;                                       \
             if (pg->u.val_##TYPE[m] < val) {                            \
@@ -329,7 +329,7 @@ bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val
             ctx->stack[level].pos = l;                                  \
         }                                                               \
     } else {                                                            \
-        if (l < n_items) {                                              \
+        if (l < n_items && (boundary != BOUNDARY_EXACT || pg->u.val_##TYPE[l] == val)) { \
             iterator->next_pos += l;                                    \
             ctx->stack[level].pos = l;                                  \
             ctx->stack_size = level+1;                                  \

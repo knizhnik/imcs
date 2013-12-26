@@ -6,3 +6,5 @@ select cs_group_var(Close,Day/3) from Quote_get('IBM');
 select cs_group_dev(Close,Day/3) from Quote_get('IBM');
 select cs_group_first(Close,Day/3) from Quote_get('IBM');
 select cs_group_last(Close,Day/3) from Quote_get('IBM');
+select cs_group_all('int8:{3,1,6,7,0,3,6,5,2,3,7}','int4:{1,1,1,2,2,3,3,4,5,5,5}');
+select cs_group_any('int2:{3,1,6,7,0,3,6,5,2,3,7}','char:{1,1,1,2,2,3,3,4,5,5,5}');

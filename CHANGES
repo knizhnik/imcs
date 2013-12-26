@@ -2,7 +2,7 @@
 
 Initial version
 
---- Release version 1.02 (21.12.2013) -------------------------------------
+--- Release version 1.02 (27.12.2013) -------------------------------------
 
 1. Add support of MONEY type
 2. Add support of VARCHAR type
@@ -13,3 +13,6 @@ Initial version
 7. Add EMA and ATR indicators
 8. Support non-character timeseries ID
 9. Fix bug in infinite timeseries detection
+10. Add more overloaded binary operators accepting numeric parameter
+11. Support grand, group and hash ALL/ANY aggregates.
+12. Make timestamp join more flexible: add direction parameter

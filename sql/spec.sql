@@ -11,3 +11,6 @@ select (Quote_project(q.*,'date:{31-Oct-2013,03-Nov-2013}'->Day)).* from Quote_g
 select (Quote_project(q.*,'date:{1-Nov-2013,2-Nov-2013,03-Nov-2013,04-Nov-2013}'<->Day)).* from Quote_get('IBM') q;
 select cs_join('date:{1-Nov-2013,2-Nov-2013,03-Nov-2013,04-Nov-2013}', Day, Close) from Quote_get('IBM');
 select (Quote_project(Quote_get('IBM'), Quote_join('IBM', 'date:{2-Nov-2013,4-Nov-2013,03-Nov-2013,01-Nov-2013}'))).*;
+select (Quote_project(Quote_get('IBM'), Quote_join('IBM', 'date:{2-Nov-2013,4-Nov-2013,03-Nov-2013,01-Nov-2013}', 1))).*;
+select (Quote_project(Quote_get('IBM'), Quote_join('IBM', 'date:{2-Nov-2013,4-Nov-2013,03-Nov-2013,01-Nov-2013}', 0))).*;
+select (Quote_project(Quote_get('IBM'), Quote_join('IBM', 'date:{2-Nov-2013,4-Nov-2013,03-Nov-2013,01-Nov-2013}', -1))).*;

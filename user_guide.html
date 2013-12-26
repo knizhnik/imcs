@@ -257,8 +257,14 @@ most frequent case of deleting elements from timeseries: it correponds to shifti
 deteriorated are thrown away. This function returns number of deleted elements.</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_join(other timeseries) returns timeseries</code></td>
-<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp is greater or equal than correspodent element of joined timeseries.</td>
+<td><code>function <b>TABLE</b>_join(other timeseries, direction integer default 1) returns timeseries</code></td>
+<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp matches correspodent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
+<ul>
+<li>If <code>direction</code> is less than zero, then this timestamp should be less or equal than other timestamp (locate timeseries element preceding timestamp).</li>
+<li>If <code>direction</code> is zero, then this timestamp should be equal to other timestamp (exact match of timestamps). </li>
+<li>If <code>direction</code> is greater than zero, then this timestamp should be greater or equal than other timestamp (locate timeseries element succeeding timestamp).</li>
+</ul>
+</td>
 </tr>
 </table>
 </p>
@@ -315,7 +321,12 @@ deteriorated are thrown away. This function returns number of deleted elements.<
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_join(id <b>TIMESERIES_ID_TYPE</b>, other timeseries) returns timeseries</code></td>
-<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp is greater or equal than correspodent element of joined timeseries.</td>
+Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp  matches correspodent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
+<ul>
+<li>If <code>direction</code> is less than zero, then this timestamp should be less or equal than other timestamp (locate timeseries element preceding timestamp).</li>
+<li>If <code>direction</code> is zero, then this timestamp should be equal to other timestamp (exact match of timestamps). </li>
+<li>If <code>direction</code> is greater than zero, then this timestamp should be greater or equal than other timestamp (locate timeseries element succeeding timestamp).</li>
+</ul></td>
 </tr>
 </table>
 </p>
@@ -793,6 +804,14 @@ Execution of these functions can be parallelized (except <code>cs_median</code>)
 <td><code>function cs_median(timeseries) returns float8</code></td>
 <td>Median element of timeseries.</td>
 </tr>
+<tr>
+<td><code>function cs_all(timeseries) returns bigint</code></td>
+<td>Bitwise AND of elements of integer timeseries.</td>
+</tr>
+<tr>
+<td><code>function cs_any(timeseries) returns bigint</code></td>
+<td>Bitwise OR of elements of integer timeseries.</td>
+</tr>
 </table>
 </p>
 
@@ -821,6 +840,10 @@ It is not mandatory to sort this timeseries. But you should realize that sequenc
 <td>Minimal value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
 </tr>
 <tr>
+<td><code>function cs_group_sum(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Sum of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
 <td><code>function cs_group_avg(input timeseries, group_by timeseries) returns timeseries</code></td>
 <td>Average value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
 </tr>
@@ -839,6 +862,14 @@ It is not mandatory to sort this timeseries. But you should realize that sequenc
 <tr>
 <td><code>function cs_group_last(input timeseries, group_by timeseries) returns timeseries</code></td>
 <td>Last element of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_any(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Bitwise OR of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_group_all(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Bitwise AND of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
 </tr>
 </table>
 </p>
@@ -960,6 +991,16 @@ This function has two output parameters: <code>avg</code> timeseries contains ca
 <td><code>function cs_hash_sum(input timeseries, group_by timeseries, out avg timeseries, out groups timeseries) returns record</code></td>
 <td>Calculates sum of elements for each group. Groups are identified by <code>group_by</code> timeseries. 
 This function has two output parameters: <code>sum</code> timeseries contains calculated sums and <code>groups</code> timeseries contains corresponding group key values.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_any(input timeseries, group_by timeseries, out avg timeseries, out groups timeseries) returns record</code></td>
+<td>Calculates bitwise OR of elements for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>sum</code> timeseries contains calculated bitmasks and <code>groups</code> timeseries contains corresponding group key values.</td>
+</tr>
+<tr>
+<td><code>function cs_hash_all(input timeseries, group_by timeseries, out avg timeseries, out groups timeseries) returns record</code></td>
+<td>Calculates bitwise AND of elements for each group. Groups are identified by <code>group_by</code> timeseries. 
+This function has two output parameters: <code>sum</code> timeseries contains calculated bitmasks and <code>groups</code> timeseries contains corresponding group key values.</td>
 </tr>
 </table>
 </p>

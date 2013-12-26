@@ -15,3 +15,5 @@ select cs_sum(Close) from Quote_concat(array['ABB','IBM']);
 select cs_sum(cs_limit(cs_filter_pos(cs_const(1, 'char')), 0, 3));
 select cs_sum(cs_cum_sum(cs_limit(cs_const(1, 'int4'), 0, 3)));
 select cs_median(Close) from Quote_get(array['ABB','IBM']);
+select cs_all('int2:{2,3,6}');
+select cs_any('char:{2,3,6}');

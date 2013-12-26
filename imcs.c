@@ -144,8 +144,8 @@ static const char const* imcs_command_mnem[] =
     "prd", 
     "var", 
     "dev", 
-    "first", 
-    "last", 
+    "all", 
+    "any", 
     "median", 
     "group_count", 
     "group_approxdc", 
@@ -155,6 +155,8 @@ static const char const* imcs_command_mnem[] =
     "group_sum", 
     "group_var", 
     "group_dev", 
+    "group_all", 
+    "group_any", 
     "group_last", 
     "group_first", 
     "grid_max", 
@@ -177,6 +179,8 @@ static const char const* imcs_command_mnem[] =
     "hash_min", 
     "hash_avg", 
     "hash_sum", 
+    "hash_all", 
+    "hash_any", 
     "top_max", 
     "top_min", 
     "top_max_pos", 
@@ -357,6 +361,8 @@ PG_FUNCTION_INFO_V1(cs_max);
 PG_FUNCTION_INFO_V1(cs_min);
 PG_FUNCTION_INFO_V1(cs_avg);
 PG_FUNCTION_INFO_V1(cs_sum);
+PG_FUNCTION_INFO_V1(cs_any);
+PG_FUNCTION_INFO_V1(cs_all);
 PG_FUNCTION_INFO_V1(cs_prd);
 PG_FUNCTION_INFO_V1(cs_var);
 PG_FUNCTION_INFO_V1(cs_dev);
@@ -369,6 +375,8 @@ PG_FUNCTION_INFO_V1(cs_group_avg);
 PG_FUNCTION_INFO_V1(cs_group_sum);
 PG_FUNCTION_INFO_V1(cs_group_var);
 PG_FUNCTION_INFO_V1(cs_group_dev);
+PG_FUNCTION_INFO_V1(cs_group_any);
+PG_FUNCTION_INFO_V1(cs_group_all);
 PG_FUNCTION_INFO_V1(cs_group_last);
 PG_FUNCTION_INFO_V1(cs_group_first);
 PG_FUNCTION_INFO_V1(cs_grid_max);
@@ -391,6 +399,8 @@ PG_FUNCTION_INFO_V1(cs_hash_max);
 PG_FUNCTION_INFO_V1(cs_hash_min);
 PG_FUNCTION_INFO_V1(cs_hash_avg);
 PG_FUNCTION_INFO_V1(cs_hash_sum);
+PG_FUNCTION_INFO_V1(cs_hash_any);
+PG_FUNCTION_INFO_V1(cs_hash_all);
 PG_FUNCTION_INFO_V1(cs_top_max);
 PG_FUNCTION_INFO_V1(cs_top_min);
 PG_FUNCTION_INFO_V1(cs_top_max_pos);
@@ -548,6 +558,8 @@ Datum cs_max(PG_FUNCTION_ARGS);
 Datum cs_min(PG_FUNCTION_ARGS);
 Datum cs_avg(PG_FUNCTION_ARGS);
 Datum cs_sum(PG_FUNCTION_ARGS);
+Datum cs_any(PG_FUNCTION_ARGS);
+Datum cs_all(PG_FUNCTION_ARGS);
 Datum cs_prd(PG_FUNCTION_ARGS);
 Datum cs_var(PG_FUNCTION_ARGS);
 Datum cs_dev(PG_FUNCTION_ARGS);
@@ -558,6 +570,8 @@ Datum cs_group_max(PG_FUNCTION_ARGS);
 Datum cs_group_min(PG_FUNCTION_ARGS);
 Datum cs_group_avg(PG_FUNCTION_ARGS);
 Datum cs_group_sum(PG_FUNCTION_ARGS);
+Datum cs_group_any(PG_FUNCTION_ARGS);
+Datum cs_group_all(PG_FUNCTION_ARGS);
 Datum cs_group_var(PG_FUNCTION_ARGS);
 Datum cs_group_dev(PG_FUNCTION_ARGS);
 Datum cs_group_last(PG_FUNCTION_ARGS);
@@ -582,6 +596,8 @@ Datum cs_hash_max(PG_FUNCTION_ARGS);
 Datum cs_hash_min(PG_FUNCTION_ARGS);
 Datum cs_hash_avg(PG_FUNCTION_ARGS);
 Datum cs_hash_sum(PG_FUNCTION_ARGS);
+Datum cs_hash_any(PG_FUNCTION_ARGS);
+Datum cs_hash_all(PG_FUNCTION_ARGS);
 Datum cs_top_max(PG_FUNCTION_ARGS);
 Datum cs_top_min(PG_FUNCTION_ARGS);
 Datum cs_top_max_pos(PG_FUNCTION_ARGS);
@@ -1491,6 +1507,56 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
         PG_RETURN_NULL();                                               \
     }
 
+#define IMCS_INT_AGGREGATE(func)                                        \
+    Datum cs_##func(PG_FUNCTION_ARGS)                                   \
+    {                                                                   \
+        imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);  \
+        imcs_iterator_h result;                                         \
+        IMCS_APPLY_INT(func, input->elem_type, (input));                \
+        result = imcs_parallel_iterator(result);                        \
+        switch (result->elem_type) {                                    \
+          case TID_int8:                                                \
+          {                                                             \
+              int8 val = 0;                                             \
+              if (imcs_next_int8(result, &val)) {                       \
+                  PG_RETURN_INT64(val);                                 \
+              } else {                                                  \
+                  PG_RETURN_NULL();                                     \
+              }                                                         \
+          }                                                             \
+          case TID_int16:                                               \
+          {                                                             \
+              int16 val = 0;                                            \
+              if (imcs_next_int16(result, &val)) {                      \
+                  PG_RETURN_INT64(val);                                 \
+              } else {                                                  \
+                  PG_RETURN_NULL();                                     \
+              }                                                         \
+          }                                                             \
+          case TID_int32:                                               \
+          {                                                             \
+              int32 val = 0;                                            \
+              if (imcs_next_int32(result, &val)) {                      \
+                  PG_RETURN_INT64(val);                                 \
+              } else {                                                  \
+                  PG_RETURN_NULL();                                     \
+              }                                                         \
+          }                                                             \
+          case TID_int64:                                               \
+          {                                                             \
+              int64 val = 0;                                            \
+              if (imcs_next_int64(result, &val)) {                      \
+                  PG_RETURN_INT64(val);                                 \
+              } else {                                                  \
+                  PG_RETURN_NULL();                                     \
+              }                                                         \
+          }                                                             \
+          default:                                                      \
+            Assert(false);                                              \
+        }                                                               \
+        PG_RETURN_NULL();                                               \
+    }
+
 /* Hash aggregates */
 #define IMCS_HASH_AGG(func)                                             \
 Datum cs_hash_##func(PG_FUNCTION_ARGS)                                  \
@@ -1912,10 +1978,11 @@ Datum columnar_store_join_##TYPE(PG_FUNCTION_ARGS)                      \
     int elem_size = PG_GETARG_INT32(2);                                 \
     imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, true, elem_size, false); \
     imcs_iterator_h join_with = (imcs_iterator_h)PG_GETARG_POINTER(3);  \
+    int direction = PG_GETARG_INT32(4);                                 \
     if (ts == NULL) {                                                   \
         PG_RETURN_NULL();                                               \
     } else {                                                            \
-        PG_RETURN_POINTER(imcs_join_unsorted_##TYPE(ts, join_with));    \
+        PG_RETURN_POINTER(imcs_join_unsorted_##TYPE(ts, join_with, direction)); \
     }                                                                   \
 }
 
@@ -2757,11 +2824,16 @@ IMCS_AGGREGATE(var)
 IMCS_AGGREGATE(dev)
 IMCS_AGGREGATE(median)
 
+IMCS_INT_AGGREGATE(any)
+IMCS_INT_AGGREGATE(all)
+
 IMCS_UNARY_ANY_OP(group_count)
 IMCS_BINARY_ANY_OP(group_approxdc)
 IMCS_GROUP_OP(group_max)
 IMCS_GROUP_OP(group_min)
 IMCS_GROUP_OP(group_sum)
+IMCS_GROUP_OP(group_any)
+IMCS_GROUP_OP(group_all)
 IMCS_GROUP_OP(group_avg)
 IMCS_GROUP_OP(group_var)
 IMCS_GROUP_OP(group_dev)
@@ -2821,6 +2893,8 @@ Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
 IMCS_HASH_AGG(max)
 IMCS_HASH_AGG(min)
 IMCS_HASH_AGG(sum)
+IMCS_HASH_AGG(any)
+IMCS_HASH_AGG(all)
 IMCS_HASH_AGG(avg)
 
 IMCS_SORT_OP(rank)

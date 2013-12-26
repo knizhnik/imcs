@@ -45,14 +45,15 @@ typedef struct imcs_iterator_stack_item_t_ {
 typedef struct imcs_iterator_context_t_ 
 {
     int stack_size;
-    int rle_offs;
+    int direction; /* used for tiemstamp join */
     imcs_iterator_stack_item_t stack[IMCS_STACK_SIZE];
 } imcs_iterator_context_t;
 
 typedef enum { 
     BOUNDARY_OPEN,
     BOUNDARY_INCLUSIVE,
-    BOUNDARY_EXCLUSIVE
+    BOUNDARY_EXCLUSIVE,
+    BOUNDARY_EXACT
 } imcs_boundary_kind_t;
 
 extern void imcs_subseq_random_access_iterator(imcs_iterator_h iterator, imcs_pos_t from, imcs_pos_t till);
