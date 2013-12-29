@@ -2,7 +2,7 @@
 
 Initial version
 
---- Release version 1.02 (27.12.2013) -------------------------------------
+--- Release version 1.02 (29.12.2013) -------------------------------------
 
 1. Add support of MONEY type
 2. Add support of VARCHAR type
@@ -16,3 +16,4 @@ Initial version
 10. Add more overloaded binary operators accepting numeric parameter
 11. Support grand, group and hash ALL/ANY aggregates.
 12. Make timestamp join more flexible: add direction parameter
+13. Reimplement insert trigger in C

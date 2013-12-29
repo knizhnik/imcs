@@ -56,6 +56,7 @@ declare
     create_drop_func text;
     create_truncate_func text;
     create_project_func text;
+    trigger_args text := '';
     sep text;
     perf text;
     id_type text;
@@ -278,7 +279,9 @@ begin
         create_delete_trigger_func := create_delete_trigger_func||table_name||'_delete(OLD."'||timestamp_id||'",OLD."'||timestamp_id||'"); return OLD; end; $$ language plpgsql';
     end if;
    
-    create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure '||table_name||'_insert_trigger()';
+    -- PL/pgSQL version of trigger functions atr too slow
+    -- create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure '||table_name||'_insert_trigger()';
+    create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure columnar_store_insert_trigger('''||table_name||''','||id_attnum||','||timestamp_attnum;
     create_delete_trigger := 'create trigger '||table_name||'_delete before delete on '||table_name||' for each row execute procedure '||table_name||'_delete_trigger()';
     create_truncate_trigger := 'create trigger '||table_name||'_truncate before truncate on '||table_name||' for each statement execute procedure '||table_name||'_truncate_trigger()';
 
@@ -292,6 +295,8 @@ begin
                 raise exception 'Size is not specified for attribute %',meta.attname;              
             end if;
         end if;
+        trigger_args := trigger_args||','''||meta.attname||''','||meta.atttypid||','||attr_len;
+
         if (meta.attname = timestamp_id) then
             is_timestamp := true;
             if (timeseries_id is not null) then 
@@ -362,6 +367,8 @@ begin
     create_concat_func := create_concat_func||'end loop; return root; end; $$ language plpgsql stable';
     create_insert_trigger_func := create_insert_trigger_func||'; return NEW; end; $$ language plpgsql';
         
+    create_insert_trigger := create_insert_trigger||trigger_args||')';
+
     execute create_type;
     execute create_load_func;
     execute create_get_func;
@@ -402,6 +409,8 @@ create function columnar_store_span(cs_id cstring, from_pos bigint, till_pos big
 create function columnar_store_delete(cs_id cstring, search_result timeseries, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME' language C strict;
 create function columnar_store_truncate(table_name cstring) returns void as 'MODULE_PATHNAME' language C strict;
 
+create function columnar_store_insert_trigger() returns trigger as 'MODULE_PATHNAME' language C; 
+
 create function columnar_store_load(table_name cstring, timeseries_attnum integer, timestamp_attnum integer, already_sorted bool,filter cstring) returns bigint as 'MODULE_PATHNAME' language C; 
 create function columnar_store_append_char(cs_id cstring, val "char", field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int8' language C strict;
 create function columnar_store_append_int2(cs_id cstring, val int2, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int16' language C strict;
@@ -410,9 +419,12 @@ create function columnar_store_append_int8(cs_id cstring, val int8, field_type i
 create function columnar_store_append_date(cs_id cstring, val date, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int32' language C strict;
 create function columnar_store_append_time(cs_id cstring, val time, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int64' language C strict;
 create function columnar_store_append_timestamp(cs_id cstring, val timestamp, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int64' language C strict;
+create function columnar_store_append_money(cs_id cstring, val timestamp, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int64' language C strict;
 create function columnar_store_append_float4(cs_id cstring, val float4, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_float' language C strict;
 create function columnar_store_append_float8(cs_id cstring, val float8, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_double' language C strict;
 create function columnar_store_append_bpchar(cs_id cstring, val text, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_char' language C strict;
+create function columnar_store_append_varchar(cs_id cstring, val text, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_char' language C strict;
+
 
 create function columnar_store_search_char(cs_id cstring, from_ts "char", till_ts "char", field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int8' language C stable;
 create function columnar_store_search_int2(cs_id cstring, from_ts int2, till_ts int2, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int16' language C stable;
@@ -993,9 +1005,11 @@ create function cs_to_date_array(timeseries) returns date[] as 'MODULE_PATHNAME'
 create function cs_to_int8_array(timeseries) returns int8[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
 create function cs_to_time_array(timeseries) returns time[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
 create function cs_to_timestamp_array(timeseries) returns timestamp[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
+create function cs_to_money_array(timeseries) returns money[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
 create function cs_to_float4_array(timeseries) returns float4[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
 create function cs_to_float8_array(timeseries) returns float8[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
 create function cs_to_bpchar_array(timeseries) returns bpchar[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
+create function cs_to_varchar_array(timeseries) returns varchar[] as 'MODULE_PATHNAME','cs_to_array' language C stable strict;
 
 create function cs_from_array(anyarray, elem_size integer default 0) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 

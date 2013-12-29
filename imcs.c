@@ -4,7 +4,9 @@
 #include "func.h"
 #include "smp.h"
 #include "executor/spi.h"
+#include "commands/trigger.h"
 #include "utils/timestamp.h"
+#include "utils/rel.h"
 #include "utils/date.h"
 #include "utils/datetime.h"
 #include "utils/nabstime.h"
@@ -255,6 +257,7 @@ PG_FUNCTION_INFO_V1(columnar_store_span);
 PG_FUNCTION_INFO_V1(columnar_store_load);
 PG_FUNCTION_INFO_V1(columnar_store_delete);
 PG_FUNCTION_INFO_V1(columnar_store_truncate);
+PG_FUNCTION_INFO_V1(columnar_store_insert_trigger);
 PG_FUNCTION_INFO_V1(columnar_store_search_int8);
 PG_FUNCTION_INFO_V1(columnar_store_search_int16);
 PG_FUNCTION_INFO_V1(columnar_store_search_int32);
@@ -452,6 +455,7 @@ Datum columnar_store_span(PG_FUNCTION_ARGS);
 Datum columnar_store_load(PG_FUNCTION_ARGS);
 Datum columnar_store_delete(PG_FUNCTION_ARGS);
 Datum columnar_store_truncate(PG_FUNCTION_ARGS);
+Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS);
 Datum columnar_store_search_int8(PG_FUNCTION_ARGS);
 Datum columnar_store_search_int16(PG_FUNCTION_ARGS);
 Datum columnar_store_search_int32(PG_FUNCTION_ARGS);
@@ -3803,6 +3807,172 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     SPI_cursor_close(portal);
     SPI_finish();
     PG_RETURN_INT64(n_records);
+}    
+
+Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
+{     
+    TriggerData* trigger_data;
+    Trigger* trigger;
+    char const* table_name;
+    int id_attnum;
+    int timestamp_attnum;
+    int table_name_len;
+    int i, n_attrs;
+    Oid* attr_type_oid;
+    imcs_elem_typeid_t* attr_type;
+    int* attr_size;
+    char** attr_name;
+    char** cs_id_prefix;
+    int* cs_id_prefix_len;
+    int cs_id_max_len = 256;
+    char* cs_id = (char*)palloc(cs_id_max_len);
+    text* t;
+    Datum* values;
+    bool* nulls;
+    imcs_timeseries_t* ts;
+    char* id = NULL;
+    int id_len = 0;
+    int len;
+    char id_buf[32];
+
+    if (!CALLED_AS_TRIGGER(fcinfo)) { 
+        ereport(ERROR, (errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION), (errmsg("columnar_store_insert_trigger can be called only by trigger")))); 
+    }
+    trigger_data = (TriggerData*)fcinfo->context;
+    trigger = trigger_data->tg_trigger;
+    table_name = trigger->tgargs[0];
+    id_attnum = atoi(trigger->tgargs[1]);
+    timestamp_attnum = atoi(trigger->tgargs[2]);
+    table_name_len = strlen(table_name);
+    n_attrs = trigger->tgnargs/3-1;
+
+    attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
+    attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
+    attr_size = (int*)palloc(n_attrs*sizeof(int));
+    attr_name = (char**)palloc(n_attrs*sizeof(char*));
+    cs_id_prefix = (char**)palloc(n_attrs*sizeof(char*));
+    cs_id_prefix_len = (int*)palloc(n_attrs*sizeof(int));
+
+    values = (Datum*)palloc(sizeof(Datum)*n_attrs);
+    nulls = (bool*)palloc(sizeof(bool)*n_attrs);
+
+    for (i = 0; i < n_attrs; i++) {
+        attr_name[i] = trigger->tgargs[i*3+3];
+        attr_type_oid[i] = atoi(trigger->tgargs[i*3+4]);
+        attr_type[i] = imcs_oid_to_typeid(attr_type_oid[i]);
+        attr_size[i] = atoi(trigger->tgargs[i*3+5]);
+        cs_id_prefix_len[i] = table_name_len + strlen(attr_name[i]) + 1;
+        cs_id_prefix[i] = (char*)palloc(cs_id_prefix_len[i]+1);
+        sprintf(cs_id_prefix[i], "%s-%s", table_name, attr_name[i]);
+    }
+
+    ts = imcs_get_timeseries(cs_id_prefix[timestamp_attnum-1], attr_type[timestamp_attnum-1], true, attr_size[timestamp_attnum-1], true);
+    
+    if (id_attnum != 0) { /* in case of single timeseries, dummy hash entry to check if timeseries was already initialized is not needed: use entry for timestamp */
+        ts->count = 1;
+    }
+    heap_deform_tuple(trigger_data->tg_trigtuple, trigger_data->tg_relation->rd_att, values, nulls);
+    if (id_attnum != 0) { 
+        if (nulls[id_attnum-1]) {
+            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("Timseries identifier can not be NULL"))));
+        }
+        switch (attr_type[id_attnum-1]) { 
+          case TID_int8:
+            id_len = sprintf(id_buf, "%d", DatumGetChar(values[id_attnum-1]));
+            break;
+          case TID_int16:
+            id_len = sprintf(id_buf, "%d", DatumGetInt16(values[id_attnum-1]));
+            break;
+          case TID_int32:
+            id_len = sprintf(id_buf, "%d", DatumGetInt32(values[id_attnum-1]));
+            break;
+          case TID_int64:
+            id_len = sprintf(id_buf, "%lld", (long long)DatumGetInt64(values[id_attnum-1]));
+            break;             
+          case TID_char:
+            t = DatumGetTextP(values[id_attnum-1]);
+            id = (char*)VARDATA(t);
+            id_len = VARSIZE(t) - VARHDRSZ;
+            if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
+                while (id_len != 0 && id[id_len-1] == ' ') { 
+                    id_len -= 1;
+                }
+            }
+            break;
+          default:
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Unsupported timeseries ID type %d", attr_type_oid[id_attnum-1])))); 
+        }
+    }
+    for (i = 0; i < n_attrs; i++) {
+        if (nulls[i]) {
+            if (imcs_substitute_nulls) { 
+                values[i] = 0;
+            } else { 
+                ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("NULL values are not supported by columnar store"))));
+            }
+        }
+        if (i+1 != id_attnum) { 
+            bool is_timestamp = i+1 == timestamp_attnum;
+            char *str;
+            if (id_attnum != 0) { 
+                int prefix_len = cs_id_prefix_len[i];
+                while (cs_id_max_len < prefix_len + id_len + 2) { 
+                    cs_id_max_len *= 2;
+                    pfree(cs_id);
+                    cs_id = (char*)palloc(cs_id_max_len);
+                }
+                memcpy(cs_id, cs_id_prefix[i], prefix_len);
+                cs_id[prefix_len] = '-';
+                memcpy(cs_id + prefix_len + 1, id, id_len);
+                cs_id[prefix_len + id_len + 1] = '\0';
+            } else { 
+                cs_id = cs_id_prefix[i];
+            }
+            ts = imcs_get_timeseries(cs_id, attr_type[i], is_timestamp, attr_size[i], true);
+            switch (attr_type[i]) { 
+              case TID_int8:
+                imcs_append_int8(ts, DatumGetChar(values[i]));
+                break;
+              case TID_int16:
+                imcs_append_int16(ts, DatumGetInt16(values[i]));
+                break;
+              case TID_int32:
+              case TID_date:
+                imcs_append_int32(ts, DatumGetInt32(values[i]));
+                break;
+              case TID_int64:
+              case TID_time:
+              case TID_timestamp:
+              case TID_money:                           
+                imcs_append_int64(ts, DatumGetInt64(values[i]));
+                break;
+              case TID_float:
+                imcs_append_float(ts, DatumGetFloat4(values[i]));
+                break;
+              case TID_double:
+                imcs_append_double(ts, DatumGetFloat8(values[i]));
+                break;                    
+              case TID_char:
+                if (nulls[i]) { /* substitute NULL with empty string */
+                    imcs_append_char(ts, NULL, 0);
+                } else { 
+                    t = DatumGetTextP(values[i]);
+                    str = (char*)VARDATA(t);
+                    len = VARSIZE(t) - VARHDRSZ;
+                    if (attr_type_oid[i] == BPCHAROID) { 
+                        while (len != 0 && str[len-1] == ' ') { 
+                            len -= 1;
+                        }
+                    }
+                    imcs_append_char(ts, str, len);
+                }
+                break;
+              default:
+                Assert(false);
+            }
+        }
+    }
+    PG_RETURN_POINTER(NULL);
 }    
 
 Datum cs_cut(PG_FUNCTION_ARGS)

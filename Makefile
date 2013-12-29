@@ -31,5 +31,7 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
-distrib: clean
+distrib:
+	rm -f *.o
+	rm -rf results/ regression.diffs regression.out tmp_check/ log/
 	cd .. ; tar --exclude=.svn -chvzf imcs-1.02.tar.gz imcs
