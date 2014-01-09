@@ -2807,7 +2807,7 @@ imcs_iterator_h imcs_filter_pos(imcs_iterator_h cond)
 }
 
 
-static int imcs_get_first_pos(imcs_iterator_h iterator)
+static imcs_pos_t imcs_get_first_pos(imcs_iterator_h iterator)
 {
     imcs_pos_t max_first_pos = iterator->first_pos;
     int i;
