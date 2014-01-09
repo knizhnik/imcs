@@ -7,6 +7,7 @@ select cs_head(Close, 2) from Quote_get('IBM');
 select cs_tail(Close, 2) from Quote_get('IBM');
 select cs_filter(Open > Close, Day) from Quote_get('IBM');
 select Quote_project(q.*, cs_filter_pos(High > Low*1.01)) from Quote_get('IBM', null, date('05-Nov-2013')) q;
+select Quote_project(q.*, cs_filter_first_pos(High > Low*1.01, 3)) from Quote_get('IBM') q;
 select cs_unique(Volume/200) from Quote_get('IBM');
 select cs_reverse(Day) from Quote_get('IBM');
 select cs_diff(Close) from Quote_get('IBM');

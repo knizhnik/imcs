@@ -218,6 +218,7 @@ imcs_iterator_h imcs_like(imcs_iterator_h input, char const* pattern);
 imcs_iterator_h imcs_ilike(imcs_iterator_h input, char const* pattern);
 
 imcs_iterator_h imcs_filter_pos(imcs_iterator_h cond);
+imcs_iterator_h imcs_filter_first_pos(imcs_iterator_h cond, size_t n);
 void imcs_tee(imcs_iterator_h out_iterators[2], imcs_iterator_h in_iterator);
 
 void imcs_from_array(imcs_iterator_h result, void const* buf, size_t buf_size);

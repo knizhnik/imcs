@@ -54,6 +54,14 @@ select Quote_project(q.*, cs_filter_pos(High > Low*1.01)) from Quote_get('IBM', 
  (IBM,11-05-2013,40.5,41,40,40.2,400)
 (3 rows)
 
+select Quote_project(q.*, cs_filter_first_pos(High > Low*1.01, 3)) from Quote_get('IBM') q;
+            quote_project             
+--------------------------------------
+ (IBM,11-01-2013,10.2,11,10,10.5,100)
+ (IBM,11-04-2013,30.5,31,30,30.2,300)
+ (IBM,11-05-2013,40.5,41,40,40.2,400)
+(3 rows)
+
 select cs_unique(Volume/200) from Quote_get('IBM');
   cs_unique   
 --------------
@@ -95,15 +103,15 @@ select cs_union(ibm.Day, abb.Day) from Quote_get('ABB') as abb, Quote_get('IBM')
 
 create function mul2(x float) returns float as $$ begin return x*2; end; $$ language plpgsql strict immutable;
 select cs_call(Close, 'mul2'::regproc) from Quote_get('IBM');
-            cs_call             
---------------------------------
- float8:{21,40.4,60.4,80.4,101}
+                              cs_call                               
+--------------------------------------------------------------------
+ float8:{21,40.4000015258789,60.4000015258789,80.4000015258789,101}
 (1 row)
 
 select cs_call(Close, 'sin'::regproc) from Quote_get('IBM');
-                        cs_call                         
---------------------------------------------------------
- float8:{-0.879696,0.975821,-0.937691,0.59776,0.232374}
+                                               cs_call                                               
+-----------------------------------------------------------------------------------------------------
+ float8:{-0.87969575997167,0.975820684524937,-0.937691475202754,0.597759755275722,0.232373761655485}
 (1 row)
 
 select cs_to_int4_array('int4:{1,2,3,4,5}');
@@ -151,8 +159,8 @@ select cs_cast('float4:{100.99,99.01,1000000}', 'money');
 (1 row)
 
 select cs_cast('money:{100.99,99.01,"1,000,000"}', 'float8');
-           cs_cast           
------------------------------
- float8:{100.99,99.01,1e+06}
+            cs_cast            
+-------------------------------
+ float8:{100.99,99.01,1000000}
 (1 row)
 

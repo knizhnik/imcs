@@ -2806,6 +2806,98 @@ imcs_iterator_h imcs_filter_pos(imcs_iterator_h cond)
     return result;                                                    
 }
 
+
+static int imcs_get_first_pos(imcs_iterator_h iterator)
+{
+    imcs_pos_t max_first_pos = iterator->first_pos;
+    int i;
+    for (i = 0; i < 3; i++) { 
+        if (iterator->opd[i]) { 
+            imcs_pos_t first_pos = imcs_get_first_pos(iterator->opd[i]);
+            if (first_pos > max_first_pos) { 
+                max_first_pos = first_pos;
+            }
+        }
+    }
+    return max_first_pos;
+}
+
+static void imcs_filter_first_pos_merge(imcs_iterator_h dst, imcs_iterator_h src)
+{
+    size_t n = dst->last_pos;
+    size_t tile_size = dst->tile_size;
+    size_t l = 0, r = tile_size;
+    imcs_pos_t pos = src->tile.arr_int64[0];
+    size_t ins = src->tile_size;
+    do { 
+        size_t m = (l + r) >> 1;
+        if (dst->tile.arr_int64[m] < pos) { 
+            l = m+1;
+        } else { 
+            r = m;
+        }
+    } while (l < r);
+
+    if (l + ins > n) { 
+        ins = n - l;
+    }
+    if (ins > 0) { 
+        size_t shift = tile_size - l;
+        if (l + ins + shift > n) { 
+            shift = n - l - ins;
+        }
+        memmove(&dst->tile.arr_int64[l+ins], &dst->tile.arr_int64[l], shift*sizeof(imcs_pos_t));
+        memcpy(&dst->tile.arr_int64[l], src->tile.arr_int64, ins*sizeof(imcs_pos_t));
+        dst->next_pos = dst->tile_size = l + ins + shift;
+    }
+}
+
+static bool imcs_filter_first_pos_next(imcs_iterator_h iterator)
+{
+    size_t n = iterator->last_pos;
+    size_t this_tile_size = 0;
+    imcs_pos_t pos;
+    if (iterator->flags & FLAG_PREPARED) {                              
+        return iterator->tile_size != 0;                                
+    }                                                                   
+    if (iterator->next_pos != 0) {                                      
+        return false;                                                   
+    }                   
+    pos = imcs_get_first_pos(iterator);
+    while (this_tile_size < n && iterator->opd[0]->next(iterator->opd[0])) {                  
+        size_t i, tile_size = iterator->opd[0]->tile_size;              
+        for (i = 0; i < tile_size; i++, pos++) {                               
+            if (iterator->opd[0]->tile.arr_int8[i]) { 
+                iterator->tile.arr_int64[this_tile_size] = pos;
+                if (++this_tile_size >= n) { 
+                    break;
+                }
+            }
+        }
+    }
+    iterator->tile_size = this_tile_size;                                    
+    iterator->next_pos = this_tile_size;                                 
+    return this_tile_size != 0;                                                    
+}                                                                       
+                
+    
+imcs_iterator_h imcs_filter_first_pos(imcs_iterator_h cond, size_t n) 
+{                                                                       
+    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_pos_t), 0); 
+    IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
+    if (n > imcs_tile_size) {                                         
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("N should not be larger than tile size")))); 
+    }                                                                   
+    result->elem_type = TID_int64;                        
+    result->opd[0] = imcs_operand(cond);                                                    
+    result->next = imcs_filter_first_pos_next;                    
+    result->prepare = imcs_filter_first_pos_next;                    
+    result->merge = imcs_filter_first_pos_merge;                           
+    result->last_pos = n;
+    return result;                                                    
+}
+
+
 typedef struct imcs_top_context_t_ {               
     size_t top;
 } imcs_top_context_t;                              
@@ -2890,7 +2982,7 @@ imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, size_t top) \
     imcs_iterator_h result = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_top_context_t)); \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     if (top > imcs_tile_size) {                                         \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("TOP value should be smaller than tile size")))); \
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("TOP value should not be larger than tile size")))); \
     }                                                                   \
     result->elem_type = input->elem_type;                               \
     result->opd[0] = imcs_operand(input);                               \
@@ -3012,7 +3104,7 @@ imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, size_t top) \
     imcs_top_pos_##MNEM##_##TYPE##_context_t* ctx = (imcs_top_pos_##MNEM##_##TYPE##_context_t*)result->context; \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     if (top > imcs_tile_size) {                                         \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("TOP value should be smaller than tile size")))); \
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("TOP value should not be larger than tile size")))); \
     }                                                                   \
     result->elem_type = TID_int64;                                      \
     result->opd[0] = imcs_operand(input);                               \
@@ -3930,7 +4022,7 @@ imcs_iterator_h imcs_histogram_##TYPE(imcs_iterator_h input, TYPE min_value, TYP
     imcs_histogram_##TYPE##_context_t* ctx = (imcs_histogram_##TYPE##_context_t*)result->context; \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     if (n_intervals-1 >= (size_t)imcs_tile_size) {                      \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("number of histogram intervals should be smaller than tile size")))); \
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("number of histogram intervals should not be larger than tile size")))); \
     }                                                                   \
     if (max_value <= min_value) {                                       \
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("max_value shouldbegreater or equal thanmin_value")))); \

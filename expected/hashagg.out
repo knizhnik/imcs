@@ -11,15 +11,15 @@ select cs_hash_min(Close,Day % 2) from Quote_get('IBM');
 (1 row)
 
 select cs_hash_sum(Close,Day % 2) from Quote_get('IBM');
-             cs_hash_sum              
---------------------------------------
- ("float8:{100.9,50.7}","int4:{0,1}")
+                         cs_hash_sum                         
+-------------------------------------------------------------
+ ("float8:{100.900001525879,50.7000007629395}","int4:{0,1}")
 (1 row)
 
 select cs_hash_avg(Close,Day % 2) from Quote_get('IBM');
-               cs_hash_avg               
------------------------------------------
- ("float8:{33.6333,25.35}","int4:{0,1}")
+                         cs_hash_avg                         
+-------------------------------------------------------------
+ ("float8:{33.6333338419596,25.3500003814697}","int4:{0,1}")
 (1 row)
 
 select (q.p).agg_val,cs_cut((q.p).group_by,'i4i4') from (select cs_project_agg(cs_hash_sum(Close,(Day % 2)||(Volume%10))) p from Quote_get('IBM')) q;

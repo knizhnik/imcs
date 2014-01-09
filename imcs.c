@@ -132,6 +132,7 @@ static const char const* imcs_command_mnem[] =
     "if", 
     "filter", 
     "filter_pos", 
+    "filter_first_pos", 
     "unique", 
     "reverse", 
     "diff", 
@@ -353,6 +354,7 @@ PG_FUNCTION_INFO_V1(cs_iif);
 PG_FUNCTION_INFO_V1(cs_if);
 PG_FUNCTION_INFO_V1(cs_filter);
 PG_FUNCTION_INFO_V1(cs_filter_pos);
+PG_FUNCTION_INFO_V1(cs_filter_first_pos);
 PG_FUNCTION_INFO_V1(cs_unique);
 PG_FUNCTION_INFO_V1(cs_reverse);
 PG_FUNCTION_INFO_V1(cs_diff);
@@ -551,6 +553,7 @@ Datum cs_iif(PG_FUNCTION_ARGS);
 Datum cs_if(PG_FUNCTION_ARGS);
 Datum cs_filter(PG_FUNCTION_ARGS);
 Datum cs_filter_pos(PG_FUNCTION_ARGS);
+Datum cs_filter_first_pos(PG_FUNCTION_ARGS);
 Datum cs_unique(PG_FUNCTION_ARGS);
 Datum cs_reverse(PG_FUNCTION_ARGS);
 Datum cs_diff(PG_FUNCTION_ARGS);
@@ -2314,6 +2317,10 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       case TID_float:
       {
           float val;
+          int ndig = FLT_DIG + extra_float_digits;
+          if (ndig < 1) { 
+              ndig = 1;         
+          }
           while (imcs_next_float(input, &val)) { 
               if (used + MAX_NUMELEM_LEN > allocated) { 
                   if (allocated >= output_limit) { 
@@ -2326,7 +2333,7 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   buf = new_buf;
               }
               buf[used++] = sep;
-              used += sprintf(&buf[used], "%g", val);
+              used += sprintf(&buf[used], "%.*g", ndig, val);
               sep = ',';
           }
           break;
@@ -2334,6 +2341,10 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       case TID_double:
       {
           double val;
+          int ndig = DBL_DIG + extra_float_digits;
+          if (ndig < 1) { 
+              ndig = 1;         
+          }
           while (imcs_next_double(input, &val)) { 
               if (used + MAX_NUMELEM_LEN > allocated) { 
                   if (allocated >= output_limit) { 
@@ -2346,7 +2357,7 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   buf = new_buf;
               }
               buf[used++] = sep;
-              used += sprintf(&buf[used], "%g", val);
+              used += sprintf(&buf[used], "%.*g", ndig, val);
               sep = ',';
           }
           break;
@@ -2757,8 +2768,16 @@ IMCS_UNARY_CHAR_OP(unique)
 IMCS_UNARY_CHAR_OP(reverse)
 IMCS_UNARY_OP(diff)
 IMCS_UNARY_OP(diff0)
-
 IMCS_INTERVAL_OP(repeat)
+
+Datum cs_filter_first_pos(PG_FUNCTION_ARGS)
+{
+    imcs_iterator_h cond = (imcs_iterator_h)PG_GETARG_POINTER(0);
+    int32 n = PG_GETARG_INT32(1); 
+    imcs_iterator_h result = imcs_filter_first_pos(cond, n);
+    result = imcs_parallel_iterator(result);                            
+    PG_RETURN_POINTER(result);
+}
 
 Datum cs_count(PG_FUNCTION_ARGS)
 {

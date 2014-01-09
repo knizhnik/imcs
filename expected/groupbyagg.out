@@ -11,27 +11,27 @@ select cs_group_min(Close,Day/3) from Quote_get('IBM');
 (1 row)
 
 select cs_group_sum(Close,Day/3) from Quote_get('IBM');
-      cs_group_sum       
--------------------------
- float8:{30.7,70.4,50.5}
+                  cs_group_sum                   
+-------------------------------------------------
+ float8:{30.7000007629395,70.4000015258789,50.5}
 (1 row)
 
 select cs_group_avg(Close,Day/3) from Quote_get('IBM');
-       cs_group_avg       
---------------------------
- float8:{15.35,35.2,50.5}
+                  cs_group_avg                   
+-------------------------------------------------
+ float8:{15.3500003814697,35.2000007629395,50.5}
 (1 row)
 
 select cs_group_var(Close,Day/3) from Quote_get('IBM');
-     cs_group_var      
------------------------
- float8:{23.5225,25,0}
+          cs_group_var          
+--------------------------------
+ float8:{23.5225037002565,25,0}
 (1 row)
 
 select cs_group_dev(Close,Day/3) from Quote_get('IBM');
-   cs_group_dev    
--------------------
- float8:{4.85,5,0}
+         cs_group_dev          
+-------------------------------
+ float8:{4.85000038146973,5,0}
 (1 row)
 
 select cs_group_first(Close,Day/3) from Quote_get('IBM');

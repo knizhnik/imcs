@@ -25,4 +25,3 @@ select cs_used_memory();
           49152
 (1 row)
 
- 

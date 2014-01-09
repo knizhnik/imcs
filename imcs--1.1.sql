@@ -868,6 +868,7 @@ create function cs_iif(cond timeseries, then_ts timeseries, else_ts timeseries) 
 create function cs_if(cond timeseries, then_ts timeseries, else_ts timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_filter(cond timeseries, input timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_filter_pos(cond timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_filter_first_pos(timeseries, n integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create operator ? (leftarg=timeseries, rightarg=timeseries, procedure=cs_filter);
 create operator ? (leftarg=timeseries, procedure=cs_filter_pos);

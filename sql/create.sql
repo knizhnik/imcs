@@ -10,4 +10,3 @@ create extension imcs;
 select cs_create('Quote', 'Day', 'Symbol');
 select Quote_load();
 select cs_used_memory();
- 

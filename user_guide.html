@@ -712,6 +712,13 @@ For example <code>cs_filter('char:{1,0,1}', 'float4:{1.0,2.0,3.0}') = 'float4:{1
 For example <code>cs_filter_pos('char:{1,0,1}') = 'int8:{0,2}'</code></td>
 </tr>
 <tr>
+<td><code>function cs_filter_first_pos(cond timeseries, n integer) returns timeseries</code></td>
+<td>Finds first N positions of timeseries elements for which condition <code>cond</code> is true.
+For example <code>cs_filter_first_pos('char:{1,0,1}', 1) = 'int8:{0}'</code>
+Execution of this function can be parallelized.
+</td>
+</tr>
+<tr>
 <td><code>function cs_unique(timeseries) returns timeseries</code></td>
 <td>Removes subsequent duplicate values. To eliminate all duplicates in timeseries it should be sorted prior applying <code>cs_unique</code>. For example <code>cs_unique('int4:{1,1,2,2,2,1,3}') = 'int4:{1,2,1,3}'</code></td>
 </tr>

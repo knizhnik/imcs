@@ -150,6 +150,7 @@ enum imcs_commands
     imcs_cmd_if, 
     imcs_cmd_filter, 
     imcs_cmd_filter_pos, 
+    imcs_cmd_filter_first_pos, 
     imcs_cmd_unique, 
     imcs_cmd_reverse, 
     imcs_cmd_diff, 
