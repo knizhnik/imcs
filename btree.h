@@ -1,3 +1,6 @@
+/*
+ * Implementation of B-Tree storing timeseries data
+ */
 #ifndef __BTREE_H__
 #define __BTREE_H__
 
@@ -13,7 +16,6 @@
 #define OFFSETOF_ITEMS_CHAR       ((size_t)((imcs_page_t*)0)->u.val_char)
 #define MAX_LEAF_ITEMS_CHAR(size) ((int)((imcs_page_size - OFFSETOF_ITEMS_CHAR)/(size)))
 #define MAX_NODE_ITEMS_CHAR(size) ((int)((imcs_page_size - OFFSETOF_ITEMS_CHAR)/sizeof(imcs_node_t)))
-
 
 typedef struct imcs_node_t {
     struct imcs_page_t_* page;

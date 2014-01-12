@@ -6196,7 +6196,7 @@ typedef struct {
  *   case sensitive matches, while in our implementation the diffirence is much smaller - 40%
  * - character elements of timeseries are expected to be ASCII.
  */
-inline bool imcs_match_string(char const* str, size_t str_len, char const* pattern) 
+static inline bool imcs_match_string(char const* str, size_t str_len, char const* pattern) 
 {
     char const* wildcard = NULL;
     char const* strpos = NULL;
@@ -6261,7 +6261,7 @@ imcs_iterator_h imcs_like(imcs_iterator_h input, char const* pattern)
 }
 
 
-inline bool imcs_match_string_ignore_case(char const* s, size_t slen, char const* p) 
+static inline bool imcs_match_string_ignore_case(char const* s, size_t slen, char const* p) 
 {
     unsigned char const* str = (unsigned char const*)s;
     unsigned char const* pattern = (unsigned char const*)p;

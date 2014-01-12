@@ -1,4 +1,5 @@
-#include <btree.h>
+#include "btree.h"
+#include "disk.h"
 #include <string.h>
 
 static bool imcs_next_tile(imcs_iterator_h iterator)    
@@ -6,21 +7,23 @@ static bool imcs_next_tile(imcs_iterator_h iterator)
     imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; 
     int i = ctx->stack_size-1;                                          
     if (i >= 0 && iterator->next_pos <= iterator->last_pos) {      
-        imcs_page_t* pg;                                             
         size_t tile_size = 0, n_vals;                               
         while (true) {                                                     
+            imcs_page_t* pg;                                             
             size_t inc = 0;
             while (true) {                                                 
                 pg = ctx->stack[i].page; 
+                IMCS_LOAD_PAGE(pg);
                 ctx->stack[i].pos += inc;
                 if (ctx->stack[i].pos == pg->n_items) {                 
                     inc = 1;
                     if (--i < 0) {                                      
                         ctx->stack_size = 0;                            
+                        IMCS_UNLOAD_PAGE(pg);
                         if (tile_size == 0) {                           
                             return false;                    
                         } else {                                        
-                            iterator->tile_size = tile_size;            
+                            iterator->tile_size = tile_size; 
                             return true;                            
                         }                                               
                     }                                                   
@@ -28,11 +31,14 @@ static bool imcs_next_tile(imcs_iterator_h iterator)
                     Assert(pg->n_items > ctx->stack[i].pos);                
                     break;                                              
                 }                                                       
+                IMCS_UNLOAD_PAGE(pg);
             }                                                           
             while (!pg->is_leaf) {      
                 ctx->stack[i+1].page = CHILD(pg, ctx->stack[i].pos).page; 
                 ctx->stack[++i].pos = 0;                                
+                IMCS_UNLOAD_PAGE(pg);
                 pg = ctx->stack[i].page; 
+                IMCS_LOAD_PAGE(pg);
             }                          
             Assert(pg->n_items > ctx->stack[i].pos);                
             n_vals = pg->n_items - ctx->stack[i].pos;                   
@@ -47,6 +53,7 @@ static bool imcs_next_tile(imcs_iterator_h iterator)
             ctx->stack[i].pos += n_vals; 
             ctx->stack_size = i + 1;
             tile_size += n_vals;                                        
+            IMCS_UNLOAD_PAGE(pg);
             if (tile_size == imcs_tile_size || iterator->next_pos > iterator->last_pos) {                       
                 iterator->tile_size = tile_size;                        
                 return true;                                        
@@ -62,7 +69,8 @@ static bool imcs_subseq_page(imcs_iterator_h iterator, imcs_page_t* pg,  imcs_po
     imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; 
     int n_items;                                                        
     Assert(level < IMCS_STACK_SIZE);                
-    ctx->stack[level].page = pg;                                      
+    ctx->stack[level].page = pg; 
+    IMCS_LOAD_PAGE(pg);                                     
     n_items = pg->n_items;                                              
     Assert(n_items > 0);                               
     if (!pg->is_leaf) {                 
@@ -71,6 +79,7 @@ static bool imcs_subseq_page(imcs_iterator_h iterator, imcs_page_t* pg,  imcs_po
             imcs_count_t count = CHILD(pg, i).count;                 
             if (from < count) {                                         
                 imcs_page_t* child = CHILD(pg, i).page;      
+                IMCS_UNLOAD_PAGE(pg);
                 ctx->stack[level].pos = i;                              
                 return imcs_subseq_page(iterator, child, from, level+1); 
             }                                                           
@@ -78,11 +87,13 @@ static bool imcs_subseq_page(imcs_iterator_h iterator, imcs_page_t* pg,  imcs_po
         }                                                               
     } else {                                                            
         if (from < (imcs_pos_t)n_items) {                             
+            IMCS_UNLOAD_PAGE(pg);
             ctx->stack[level].pos = (int)from;                          
             ctx->stack_size = level+1;                                  
             return true;                                            
         }                                                               
     }                                                                   
+    IMCS_UNLOAD_PAGE(pg);
     return false;                                              
 }                                                                       
                                                                         
@@ -155,9 +166,11 @@ static bool imcs_map_next(imcs_iterator_h iterator)
             prev_page_pos = next_pos - ctx->stack[ctx->stack_size-1].pos;
         }
         pg = ctx->stack[ctx->stack_size-1].page; 
+        IMCS_LOAD_PAGE(pg);
         prev_page_size = pg->n_items;
         Assert(next_pos - prev_page_pos < prev_page_size);
         memcpy(&iterator->tile.arr_char[i*elem_size], &pg->u.val_char[((size_t)(next_pos - prev_page_pos))*elem_size], elem_size);
+        IMCS_UNLOAD_PAGE(pg);
     }
     iterator->next_pos += tile_size;
     iterator->tile_size = tile_size;                        
@@ -186,10 +199,15 @@ bool imcs_first_##TYPE(imcs_timeseries_t* ts, TYPE* val)                \
     if (pg == NULL) {                                                   \
         return false;                                                   \
     }                                                                   \
+    IMCS_LOAD_PAGE(pg);                                                 \
     while (!pg->is_leaf) {                                              \
-        pg = CHILD(pg, 0).page;                                         \
+        imcs_page_t* child = CHILD(pg, 0).page;                         \
+        IMCS_UNLOAD_PAGE(pg);                                           \
+        pg = child;                                                     \
+        IMCS_LOAD_PAGE(pg);                                             \
     }                                                                   \
     *val = pg->u.val_##TYPE[0];                                         \
+    IMCS_UNLOAD_PAGE(pg);                                               \
     return true;                                                        \
 }                                                                       \
 bool imcs_last_##TYPE(imcs_timeseries_t* ts, TYPE* val)                 \
@@ -198,19 +216,27 @@ bool imcs_last_##TYPE(imcs_timeseries_t* ts, TYPE* val)                 \
     if (pg == NULL) {                                                   \
         return false;                                                   \
     }                                                                   \
+    IMCS_LOAD_PAGE(pg);                                                 \
     while (!pg->is_leaf) {                                              \
-        pg = CHILD(pg, pg->n_items-1).page;                             \
+        imcs_page_t* child = CHILD(pg, pg->n_items-1).page;             \
+        IMCS_UNLOAD_PAGE(pg);                                           \
+        pg = child;                                                     \
+        IMCS_LOAD_PAGE(pg);                                             \
     }                                                                   \
     *val = pg->u.val_##TYPE[pg->n_items-1];                             \
+    IMCS_UNLOAD_PAGE(pg);                                               \
     return true;                                                        \
 }                                                                       \
 /* return false on overflow */                                          \
 static bool imcs_append_page_##TYPE(imcs_page_t** root_page, TYPE val, bool is_timestamp) \
 {                                                                       \
     imcs_page_t* pg = *root_page;                                       \
-    int n_items = pg->n_items;                                          \
+    int n_items;                                                        \
+    IMCS_LOAD_PAGE_FOR_UPDATE(pg);                                      \
+    n_items = pg->n_items;                                              \
     Assert(n_items > 0);                                                \
     if (is_timestamp && pg->u.val_##TYPE[n_items-1] > val) {            \
+        IMCS_UNLOAD_PAGE(pg);                                           \
         ereport(ERROR, (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("value out of timeseries order"))); \
     }                                                                   \
     if (!pg->is_leaf) {                                                 \
@@ -219,6 +245,8 @@ static bool imcs_append_page_##TYPE(imcs_page_t** root_page, TYPE val, bool is_t
             if (n_items == MAX_NODE_ITEMS(TYPE)) {                      \
                 imcs_page_t* new_page = imcs_new_page();                \
                 *root_page = new_page;                                  \
+                IMCS_UNLOAD_PAGE(pg);                                   \
+                IMCS_LOAD_NEW_PAGE(new_page);                           \
                 new_page->is_leaf = false;                              \
                 new_page->n_items = 1;                                  \
                 CHILD(new_page, 0).page = child;                        \
@@ -226,6 +254,7 @@ static bool imcs_append_page_##TYPE(imcs_page_t** root_page, TYPE val, bool is_t
                 if (is_timestamp) {                                     \
                     new_page->u.val_##TYPE[0] = val;                    \
                 }                                                       \
+                IMCS_UNLOAD_PAGE(new_page);                             \
                 return false;                                           \
             } else {                                                    \
                 CHILD(pg, n_items).page = child;                        \
@@ -244,40 +273,52 @@ static bool imcs_append_page_##TYPE(imcs_page_t** root_page, TYPE val, bool is_t
         if (n_items == max_items) {                                     \
             imcs_page_t* new_page = imcs_new_page();                    \
             *root_page = new_page;                                      \
+            IMCS_UNLOAD_PAGE(pg);                                       \
+            IMCS_LOAD_NEW_PAGE(new_page);                               \
             new_page->is_leaf = true;                                   \
             new_page->u.val_##TYPE[0] = val;                            \
             new_page->n_items = 1;                                      \
+            IMCS_UNLOAD_PAGE(new_page);                                 \
             return false;                                               \
         } else {                                                        \
             pg->u.val_##TYPE[n_items] = val;                            \
             pg->n_items += 1;                                           \
         }                                                               \
     }                                                                   \
+    IMCS_UNLOAD_PAGE(pg);                                               \
     return true;                                                        \
 }                                                                       \
                                                                         \
 void imcs_append_##TYPE(imcs_timeseries_t* ts, TYPE val)                \
 {                                                                       \
     if (ts->root_page == 0) {                                           \
-        ts->root_page = imcs_new_page();                                \
-        ts->root_page->is_leaf = true;                                  \
-        ts->root_page->u.val_##TYPE[0] = val;                           \
-        ts->count = ts->root_page->n_items = 1;                         \
+        imcs_page_t* pg = imcs_new_page();                              \
+        ts->root_page = pg;                                             \
+        IMCS_LOAD_NEW_PAGE(pg);                                         \
+        pg->is_leaf = true;                                             \
+        pg->u.val_##TYPE[0] = val;                                      \
+        ts->count = pg->n_items = 1;                                    \
+        IMCS_UNLOAD_PAGE(pg);                                           \
     } else {                                                            \
         imcs_page_t* root_page = ts->root_page;                         \
+        imcs_page_t* old_root = root_page;                              \
         if (!imcs_append_page_##TYPE(&root_page, val, ts->is_timestamp)) { \
             imcs_page_t* new_root = imcs_new_page();                    \
+            ts->root_page = new_root;                                   \
+            IMCS_LOAD_NEW_PAGE(new_root);                               \
             new_root->is_leaf = false;                                  \
             new_root->n_items = 2;                                      \
-            CHILD(new_root, 0).page = ts->root_page;                    \
+            CHILD(new_root, 0).page = old_root;                         \
             CHILD(new_root, 0).count = ts->count;                       \
             CHILD(new_root, 1).page = root_page;                        \
             CHILD(new_root, 1).count = 1;                               \
             if (ts->is_timestamp) {                                     \
-                new_root->u.val_##TYPE[0] = ts->root_page->u.val_##TYPE[0]; \
+                IMCS_LOAD_PAGE(old_root);                               \
+                new_root->u.val_##TYPE[0] = old_root->u.val_##TYPE[0];  \
                 new_root->u.val_##TYPE[1] = val;                        \
+                IMCS_UNLOAD_PAGE(old_root);                             \
             }                                                           \
-            ts->root_page = new_root;                                   \
+            IMCS_UNLOAD_PAGE(new_root);                                 \
         }                                                               \
         ts->count += 1;                                                 \
     }                                                                   \
@@ -289,6 +330,7 @@ bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val
     bool found = false;                                                 \
     Assert(level < IMCS_STACK_SIZE);                                    \
     ctx->stack[level].page = pg;                                        \
+    IMCS_LOAD_PAGE(pg);                                                 \
     n_items = pg->n_items;                                              \
     Assert(n_items > 0);                                                \
     l = 0;                                                              \
@@ -336,6 +378,7 @@ bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val
             found = true;                                               \
         }                                                               \
     }                                                                   \
+    IMCS_UNLOAD_PAGE(pg);                                               \
     return found;                                                       \
 }                                                                       \
                                                                         \
@@ -386,7 +429,9 @@ IMCS_IMPLEMENTATIONS(double)
 static bool imcs_append_page_char(imcs_page_t** root_page, char const* val, size_t val_len, size_t elem_size) 
 {                                                                       
     imcs_page_t* pg = *root_page;
-    int n_items = pg->n_items;                                          
+    int n_items;                                                        
+    IMCS_LOAD_PAGE_FOR_UPDATE(pg);                                                 
+    n_items = pg->n_items;                                              
     Assert(n_items > 0);                                                
     if (!pg->is_leaf) {                                                 
         imcs_page_t* child = CHILD(pg, n_items-1).page;                 
@@ -394,10 +439,13 @@ static bool imcs_append_page_char(imcs_page_t** root_page, char const* val, size
             if (n_items == MAX_NODE_ITEMS_CHAR(elem_size)) {                      
                 imcs_page_t* new_page = imcs_new_page();                
                 *root_page = new_page;
+                IMCS_UNLOAD_PAGE(pg);                                   
+                IMCS_LOAD_NEW_PAGE(new_page);                               
                 new_page->is_leaf = false;                              
                 new_page->n_items = 1;              
                 CHILD(new_page, 0).page = child;                        
                 CHILD(new_page, 0).count = 1;                           
+                IMCS_UNLOAD_PAGE(new_page);                             
                 return false;                                           
             } else {                                                    
                 CHILD(pg, n_items).page = child;                        
@@ -413,10 +461,13 @@ static bool imcs_append_page_char(imcs_page_t** root_page, char const* val, size
         if (n_items == max_items) {                                     
             imcs_page_t* new_page = imcs_new_page();                    
             *root_page = new_page;
+            IMCS_UNLOAD_PAGE(pg);                                       
+            IMCS_LOAD_NEW_PAGE(new_page);                                   
             new_page->is_leaf = true;                                  
             memcpy(new_page->u.val_char, val, val_len);                            
             memset(new_page->u.val_char + val_len, '\0', elem_size - val_len);                            
             new_page->n_items = 1;                                      
+            IMCS_UNLOAD_PAGE(new_page);                                 
             return false;                                               
         } else {                                                        
             memcpy(&pg->u.val_char[n_items*elem_size], val, val_len);                            
@@ -424,6 +475,7 @@ static bool imcs_append_page_char(imcs_page_t** root_page, char const* val, size
             pg->n_items += 1;                                           
         }                                                               
     }                                                                   
+    IMCS_UNLOAD_PAGE(pg);                                               
     return true;                                                        
 }                                                                       
 
@@ -432,22 +484,29 @@ void imcs_append_char(imcs_timeseries_t* ts, char const* val, size_t val_len)
 {                                                                       
     Assert(!ts->is_timestamp);
     if (ts->root_page == 0) {                                           
-        ts->root_page = imcs_new_page();                                
-        ts->root_page->is_leaf = true;                                  
-        memcpy(ts->root_page->u.val_char, val, val_len);
-        memset(ts->root_page->u.val_char + val_len, 0, ts->elem_size - val_len);                          
-        ts->count = ts->root_page->n_items = 1;                              
+        imcs_page_t* pg = imcs_new_page();                              
+        ts->root_page = pg;                                             
+        IMCS_LOAD_NEW_PAGE(pg);                                             
+        pg->is_leaf = true;                                  
+        memcpy(pg->u.val_char, val, val_len);
+        memset(pg->u.val_char + val_len, 0, ts->elem_size - val_len);                          
+        ts->count = pg->n_items = 1;                              
+        IMCS_UNLOAD_PAGE(pg);                                           
     } else {                                                            
         imcs_page_t* root_page = ts->root_page;                         
+        imcs_page_t* old_root = root_page;                         
         if (!imcs_append_page_char(&root_page, val, val_len, ts->elem_size)) {     
             imcs_page_t* new_root = imcs_new_page();                    
+            ts->root_page = new_root;                                   
+            IMCS_LOAD_NEW_PAGE(new_root);                                   
             new_root->is_leaf = false;                                  
             new_root->n_items = 2;                                      
-            CHILD(new_root, 0).page = ts->root_page;                    
+            CHILD(new_root, 0).page = old_root;                    
             CHILD(new_root, 0).count = ts->count;                       
             CHILD(new_root, 1).page = root_page;                        
             CHILD(new_root, 1).count = 1;                               
-            ts->root_page = new_root;                                   
+            IMCS_UNLOAD_PAGE(new_root);         
+
         }                                                               
         ts->count += 1;                                                 
     }                                                                   
@@ -456,8 +515,10 @@ void imcs_append_char(imcs_timeseries_t* ts, char const* val, size_t val_len)
 /* returns fals euon underflow */
 static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t from, imcs_pos_t till)
 {
-    int n_items = pg->n_items;
+    int n_items;
     int elem_size = ts->elem_size;
+    IMCS_LOAD_PAGE_FOR_UPDATE(pg);
+    n_items = pg->n_items;
     if (!pg->is_leaf) {                 
         int i;                                                          
         for (i = 0; i < n_items; i++) {                                 
@@ -513,6 +574,7 @@ static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t 
             pg->n_items -= till - from + 1;                             
         }      
     }
+    IMCS_UNLOAD_PAGE(pg);
     return true;
 }
 
@@ -529,6 +591,7 @@ void imcs_delete(imcs_timeseries_t* ts, imcs_pos_t from, imcs_pos_t till)
         
 static void imcs_prune(imcs_page_t* pg) 
 { 
+    IMCS_LOAD_PAGE(pg);
     if (!pg->is_leaf) { 
         int i, n;
         for (i = 0, n = pg->n_items; i < n; i++) {

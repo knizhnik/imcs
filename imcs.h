@@ -22,9 +22,11 @@ typedef struct imcs_page_t_ imcs_page_t;
 typedef uint64 imcs_pos_t;
 typedef uint64 imcs_count_t;
 
-extern int  imcs_page_size;
-extern int  imcs_tile_size;
-extern bool imcs_sync_load;
+extern int   imcs_page_size;
+extern int   imcs_tile_size;
+extern bool  imcs_sync_load;
+extern int   imcs_cache_size;
+extern char* imcs_file_path;
 
 #define IMCS_INFINITY (-1)
 
@@ -300,6 +302,7 @@ typedef struct imcs_iterator_t_
 
 void*              imcs_alloc(size_t size);
 void               imcs_free(void* ptr);
+uint64             imcs_used_memory(void);
 
 imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_type, bool is_timestamp, int elem_size, bool create);
 imcs_page_t*       imcs_new_page(void);

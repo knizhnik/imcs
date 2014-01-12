@@ -21,3 +21,4 @@ Initial version
 --- Release version 1.03 (??.01.2014) -------------------------------------
 1. Take in account extra_float_digits for printing floating point values
 2. Add cs_filter_first_pos function
+3. Support disk mode

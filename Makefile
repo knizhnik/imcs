@@ -12,7 +12,15 @@
 # *-------------------------------------------------------------------------
 
 MODULE_big = imcs
+
+CUSTOM_COPT = -O3 -Wall -pthread
+
+ifdef USE_DISK
+OBJS = imcs.o func.o smp.o btree.o threadpool.o fileio.o disk.o
+CUSTOM_COPT += -DIMCS_DISK_SUPPORT
+else
 OBJS = imcs.o func.o smp.o btree.o threadpool.o 
+endif
 
 EXTENSION = imcs
 DATA = imcs--1.1.sql 

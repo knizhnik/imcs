@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include "imcs.h"
 #include "btree.h"
+#include "disk.h"
 #include "func.h"
 #include "smp.h"
 #include "executor/spi.h"
@@ -37,6 +38,7 @@ typedef struct imcs_state_t
 	LWLockId	lock;	/* protects timeseries search/modification */
     imcs_free_page_t* free_pages; /* list of free B-Tree pages */
     size_t n_used_pages;
+    imcs_disk_cache_t disk_cache;
 } imcs_state_t;
 
 typedef enum
@@ -61,6 +63,9 @@ static bool   imcs_substitute_nulls = false;
 static bool   imcs_autoload = true;
 static bool   imcs_serializable = true;
 static bool   imcs_trace = false;
+
+int imcs_cache_size = 0;
+char* imcs_file_path;
 
 int imcs_page_size = 4096;
 int imcs_tile_size = 128;
@@ -233,7 +238,6 @@ static const char const* imcs_command_mnem[] =
 #define MB (1024*1024)
 #define MAX_SQL_STMT_LEN 256
 #define MAX_CUT_VALUES 16
-#define IMCS_CACHE_SIZE 16
 #define IMCS_INIT_OUTPUT_BUF_SIZE (16*1024)
 #define IMCS_MIN_OUTPUT_BUF_SIZE  (MAX_NUMELEM_LEN)
 
@@ -727,6 +731,9 @@ static void imcs_trans_callback(XactEvent event, void *arg)
         if (imcs_mem_ctx) {
             MemoryContextReset(imcs_mem_ctx);
         }
+        if (event == XACT_EVENT_COMMIT) { 
+            imcs_disk_flush();
+        }
     }
 }
 
@@ -829,6 +836,12 @@ void imcs_free(void* ptr)
 }
 
 /* This function is called in context protected by imcs->lock */
+#ifndef IMCS_DISK_SUPPORT
+uint64 imcs_used_memory(void)
+{
+    return imcs == NULL ? 0 : imcs->n_used_pages*imcs_page_size);
+}
+
 imcs_page_t* imcs_new_page(void)
 {
     imcs_free_page_t* pg = imcs->free_pages;
@@ -852,6 +865,7 @@ void imcs_free_page(imcs_page_t* page)
     imcs->free_pages = pg;
     imcs->n_used_pages -= 1;
 }
+#endif
 
 void imcs_reset_iterator(imcs_iterator_h iterator)
 {
@@ -963,6 +977,32 @@ void _PG_init(void)
 							NULL,
 							NULL,
 							NULL);
+
+#ifdef IMCS_DISK_SUPPORT
+	DefineCustomIntVariable("imcs.cache_size",
+                            "Size of IMCS disk cache.",
+							NULL,
+							&imcs_cache_size,
+							256*1024, /* 1Gb cache for 4kb pages */
+							8,
+							INT_MAX,
+							PGC_POSTMASTER,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomStringVariable("imcs.file_path",
+                            "Path to IMCS disk file or partition.",
+							NULL,
+							&imcs_file_path,
+							"imcs.dbs",
+							PGC_POSTMASTER,
+							0,
+							NULL,
+							NULL,
+							NULL);
+#endif
 
 	DefineCustomIntVariable("imcs.tile_size",
                             "Number of elements in tile.",
@@ -1079,6 +1119,7 @@ void _PG_fini(void)
         imcs_alloc_mutex = NULL;
     }
     UnregisterXactCallback(imcs_trans_callback, NULL);          
+    imcs_disk_close();
 }
 
 static void imcs_shmem_startup(void)
@@ -1107,7 +1148,9 @@ static void imcs_shmem_startup(void)
 		imcs->lock = LWLockAssign();
         imcs->free_pages = NULL;
         imcs->n_used_pages = 0;
+        imcs_disk_initialize(&imcs->disk_cache);
 	}
+    imcs_disk_open();
     imcs_init_hash();
     imcs_alloc_mutex = imcs_create_mutex();
     /* operator's pipe should exist until end of query execution.
@@ -4267,7 +4310,7 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
 
 Datum cs_used_memory(PG_FUNCTION_ARGS)                    
 {                                                                       
-    PG_RETURN_INT64(imcs == NULL ? 0 : imcs->n_used_pages*imcs_page_size);
+    PG_RETURN_INT64(imcs_used_memory());
 }
 
 static int32 imcs_date2year(int32 date)
