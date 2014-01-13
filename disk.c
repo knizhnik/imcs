@@ -5,17 +5,25 @@
 static imcs_file_h imcs_file;
 static imcs_disk_cache_t* imcs_disk_cache;
 
-inline static void imcs_unlink(imcs_cache_item_t* item)
+inline static void imcs_unlink(int pid)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
+    imcs_cache_item_t* item = &cache->items[pid];
+
     cache->items[item->prev].next = item->next;
     cache->items[item->next].prev = item->prev;
+
+    /* adjust if needed pointer of last internal page in LRU list */
+    if (cache->lru_internal == pid) { 
+        cache->lru_internal = item->prev;
+    }
 }
 
 inline static void imcs_link_after(int after, int pid)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
     imcs_cache_item_t* item = &cache->items[pid];
+
     cache->items[item->next = cache->items[after].next].prev = pid;
     cache->items[item->prev = after].next = pid;
 }
@@ -38,12 +46,8 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
                 SPIN_DELAY();
                 goto Retry;
             }
-            if (item->access_count++ == 0) { /* pin page in memory */
-                imcs_unlink(item);
-                /* adjust if needed pointer of last inteneral page in LRU list */
-                if (cache->lru_internal == pid) { 
-                    cache->lru_internal = item->prev;
-                }
+            if (item->access_count++ == 0) { /* pin page in memory: exclude from LRU list */
+                imcs_unlink(pid);
             }
             if (mode != PM_READ_ONLY) { /* page will be updated */
                 if (item->dirty_index == 0) { /* page was not yet modified */
@@ -63,7 +67,7 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
     } else { /* no free items, replace LRU item */
         size_t vh;
         int* pp;
-        pid = cache->items->prev; /* LRU */
+        pid = cache->items->prev; /* LRU victim */
         if (pid == 0) { /* no free pages */
             ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("no available page in cache")));
         }
@@ -77,13 +81,8 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
         *pp = item->collision;
 
         /* exclude item from LRU list */
-        imcs_unlink(item);
+        imcs_unlink(pid);
 
-        /* adjust if needed pointer of last inteneral page in LRU list */
-        if (cache->lru_internal == pid) { 
-            cache->lru_internal = item->prev;
-        }
-        
         /* save dirty page */
         if (item->dirty_index) { 
             pg = IMCS_PAGE_DATA(cache, pid);
