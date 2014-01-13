@@ -52,14 +52,14 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
                 }
             }
             SpinLockRelease(&cache->mutex);
-            return (imcs_page_t*)(cache->data + pid*imcs_page_size);
+            return IMCS_PAGE_DATA(cache, pid);
         }
     }            
-    if (cache->free_chain != 0) { 
-        pid = cache->free_chain;
-        cache->free_chain = cache->items[pid].next;
-    } else if (cache->used < imcs_cache_size) { 
-        pid = ++cache->used;
+    if (cache->free_items_chain != 0) { 
+        pid = cache->free_items_chain;
+        cache->free_items_chain = cache->items[pid].next;
+    } else if (cache->n_used_items < imcs_cache_size) { 
+        pid = ++cache->n_used_items;
     } else { /* no free items, replace LRU item */
         size_t vh;
         int* pp;
@@ -86,7 +86,7 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
         
         /* save dirty page */
         if (item->dirty_index) { 
-            pg = (imcs_page_t*)(cache->data + pid*imcs_page_size);
+            pg = IMCS_PAGE_DATA(cache, pid);
             imcs_file_write(imcs_file, pg, imcs_page_size, item->offs);
             cache->dirty_pages[item->dirty_index-1] = cache->dirty_pages[--cache->n_dirty_pages]; /* exclude from dirty list */
         }
@@ -111,13 +111,13 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
     item->access_count = 1;
     item->is_busy = false;  
     SpinLockRelease(&cache->mutex);
-    return (imcs_page_t*)(cache->data + pid*imcs_page_size);
+    return IMCS_PAGE_DATA(cache, pid);
 }
 
 void imcs_unload_page(imcs_page_t* pg)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
-    size_t pid = ((char*)pg - cache->data)/imcs_page_size;
+    size_t pid = ((char*)pg - cache->data)/imcs_page_size + 1;
     imcs_cache_item_t* item = &cache->items[pid];
     Assert(pid-1 < (size_t)imcs_cache_size);
     SpinLockAcquire(&cache->mutex); 
@@ -132,12 +132,12 @@ void imcs_unload_page(imcs_page_t* pg)
 
 void imcs_disk_initialize(imcs_disk_cache_t* cache)
 {
+    memset(cache, 0, sizeof(*cache));
     cache->items = (imcs_cache_item_t*)ShmemAlloc((imcs_cache_size+1)*sizeof(imcs_cache_item_t));
     if (cache->items == NULL) { 
         ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
     }
-    cache->items->next = cache->items->prev = 0; /* initialize LRU list */
-    cache->data = (char*)ShmemAlloc((size_t)(imcs_cache_size+1)*imcs_page_size);
+    cache->data = (char*)ShmemAlloc((size_t)imcs_cache_size*imcs_page_size);
     if (cache->data == NULL) { 
         ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
     }
@@ -151,12 +151,7 @@ void imcs_disk_initialize(imcs_disk_cache_t* cache)
     if (cache->dirty_pages == NULL) { 
         ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
     }
-    cache->n_dirty_pages = 0;
-    cache->used = 0;
-    cache->free_chain = 0;
-    cache->lru_internal = 0;
-    cache->hdr = (imcs_file_header_t*)cache->data;
-    cache->hdr->magic = 0; /* header is not yet fetched from the disk */
+    cache->file_size = imcs_page_size; /* reserve first page to make address not NULL */
     SpinLockInit(&cache->mutex);
     imcs_disk_cache = cache;
 }
@@ -164,24 +159,11 @@ void imcs_disk_initialize(imcs_disk_cache_t* cache)
     
 void imcs_disk_open(void)
 {
-    imcs_disk_cache_t* cache = imcs_disk_cache;
     imcs_file = imcs_file_open(imcs_file_path);
-    if (cache->hdr->magic != IMCS_DISK_MAGIC) { 
-        if (!imcs_file_read(imcs_file, cache->data, imcs_page_size, 0) || cache->hdr->magic != IMCS_DISK_MAGIC) { 
-            memset(cache->data, 0, imcs_page_size);
-            cache->hdr->magic = IMCS_DISK_MAGIC;
-            cache->hdr->page_size = imcs_page_size;
-            cache->hdr->used = imcs_page_size;
-            imcs_file_write(imcs_file, cache->data, imcs_page_size, 0);
-        } else if (cache->hdr->page_size != imcs_page_size) { 
-            ereport(ERROR, (errcode(ERRCODE_IO_ERROR), errmsg("Invalid page size %d instead of %d", cache->hdr->page_size, imcs_page_size)));
-        }            
-    }
 }
 
 void imcs_disk_close(void)
 {
-    imcs_disk_flush();
     imcs_file_close(imcs_file);
 }
 
@@ -196,17 +178,13 @@ void imcs_disk_flush(void)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
     int i, n = cache->n_dirty_pages;
-    if (cache->items->dirty_index) { /* need to write file header */
-        imcs_file_write(imcs_file, cache->data, imcs_page_size, 0);
-        cache->items->dirty_index = 0;
-    }
     if (n != 0) { 
         /* sort dirty pages by offset so that them will be written in more or less sequential order */
         qsort(cache->dirty_pages, n, sizeof(int), compare_page_offset);
         for (i = 0; i < n; i++) {
             int pid = cache->dirty_pages[i];
             imcs_cache_item_t* item = &cache->items[pid];
-            imcs_page_t* pg = (imcs_page_t*)(cache->data + pid*imcs_page_size);
+            imcs_page_t* pg = IMCS_PAGE_DATA(cache, pid);
             imcs_file_write(imcs_file, pg, imcs_page_size, item->offs);
             item->dirty_index = 0;
         }
@@ -218,22 +196,22 @@ void imcs_disk_flush(void)
 imcs_page_t* imcs_new_page(void)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
-    uint64 addr = cache->hdr->free_chain_head;
+    uint64 addr = cache->free_pages_chain_head;
     if (addr != 0) { /* free page list is not empty */
-        if (cache->hdr->free_chain_head == cache->hdr->free_chain_tail) { 
+        if (cache->free_pages_chain_head == cache->free_pages_chain_tail) { 
             /* free page list is now empty */
-            cache->hdr->free_chain_head = cache->hdr->free_chain_tail = 0;
+            cache->free_pages_chain_head = cache->free_pages_chain_tail = 0;
         } else { 
-            if (!imcs_file_read(imcs_file, &cache->hdr->free_chain_head, sizeof cache->hdr->free_chain_head, addr)) { 
+            if (!imcs_file_read(imcs_file, &cache->free_pages_chain_head, sizeof cache->free_pages_chain_head, addr)) { 
                 ereport(ERROR, (errcode(ERRCODE_IO_ERROR), errmsg("Failed to read free page")));
             }
-            Assert(cache->hdr->free_chain_tail != 0);
+            Assert(cache->free_pages_chain_tail != 0);
         }
     } else { 
-        addr = cache->hdr->used;
-        cache->hdr->used += imcs_page_size;
+        addr = cache->file_size;
+        cache->file_size += imcs_page_size;
     }
-    cache->items->dirty_index = 1; /* mark root page as modified, particular value of dirty_index is not important: it should be just not zero */    
+    cache->n_used_pages += 1;
     return (imcs_page_t*)(size_t)addr;
 }
 
@@ -244,7 +222,7 @@ imcs_page_t* imcs_new_page(void)
 void imcs_free_page(imcs_page_t* pg) 
 { 
     imcs_disk_cache_t* cache = imcs_disk_cache;
-    size_t pid = ((char*)pg - cache->data)/imcs_page_size;
+    size_t pid = ((char*)pg - cache->data)/imcs_page_size + 1;
     imcs_cache_item_t* item = &cache->items[pid];
     int* pp;
     size_t h = (size_t)(item->offs / imcs_page_size) % imcs_cache_size;    
@@ -264,21 +242,20 @@ void imcs_free_page(imcs_page_t* pg)
     }
      
     /* include item in free items list */
-    item->next = cache->free_chain;
-    cache->free_chain = pid;
+    item->next = cache->free_items_chain;
+    cache->free_items_chain = pid;
 
     /* append page to free pages list */
-    if (cache->hdr->free_chain_tail != 0) { 
-        imcs_file_write(imcs_file, &item->offs, sizeof item->offs, cache->hdr->free_chain_tail);
+    if (cache->free_pages_chain_tail != 0) { 
+        imcs_file_write(imcs_file, &item->offs, sizeof item->offs, cache->free_pages_chain_tail);
     } else { 
-        cache->hdr->free_chain_head = item->offs;
+        cache->free_pages_chain_head = item->offs;
     }
-    cache->hdr->free_chain_tail = item->offs;
-
-    cache->items->dirty_index = 1; /* mark root page as modified, particular value of dirty_index is not important: it should be just not zero */    
+    cache->free_pages_chain_tail = item->offs;
+    cache->n_used_pages -= 1;
 }
 
 uint64 imcs_used_memory(void)
 {
-    return imcs_disk_cache == NULL ? 0 : imcs_disk_cache->hdr->used;
+    return imcs_disk_cache == NULL ? 0 : imcs_disk_cache->n_used_pages*imcs_page_size;
 }

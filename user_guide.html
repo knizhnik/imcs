@@ -30,6 +30,7 @@
 <li><a href="#operators">Operators</a></li>
 <li><a href="#projection">Projection issues</a></li>
 <li><a href="#impletemtation">Implementation details</a></li>
+<li><a href="#disk">Scaling beyond physical memory</a></li>
 <li><a href="#installation">Installation and tuning</a></li>
 <li><a href="#performance">Performance comparison</a></li>
 <li><a href="#license">License</a></li>
@@ -1360,6 +1361,60 @@ Then results are merged using operator-specific merge function. Merge requires s
 Please notice that PostgreSQL is not able to parallelize execution of SQL query. Certainly it is possible to manually split query into several subqueries and execute them concurrently. But it is not trivial and not convenient. The fact that IMCS can overcome this limitation is very important for OLAP queries.
 </p>
 
+<h2><a name="disk">Scaling beyond physical memory</a></h2>
+<p>
+IMCS was originally designed to hold all data in main memory. In this case it shows the best performance.
+But there are cases when available data doesn't fit in server's RAM. 
+After receiving requests from several customers I have added to IMCS possibility to swap data to the disk.
+Certainly performance of disk version of IMCS is not so high as of in-memory version.
+But there are two factors which allows to expect quite good performance of disk version also:
+<ol>
+<li>IMCS uses B-Tree to store timeseries data and B-Tree is one of the most efficient data structure for disk lookups (minimizing number of read operations)</li>
+<li>Most of IMCS queries are performing sequential scans of large timeseries intervals. In allows to sequentially read data from the disk with disk head speed (up to Gbit per second for modern disks).</li>
+</ol>
+</p>
+<p>
+To use IMCS in disk mode, you should rebuild it with <code>USE_DISK=1</code> option of makefile.
+In this case IMCS will store timeseries data in specified file or raw partition and use page pool (disk cache) to optimize access to the disk.
+So you need to specify path to file or raw partition and size of disk cache (number of pages).
+Cache is placed in shared memory so it can be accessed by all PostgreSQL processes. 
+Please notice that size of the cache should be smaller than size of shared memory reserved for IMCS extension (<code>"imcs.shmem_size"</code>).
+</p>
+<p>
+Usually the large cache is used, the better performance you will get. Certainly if cache fits in main memory, in case of swapping cache only can cause degrade of performance.
+But most of IMCS queries perform sequential scan of data. If size of data is larger than size of the cache, than it doesn't matter how large this cache is: there will be no cache hits in any case (page is thrown away from the cache by LRU algorithm before it is accessed second time).
+IMCS uses two level LRU replacement algorithm trying to keep in memory internal pages of B-Tree and protect then from throwing away from the cache by leaf pages during 
+large scans.
+</p>
+<p>
+Also please notice that caching is also done at OS level (file system cache). It means that the same page can be stored in memory twice: in IMCS shared memory and in 
+OS disk cache. And extra memory copies are needed to move data between OS cache and IMCS cache. IMCS cache provides faster access (requires no context switches), 
+but only OS has precise knowledge about availability of memory and so it is more flexible in assignment of available memory resources.
+And IMCS knows specific of accessed pages (leaf or internal page) and so may choose more efficient replacement policy for each of them.
+So there is no simple answer to the question how to split memory between OS and internal IMCS cache. You can not certainly control size of OS file cache, but the larger IMCS cache is, the less memory will left to OS and can be used for caching at OS level. And vice versa.
+</p>
+<p>
+Disk version of IMCS doesn't provides durability (persistence) of data: after restart of server it is still necessary to reload all IMCS data.
+There are two main reasons for it:
+<ol>
+<li>Some IMCS data is still not persistent, for example hash table used to locate timeseries.</li>
+<li>Due to performance reasons, IMCS is not using WAL (write ahead logging) or some other approach to provide 
+all ACID properties of transaction. So in case of some error (power failure, OS crash, error in executed update query,...) IMCS data file can be corrupted
+and there is no way to atomically recover it.</li>
+</ol>
+</p>
+<p>
+IMCS never shrinks size of used data file. If you deallocate some table, then correspondent pages will be marked as free and can be reused in subsequent allocation queries.
+But size of the file is not decreased. Even after restart of the server file is not truncated, because: 
+<ol>
+<li>IMCS can work not only with normal OS file, but also with raw partitions which can not be truncated;</li>
+<li>extension of file requires update of file metadata which adds additional overhead.</li>
+</ol>
+So you need to delete the file explicitly if you want to truncate it.
+</p>
+
+
+
 <h2><a name="installation">Installation and tuning</a></h2>
 <p>
 As far as IMCS is using PostgreSQL shared memory, it should be loaded via shared_preload_libraries.
@@ -1397,7 +1452,13 @@ Below is list of all IMCS configuration parameters:
 <tr><td><code>imcs.output_string_limit</code></td><td>Limit for length of timeseries string representation</td><td>1024</td><td>Trying to print result of query returning larger timeseries can cause memory overflow or at least produce a lot of screens of hardly readable text. Setting this limit allows to restrict size of printed timeseries: only part of timeseries elements will be printed and then "..." indicates that timeseries was truncated.
 Setting this parameter to 0 disables this limitation.</td></tr>
 <tr><td><code>imcs.project_caching</code></td><td>Cache <code>cs_project</code> results to avoid redundant calculations in <code>(cs_project(...)).*</code> expression.</td><td>true</td><td>Caching can cause incorrect behavior in some cases: when <code>cs_project</code> is used twice in the same query. In this case disable it: everything should work correctly, may be only with some performance penalty in case of using <code>(cs_project(...)).*</code> construction. Also it is possible to disable caching for each particular <code>cs_project</code> invocation by assigning false to optional <code>disable_caching</code> parameter. Please read more in section <a href="#projection">Projection issues</a>.</td></tr>
+<tr><td><code>imcs.cache_size</code>(*)</td><td>Size of IMCS disk cache (in pages)</td><td>256*1024</td><td>Total size in bytes used by cache is <code>imcs.cache_size*imcs.page_size</code>. With default values of parameters it is 1Gb. It should be smaller than <code>imcs.shmem_size</code>. See more about choosing optimal setting for this parameter in section <a href="#disk">Scaling beyond physical memory</a>.</td></tr>
+<tr><td><code>imcs.flush_file</code>(*)</td><td>Flush changes to the file during commit</td><td>true</td><td>Force dirty pages to be written to the disk during commit.
+Pages are written in offset increasing order, so writes are more or less sequential. That is why it can be faster than random writes of dirty pages thrown away by LRU
+replacement algorithm. But it can increase number of writes, especially in case of short transactions (for example if triggers are used to propagate updates to IMCS).</td></tr>
+<tr><td><code>imcs.file_path</code>(*)</td><td>Path to IMCS disk file or partition.</td><td>"imcs.dbs"</td><td>Location of IMCS file or raw partition. Please notice that IMCS never tries to truncate this file.</td></tr>
 </table>
+<i>*) These parameters are available only in disk mode</i>
 </p><p>
 So steps of using IMCS extension are the following:
 <ol>

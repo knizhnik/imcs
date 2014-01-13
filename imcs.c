@@ -70,7 +70,7 @@ char* imcs_file_path;
 int imcs_page_size = 4096;
 int imcs_tile_size = 128;
 static int imcs_output_string_limit = 1024;
-
+static bool imcs_flush_file;
 static int shmem_size = 1024;
 static int n_timeseries = 10000;
 static int n_threads = 0;
@@ -731,7 +731,7 @@ static void imcs_trans_callback(XactEvent event, void *arg)
         if (imcs_mem_ctx) {
             MemoryContextReset(imcs_mem_ctx);
         }
-        if (event == XACT_EVENT_COMMIT) { 
+        if (event == XACT_EVENT_COMMIT && imcs_flush_file) { 
             imcs_disk_flush();
         }
     }
@@ -839,7 +839,7 @@ void imcs_free(void* ptr)
 #ifndef IMCS_DISK_SUPPORT
 uint64 imcs_used_memory(void)
 {
-    return imcs == NULL ? 0 : imcs->n_used_pages*imcs_page_size);
+    return imcs == NULL ? 0 : imcs->n_used_pages*imcs_page_size;
 }
 
 imcs_page_t* imcs_new_page(void)
@@ -992,6 +992,17 @@ void _PG_init(void)
 							NULL,
 							NULL);
 
+	DefineCustomBoolVariable("imcs.flush_file",
+                             "Flush changes to the file during commit.",
+                             NULL,
+                             &imcs_flush_file,
+                             true,
+                             PGC_USERSET,
+                             0,
+                             NULL,
+                             NULL,
+                             NULL);
+    
 	DefineCustomStringVariable("imcs.file_path",
                             "Path to IMCS disk file or partition.",
 							NULL,

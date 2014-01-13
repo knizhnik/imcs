@@ -7,17 +7,6 @@
 #include "imcs.h"
 #include <storage/spin.h>
 
-#define IMCS_DISK_MAGIC 0xDBA0FACE
-
-typedef struct 
-{
-    uint32 magic; /* IMCS_DISK_MAGIC */
-    uint32 page_size; /* Used to compare with imcs_page_size */
-    uint64 used;      /* number of used pages */
-    uint64 free_chain_head; /* head of L1-list of free pages */
-    uint64 free_chain_tail; /* tail of L1-list of free pages */
-} imcs_file_header_t; 
-
 /* 
  * IMCS implements two-level LRU using L2-list.
  * Head of the list corresponds to most recently used internal (not leaf) pages, tail - least recently leaf used.
@@ -35,19 +24,24 @@ typedef struct imcs_cache_item_t_
 
 typedef struct 
 {
-    imcs_cache_item_t* items; /* imcs_cache_item_t[imcs_cache_size+1], first item is used is head of LRU list */
-    char*   data; /* char[(imcs_cache_size+1)*imcs_page_size], zero page is pinned for disk header */
+    imcs_cache_item_t* items; /* imcs_cache_item_t[imcs_cache_size+1], first item is used as head of LRU list */
+    char*   data; /* char[imcs_cache_size*imcs_page_size] */
     int*    dirty_pages;  /* int[imcs_cache_size] */
     int*    hash_table; /* int[imcs_cache_size] */
     int     n_dirty_pages; /* number of used items in array dirty_page */ 
-    int     used; /* number of used pages in cache (<= imcs_cache_size), initially 0 */
-    int     free_chain; /* L1 list of free pages (linked by "next" field) */
+    int     n_used_items; /* number of used items in cache (<= imcs_cache_size), initially 0 */
+    int     free_items_chain; /* L1 list of free pages (linked by "next" field) */
     int     lru_internal; /* index of least recently used internal page: it is used to separate in LRU list leaf pages from internal pages */
-    imcs_file_header_t* hdr; /* == data: content of first file page */
+    uint64  n_used_pages;
+    uint64  file_size;  /* size of data file */
+    uint64  free_pages_chain_head; /* head of L1-list of free pages */
+    uint64  free_pages_chain_tail; /* tail of L1-list of free pages */
     slock_t mutex; /* spinlock synchronizing access to the cache */
 } imcs_disk_cache_t;
 
 #ifdef IMCS_DISK_SUPPORT
+
+#define IMCS_PAGE_DATA(cache, pid) (imcs_page_t*)(cache->data + ((pid)-1)*imcs_page_size)
 
 typedef enum { 
     PM_READ_ONLY,
