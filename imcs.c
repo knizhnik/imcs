@@ -1019,7 +1019,11 @@ void _PG_init(void)
                             "Number of elements in tile.",
 							NULL,
 							&imcs_tile_size,
+#ifdef IMCS_DISK_SUPPORT
+							1024, /* use large tiles for disk mode to minize number of page accesses */
+#else
 							128,
+#endif
 							1,
 							10000,
 							PGC_POSTMASTER,
