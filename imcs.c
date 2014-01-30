@@ -69,6 +69,7 @@ char* imcs_file_path;
 
 int imcs_page_size = 4096;
 int imcs_tile_size = 128;
+bool imcs_use_rle = true;
 static int imcs_output_string_limit = 1024;
 static bool imcs_flush_file;
 static int shmem_size = 1024;
@@ -998,6 +999,17 @@ void _PG_init(void)
                              &imcs_flush_file,
                              true,
                              PGC_USERSET,
+                             0,
+                             NULL,
+                             NULL,
+                             NULL);
+    
+	DefineCustomBoolVariable("imcs.use_rle",
+                             "Use RLE compression for chararacter types.",
+                             NULL,
+                             &imcs_use_rle,
+                             false,
+                             PGC_POSTMASTER,
                              0,
                              NULL,
                              NULL,

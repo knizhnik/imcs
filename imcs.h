@@ -25,6 +25,7 @@ typedef uint64 imcs_count_t;
 extern int   imcs_page_size;
 extern int   imcs_tile_size;
 extern bool  imcs_sync_load;
+extern bool  imcs_use_rle;
 extern int   imcs_cache_size;
 extern char* imcs_file_path;
 

@@ -4913,7 +4913,7 @@ static bool imcs_group_approxdc_next(imcs_iterator_h iterator)
                     return false;                                              
                 }                                                       
                 if (iterator->opd[1]->tile_size > iterator->opd[0]->tile_size) { 
-                    ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group be sequence doesn't match values sequence")))); \
+                    ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); \
                 }
             }                                                           
             ctx->offset = 0;                                            
@@ -5050,7 +5050,7 @@ static bool imcs_hash_initialize_##OP##_##IN_TYPE(imcs_iterator_h iterator) \
     while (iterator->opd[1]->next(iterator->opd[1])) {                  \
         if (iterator->opd[0] != 0) {                                    \
             if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { \
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group be sequence doesn't match values sequence")))); \
+                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); \
             }                                                           \
         }                                                               \
         tile_size = iterator->opd[1]->tile_size;                        \
@@ -5400,7 +5400,7 @@ static bool imcs_hash_initialize_approxdc(imcs_iterator_h iterator)
     while (iterator->opd[1]->next(iterator->opd[1])) { 
         if (iterator->opd[0] != 0) {                                      
             if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { 
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group be sequence doesn't match values sequence")))); 
+                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); 
             }                                                           
         }                                                               
         tile_size = iterator->opd[1]->tile_size;                         
@@ -5708,7 +5708,7 @@ static bool imcs_dup_hash_initialize(imcs_iterator_h iterator)
 
     while (iterator->opd[1]->next(iterator->opd[1])) {   
         if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { 
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group be sequence doesn't match values sequence")))); 
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); 
         }
         tile_size = iterator->opd[1]->tile_size; 
         for (i = 0; i < tile_size; i++) {      

@@ -18,7 +18,10 @@ Initial version
 12. Make timestamp join more flexible: add direction parameter
 13. Reimplement insert trigger in C
 
---- Release version 1.03 (13.01.2014) -------------------------------------
+--- Release version 1.03 (30.01.2014) -------------------------------------
 1. Take in account extra_float_digits for printing floating point values
 2. Add cs_filter_first_pos function
 3. Support disk mode
+4. Support RLE compression
+
+

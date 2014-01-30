@@ -1346,8 +1346,13 @@ IMCS uses RW (read-write) lock to synchronize access to columnar store. It means
 but adding or removing timeseries elements is possible only in exclusive mode. Lock is set when timeseries is accessed first time. If <code>imcs.serializable</code> configuration parameter is true (default), then lock is hold till the end of transaction. Such locking policy provides serializable isolation level for timeseries.
 If <code>imcs.serializable</code> is false, then lock is released at the end of query execution. It corresponds to "read committed" isolation level.
 </p><p>
-Right now IMCS doesn't  provide any compression of timeseries elements. It can be done in the future.
-But IMCS is first of all oriented on financial data (trading systems). And here duplicates are not so often.
+Right now IMCS supports RLE compression for timeseries of character type. But duplicates are eliminated only at B-Tree pages.
+When elements are extracted into tile, them are decompressed. Using RLE at tiles level can significantly increase speed of some operations.
+For example if we perform aggregation (let's say sum) of timeseries with large number of repeated duplicate values, then RLE
+can significantly reduce number of performed operation. If value is is repeated 100 times, then with RLE we can just 
+calculate <code>100*x</code> instead of performing 100 additions.
+But IMCS is first of all oriented on financial data (trading systems). And here duplicates are not so often, at least for numeric characteristics.
+(price, volume, date,...).
 Even if value of some stock option is quite durable (variation about few cents per year), small fluctuations of this option during a days normally occur. Our experiments show that RLE encoding cause only degrade of performance in case
 of standard queries on securities data. 
 </p><p>
@@ -1452,6 +1457,7 @@ Below is list of all IMCS configuration parameters:
 <tr><td><code>imcs.output_string_limit</code></td><td>Limit for length of timeseries string representation</td><td>1024</td><td>Trying to print result of query returning larger timeseries can cause memory overflow or at least produce a lot of screens of hardly readable text. Setting this limit allows to restrict size of printed timeseries: only part of timeseries elements will be printed and then "..." indicates that timeseries was truncated.
 Setting this parameter to 0 disables this limitation.</td></tr>
 <tr><td><code>imcs.project_caching</code></td><td>Cache <code>cs_project</code> results to avoid redundant calculations in <code>(cs_project(...)).*</code> expression.</td><td>true</td><td>Caching can cause incorrect behavior in some cases: when <code>cs_project</code> is used twice in the same query. In this case disable it: everything should work correctly, may be only with some performance penalty in case of using <code>(cs_project(...)).*</code> construction. Also it is possible to disable caching for each particular <code>cs_project</code> invocation by assigning false to optional <code>disable_caching</code> parameter. Please read more in section <a href="#projection">Projection issues</a>.</td></tr>
+<tr><td><code>imcs.use_rle</code></td><td>Use RLE encoding for character timeseries</td><td>false</td><td>RLE allows to significantly reduce size of used memory for timeseries with large fraction of duplicates.</td></tr>
 <tr><td><code>imcs.cache_size</code>(*)</td><td>Size of IMCS disk cache (in pages)</td><td>256*1024</td><td>Total size in bytes used by cache is <code>imcs.cache_size*imcs.page_size</code>. With default values of parameters it is 1Gb. It should be smaller than <code>imcs.shmem_size</code>. See more about choosing optimal setting for this parameter in section <a href="#disk">Scaling beyond physical memory</a>.</td></tr>
 <tr><td><code>imcs.flush_file</code>(*)</td><td>Flush changes to the file during commit</td><td>true</td><td>Write dirty pages to the disk during commit.
 Pages are written in offset increasing order, so disk writes are more or less sequential minimizing disk head movements. That is why it can be faster than random writes of dirty pages thrown away by LRU

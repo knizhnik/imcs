@@ -15,7 +15,7 @@
 
 #define OFFSETOF_ITEMS_CHAR       ((size_t)((imcs_page_t*)0)->u.val_char)
 #define MAX_LEAF_ITEMS_CHAR(size) ((int)((imcs_page_size - OFFSETOF_ITEMS_CHAR)/(size)))
-#define MAX_NODE_ITEMS_CHAR(size) ((int)((imcs_page_size - OFFSETOF_ITEMS_CHAR)/sizeof(imcs_node_t)))
+#define MAX_NODE_ITEMS_CHAR()     ((int)((imcs_page_size - OFFSETOF_ITEMS_CHAR)/sizeof(imcs_node_t)))
 
 typedef struct imcs_node_t {
     struct imcs_page_t_* page;
@@ -46,8 +46,9 @@ typedef struct imcs_iterator_stack_item_t_ {
 
 typedef struct imcs_iterator_context_t_ 
 {
-    int stack_size;
-    int direction; /* used for tiemstamp join */
+    uint8 stack_size;
+    int8  direction;  /* used for timestamp join */
+    uint8 rle_offs;   /* offset within duplicate values for RLE encoding */
     imcs_iterator_stack_item_t stack[IMCS_STACK_SIZE];
 } imcs_iterator_context_t;
 
