@@ -1379,39 +1379,6 @@ IMCS_AGG_DEF(int64, double, dev, IMCS_VAR_INIT, IMCS_VAR_ACCUMULATE, IMCS_DEV_RE
 IMCS_AGG_DEF(float, double, dev, IMCS_VAR_INIT, IMCS_VAR_ACCUMULATE, IMCS_DEV_RESULT)
 IMCS_AGG_DEF(double, double, dev, IMCS_VAR_INIT, IMCS_VAR_ACCUMULATE, IMCS_DEV_RESULT)
 
-static void imcs_count_merge(imcs_iterator_h dst, imcs_iterator_h src) 
-{                                                                       
-    dst->tile.arr_int64[0] += src->tile.arr_int64[0];
-}                                                                       
-static bool imcs_count_next(imcs_iterator_h iterator)       
-{                                                                       
-    imcs_count_t count = 0;                                             
-    if (iterator->flags & FLAG_PREPARED) {                              
-        return iterator->tile_size != 0;                                
-    }
-    if (iterator->next_pos != 0) {                                      
-        return false;                                                   
-    }                                                                   
-    while (iterator->opd[0]->next(iterator->opd[0])) {                    
-        count += iterator->opd[0]->tile_size;
-    }                                                                   
-    iterator->next_pos = 1;                                             
-    iterator->tile_size = 1;                                            
-    iterator->tile.arr_int64[0] = count;              
-    return true;                                                        
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_count_iterator(imcs_iterator_h input)             
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(sizeof(int64), 0); 
-    result->elem_type = TID_int64;                                 
-    result->opd[0] = imcs_operand(input);                               
-    result->next = imcs_count_next;                         
-    result->prepare = imcs_count_next;                      
-    result->merge = imcs_count_merge;                       
-    return result;                                                      \
-}
-
 typedef struct {                                                        
     double sx;
     double sy;
@@ -6386,3 +6353,45 @@ IMCS_JOIN_TS_DEF(int32)
 IMCS_JOIN_TS_DEF(int64)
 IMCS_JOIN_TS_DEF(float)
 IMCS_JOIN_TS_DEF(double)
+
+
+static void imcs_count_merge(imcs_iterator_h dst, imcs_iterator_h src) 
+{                                                                       
+    dst->tile.arr_int64[0] += src->tile.arr_int64[0];
+}                                                                       
+static bool imcs_count_next(imcs_iterator_h iterator)       
+{                                                                       
+    imcs_count_t count = 0;                                             
+    if (iterator->flags & FLAG_PREPARED) {                              
+        return iterator->tile_size != 0;                                
+    }
+    if (iterator->next_pos != 0) {                                      
+        return false;                                                   
+    }                                                                   
+    if (iterator->opd[0]->reset == imcs_hash_agg_reset) { /* hash table already contains count: no need to calculate it */
+        if (iterator->opd[0]->next(iterator->opd[0])) { /* should initialize hash table */
+            count = ((imcs_hash_iterator_context_t*)iterator->opd[0]->context)->shared->hash->table_used;
+        }
+    } else { 
+        while (iterator->opd[0]->next(iterator->opd[0])) {                    
+            count += iterator->opd[0]->tile_size;
+        }       
+    }                                                            
+    iterator->next_pos = 1;                                             
+    iterator->tile_size = 1;                                            
+    iterator->tile.arr_int64[0] = count;              
+    return true;                                                        
+}                                                                       
+                                                                        
+imcs_iterator_h imcs_count_iterator(imcs_iterator_h input)             
+{                                                                       
+    imcs_iterator_h result = imcs_new_iterator(sizeof(int64), 0); 
+    result->elem_type = TID_int64;                                 
+    result->opd[0] = imcs_operand(input);                               
+    result->next = imcs_count_next;                         
+    if (input->reset != imcs_hash_agg_reset) {/* hash table already contains count: no need to calculate it */
+        result->prepare = imcs_count_next;   
+        result->merge = imcs_count_merge;                       
+    }
+    return result;                                                      
+}
