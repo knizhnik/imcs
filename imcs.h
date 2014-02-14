@@ -316,6 +316,8 @@ void               imcs_reset_iterator(imcs_iterator_h);
 imcs_iterator_h    imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type);
 imcs_count_t       imcs_count(imcs_iterator_h input);
 
+imcs_iterator_h    imcs_parallel_iterator(imcs_iterator_h iterator);
+
 struct imcs_adt_parser_t;
 typedef Datum (*imcs_adt_parse_t)(struct imcs_adt_parser_t* parser, char* value);
 

@@ -6369,7 +6369,8 @@ static bool imcs_count_next(imcs_iterator_h iterator)
         return false;                                                   
     }                                                                   
     if (iterator->opd[0]->reset == imcs_hash_agg_reset) { /* hash table already contains count: no need to calculate it */
-        if (iterator->opd[0]->next(iterator->opd[0])) { /* should initialize hash table */
+        imcs_iterator_h input = imcs_parallel_iterator(iterator->opd[0]);
+        if (input->next(input)) { /* should initialize hash table */
             count = ((imcs_hash_iterator_context_t*)iterator->opd[0]->context)->shared->hash->table_used;
         }
     } else { 

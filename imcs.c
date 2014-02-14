@@ -1745,7 +1745,7 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     return result;
 }
 
-static imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator) 
+imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator) 
 {
     imcs_visitor_context_t ctx;
     if (n_threads == 1 || iterator->merge == NULL) {                  
