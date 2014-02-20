@@ -875,8 +875,8 @@ create operator ? (leftarg=timeseries, procedure=cs_filter_pos);
 
 create function cs_unique(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_reverse(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_trend(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_diff(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
-create function cs_diff0(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_repeat(input timeseries, count integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_sort(input timeseries, sort_order cs_sort_order default 'asc') returns timeseries as $$

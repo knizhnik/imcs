@@ -728,12 +728,12 @@ Execution of this function can be parallelized.
 <td>Reverses order of timeseries elements .For example <code>cs_reverse('int4:{1,2,3}') = 'int4:{3,2,1}'</code></td>
 </tr>
 <tr>
-<td><code>function cs_diff(input timeseries) returns timeseries</code></td>
-<td>Calculates difference between pairs of subsequent timeseries elements: <code>result[0] = input[0], result[i] = input[i] - input[i-1]</code>. For example <code>cs_diff('int8:{1,3,2,5}) = 'int8:{1,2,-1,3}</code></td>
+<td><code>function cs_trend(input timeseries) returns timeseries</code></td>
+<td>Calculates sequence trend: sign of difference between pairs of non-equal sequence elements, for example <code>cs_trend('int8:{1,2,3,3,2,2,4,5,6,5,5}') = 'int1:{0,1,1,1,-1,-1,1,1,1,-1,-1}'</code></td>
 </tr>
 <tr>
-<td><code>function cs_diff0(input timeseries) returns timeseries</code></td>
-<td>Calculates difference between pairs of subsequent timeseries elements: <code>result[0] = 0, result[i] = input[i] - input[i-1]</code>. For example <code>cs_diff0('int8:{1,3,2,5}) = 'int8:{0,2,-1,3}</code></td>
+<td><code>function cs_diff(input timeseries) returns timeseries</code></td>
+<td>Calculates difference between pairs of subsequent timeseries elements: <code>result[0] = 0, result[i] = input[i] - input[i-1]</code>. For example <code>cs_diff('int8:{1,3,2,5}') = 'int8:{0,2,-1,3}'</code></td>
 </tr>
 <tr>
 <td><code>function cs_project(anyelement, positions timeseries default null, disable_caching book default false) returns setof record</code></td>

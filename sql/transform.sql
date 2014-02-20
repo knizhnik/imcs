@@ -11,6 +11,7 @@ select Quote_project(q.*, cs_filter_first_pos(High > Low*1.01, 3)) from Quote_ge
 select cs_unique(Volume/200) from Quote_get('IBM');
 select cs_reverse(Day) from Quote_get('IBM');
 select cs_diff(Close) from Quote_get('IBM');
+select cs_trend(Close) from Quote_get('IBM');
 select cs_project(q.*) from (select Day,cs_maxof(Open,Close) from Quote_get('IBM', date('02-Nov-2013'))) q;
 select cs_map(Volume, cs_top_max_pos(Close, 1)) from Quote_get('IBM');
 select cs_union(ibm.Day, abb.Day) from Quote_get('ABB') as abb, Quote_get('IBM') as ibm;
@@ -26,4 +27,5 @@ select cs_parse('{100.99,99.01,"$1,000,000"}', 'money');
 select cs_cast(cs_parse('{100.99,99.01,1000000}', 'money') * 2, 'money');
 select cs_cast('float4:{100.99,99.01,1000000}', 'money');
 select cs_cast('money:{100.99,99.01,"1,000,000"}', 'float8');
+select cs_trend('int4:{1,2,3,3,2,2,4,5,6,5,5}');
 

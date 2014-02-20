@@ -85,7 +85,7 @@ select avg(Close) ac,Symbol from Quote group by Symbol order by ac desc limit 5;
 --- Time: 1621.042 ms
 
 --- Find longest periods when NYSE is not working
-select cs_map(Day, cs_top_max_pos(cs_diff0(Day), 5)),cs_top_max(cs_diff0(Day), 5) from Quote_get();
+select cs_map(Day, cs_top_max_pos(cs_diff(Day), 5)),cs_top_max(cs_diff(Day), 5) from Quote_get();
 --- Time: 38.448 ms
 
 --- Number of unique values of close prices for 10 years

@@ -1506,6 +1506,7 @@ typedef struct imcs_agg_context_t_
     imcs_key_t accumulator;
     double norm;
     union { 
+        int8 trend;
         char arr_char[1];
         int8 arr_int8[1];
         int16 arr_int16[1];
@@ -2153,52 +2154,8 @@ IMCS_GRID_AGG_DEF(int64, double, grid_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_A
 IMCS_GRID_AGG_DEF(float, double, grid_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
 IMCS_GRID_AGG_DEF(double, double, grid_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
 
-
-#define IMCS_DIFF_DEF(TYPE)                                             \
-static bool imcs_diff_##TYPE##_next(imcs_iterator_h iterator)           \
-{                                                                       \
-    size_t i, tile_size;                                                \
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;   \
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
-        return false;                                                   \
-    }                                                                   \
-    tile_size = iterator->opd[0]->tile_size;                            \
-    for (i = 0; i < tile_size; i++) {                                   \
-        iterator->tile.arr_##TYPE[i] = iterator->opd[0]->tile.arr_##TYPE[i] - ctx->accumulator.val_##TYPE; \
-        ctx->accumulator.val_##TYPE = iterator->opd[0]->tile.arr_##TYPE[i]; \
-    }                                                                   \
-    iterator->next_pos += tile_size;                                    \
-    iterator->tile_size = tile_size;                                    \
-    return true;                                                        \
-}                                                                       \
-static void imcs_diff_##TYPE##_reset(imcs_iterator_h iterator)          \
-{                                                                       \
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;   \
-    ctx->accumulator.val_##TYPE = 0;                                    \
-    imcs_reset_iterator(iterator);                                      \
-}                                                                       \
-imcs_iterator_h imcs_diff_##TYPE(imcs_iterator_h input)                 \
-{                                                                       \
-    imcs_iterator_h result = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_agg_context_t)); \
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context;     \
-    IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
-    result->elem_type = TID_##TYPE;                                     \
-    result->opd[0] = imcs_operand(input);                               \
-    result->next = imcs_diff_##TYPE##_next;                             \
-    result->reset = imcs_diff_##TYPE##_reset;                           \
-    ctx->accumulator.val_##TYPE = 0;                                    \
-    return result;                                                      \
-}
-
-IMCS_DIFF_DEF(int8)
-IMCS_DIFF_DEF(int16)
-IMCS_DIFF_DEF(int32)
-IMCS_DIFF_DEF(int64)
-IMCS_DIFF_DEF(float)
-IMCS_DIFF_DEF(double)
-
-#define IMCS_DIFF0_DEF(TYPE)                                            \
-static bool imcs_diff0_##TYPE##_next(imcs_iterator_h iterator)          \
+#define IMCS_DIFF_DEF(TYPE)                                            \
+static bool imcs_diff_##TYPE##_next(imcs_iterator_h iterator)          \
 {                                                                       \
     size_t i, tile_size;                                                \
     imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;   \
@@ -2217,22 +2174,63 @@ static bool imcs_diff0_##TYPE##_next(imcs_iterator_h iterator)          \
     iterator->tile_size = tile_size;                                    \
     return true;                                                        \
 }                                                                       \
-imcs_iterator_h imcs_diff0_##TYPE(imcs_iterator_h input)                \
+imcs_iterator_h imcs_diff_##TYPE(imcs_iterator_h input)                \
 {                                                                       \
     imcs_iterator_h result = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_agg_context_t)); \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     result->elem_type = TID_##TYPE;                                     \
     result->opd[0] = imcs_operand(input);                               \
-    result->next = imcs_diff0_##TYPE##_next;                            \
+    result->next = imcs_diff_##TYPE##_next;                            \
     return result;                                                      \
 }
 
-IMCS_DIFF0_DEF(int8)
-IMCS_DIFF0_DEF(int16)
-IMCS_DIFF0_DEF(int32)
-IMCS_DIFF0_DEF(int64)
-IMCS_DIFF0_DEF(float)
-IMCS_DIFF0_DEF(double)
+IMCS_DIFF_DEF(int8)
+IMCS_DIFF_DEF(int16)
+IMCS_DIFF_DEF(int32)
+IMCS_DIFF_DEF(int64)
+IMCS_DIFF_DEF(float)
+IMCS_DIFF_DEF(double)
+
+#define IMCS_TREND_DEF(TYPE)                                             \
+static bool imcs_trend_##TYPE##_next(imcs_iterator_h iterator)           \
+{                                                                       \
+    size_t i, tile_size;                                                \
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;   \
+    if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
+        return false;                                                   \
+    }                                                                   \
+    tile_size = iterator->opd[0]->tile_size;                            \
+    if (iterator->next_pos == 0) {                                      \
+        ctx->accumulator.val_##TYPE = iterator->opd[0]->tile.arr_##TYPE[0]; \
+        ctx->history.trend = 0;                                         \
+    }                                                                   \
+    for (i = 0; i < tile_size; i++) {                                   \
+        iterator->tile.arr_int8[i] = ctx->history.trend = (iterator->opd[0]->tile.arr_##TYPE[i] < ctx->accumulator.val_##TYPE) \
+            ? -1 : (iterator->opd[0]->tile.arr_##TYPE[i] > ctx->accumulator.val_##TYPE) \
+            ? 1 : ctx->history.trend;                                  \
+        ctx->accumulator.val_##TYPE = iterator->opd[0]->tile.arr_##TYPE[i]; \
+    }                                                                   \
+    iterator->next_pos += tile_size;                                    \
+    iterator->tile_size = tile_size;                                    \
+    return true;                                                        \
+}                                                                       \
+imcs_iterator_h imcs_trend_##TYPE(imcs_iterator_h input)                 \
+{                                                                       \
+    imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_agg_context_t)); \
+    IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
+    result->elem_type = TID_int8;                                     \
+    result->opd[0] = imcs_operand(input);                               \
+    result->next = imcs_trend_##TYPE##_next;                             \
+    return result;                                                      \
+}
+
+IMCS_TREND_DEF(int8)
+IMCS_TREND_DEF(int16)
+IMCS_TREND_DEF(int32)
+IMCS_TREND_DEF(int64)
+IMCS_TREND_DEF(float)
+IMCS_TREND_DEF(double)
+
 
 typedef struct imcs_concat_context_t_ {
     size_t left_offs;

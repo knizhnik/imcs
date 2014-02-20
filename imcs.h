@@ -157,7 +157,7 @@ enum imcs_commands
     imcs_cmd_unique, 
     imcs_cmd_reverse, 
     imcs_cmd_diff, 
-    imcs_cmd_diff0, 
+    imcs_cmd_trend, 
     imcs_cmd_repeat, 
     imcs_cmd_count, 
     imcs_cmd_approxdc, 

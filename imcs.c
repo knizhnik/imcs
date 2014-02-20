@@ -142,7 +142,7 @@ static const char const* imcs_command_mnem[] =
     "unique", 
     "reverse", 
     "diff", 
-    "diff0", 
+    "trend", 
     "repeat", 
     "count", 
     "approxdc", 
@@ -363,7 +363,7 @@ PG_FUNCTION_INFO_V1(cs_filter_first_pos);
 PG_FUNCTION_INFO_V1(cs_unique);
 PG_FUNCTION_INFO_V1(cs_reverse);
 PG_FUNCTION_INFO_V1(cs_diff);
-PG_FUNCTION_INFO_V1(cs_diff0);
+PG_FUNCTION_INFO_V1(cs_trend);
 PG_FUNCTION_INFO_V1(cs_repeat);
 PG_FUNCTION_INFO_V1(cs_count);
 PG_FUNCTION_INFO_V1(cs_approxdc);
@@ -562,7 +562,7 @@ Datum cs_filter_first_pos(PG_FUNCTION_ARGS);
 Datum cs_unique(PG_FUNCTION_ARGS);
 Datum cs_reverse(PG_FUNCTION_ARGS);
 Datum cs_diff(PG_FUNCTION_ARGS);
-Datum cs_diff0(PG_FUNCTION_ARGS);
+Datum cs_trend(PG_FUNCTION_ARGS);
 Datum cs_repeat(PG_FUNCTION_ARGS);
 Datum cs_count(PG_FUNCTION_ARGS);
 Datum cs_approxdc(PG_FUNCTION_ARGS);
@@ -2837,7 +2837,7 @@ IMCS_UNARY_ANY_OP(filter_pos)
 IMCS_UNARY_CHAR_OP(unique)
 IMCS_UNARY_CHAR_OP(reverse)
 IMCS_UNARY_OP(diff)
-IMCS_UNARY_OP(diff0)
+IMCS_UNARY_OP(trend)
 IMCS_INTERVAL_OP(repeat)
 
 Datum cs_filter_first_pos(PG_FUNCTION_ARGS)

@@ -75,9 +75,15 @@ select cs_reverse(Day) from Quote_get('IBM');
 (1 row)
 
 select cs_diff(Close) from Quote_get('IBM');
-           cs_diff            
-------------------------------
- float4:{10.5,9.7,10,10,10.3}
+          cs_diff          
+---------------------------
+ float4:{0,9.7,10,10,10.3}
+(1 row)
+
+select cs_trend(Close) from Quote_get('IBM');
+     cs_trend     
+------------------
+ char:{0,1,1,1,1}
 (1 row)
 
 select cs_project(q.*) from (select Day,cs_maxof(Open,Close) from Quote_get('IBM', date('02-Nov-2013'))) q;
@@ -162,5 +168,11 @@ select cs_cast('money:{100.99,99.01,"1,000,000"}', 'float8');
             cs_cast            
 -------------------------------
  float8:{100.99,99.01,1000000}
+(1 row)
+
+select cs_trend('int4:{1,2,3,3,2,2,4,5,6,5,5}');
+             cs_trend             
+----------------------------------
+ char:{0,1,1,1,-1,-1,1,1,1,-1,-1}
 (1 row)
 

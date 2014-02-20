@@ -45,7 +45,7 @@
     imcs_iterator_h imcs_neg_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_reverse_##TYPE(imcs_iterator_h input);         \
     imcs_iterator_h imcs_diff_##TYPE(imcs_iterator_h input);            \
-    imcs_iterator_h imcs_diff0_##TYPE(imcs_iterator_h input);           \
+    imcs_iterator_h imcs_trend_##TYPE(imcs_iterator_h input);           \
     imcs_iterator_h imcs_max_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_min_##TYPE(imcs_iterator_h input);             \
     imcs_iterator_h imcs_sum_##TYPE(imcs_iterator_h input);             \
