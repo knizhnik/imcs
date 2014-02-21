@@ -1745,9 +1745,30 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     return result;
 }
 
+static bool imcs_is_unlimited(imcs_iterator_h iterator) 
+{
+    int i;
+    int n_operands = 0;
+    if (iterator->flags & FLAG_CONSTANT) {
+        return true;
+    }
+    for (i = 0; i < 3; i++) {
+        if (iterator->opd[i] != NULL) { 
+            n_operands += 1;
+            if (!imcs_is_unlimited(iterator->opd[i])) {
+                return false;
+            }
+        }
+    }
+    return n_operands != 0;
+}
+
 imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator) 
 {
     imcs_visitor_context_t ctx;
+    if (imcs_is_unlimited(iterator)) { 
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Value can not be caclualted for unbounded sequence"))));    
+    } 
     if (n_threads == 1 || iterator->merge == NULL) {                  
         return iterator;
     }    
@@ -2268,23 +2289,6 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(result);
 }
 
-static bool imcs_is_unlimited(imcs_iterator_h iterator) 
-{
-    int i;
-    int n_operands = 0;
-    if (iterator->flags & FLAG_CONSTANT) {
-        return true;
-    }
-    for (i = 0; i < 3; i++) {
-        if (iterator->opd[i] != NULL) { 
-            n_operands += 1;
-            if (!imcs_is_unlimited(iterator->opd[i])) {
-                return false;
-            }
-        }
-    }
-    return n_operands != 0;
-}
     
 Datum cs_output_function(PG_FUNCTION_ARGS)
 {
