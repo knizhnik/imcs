@@ -1760,7 +1760,7 @@ static bool imcs_is_unlimited(imcs_iterator_h iterator)
             }
         }
     }
-    return n_operands != 0;
+    return n_operands != 0 && iterator->last_pos == IMCS_INFINITY;
 }
 
 imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator) 
