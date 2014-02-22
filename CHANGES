@@ -27,5 +27,6 @@ Initial version
 --- Release version 1.04 (??.01.2014) -------------------------------------
 1. Add cs_trend function
 2. Fix hang in case of calculating aggregates for unbounded sequence
-
+3. Fix incorrect construction of string constants
+4. Support bool type
 

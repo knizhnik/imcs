@@ -2138,8 +2138,19 @@ Datum cs_parse_tid(PG_FUNCTION_ARGS)
 Datum cs_const_str(PG_FUNCTION_ARGS)
 {
     text* t = PG_GETARG_TEXT_P(0);
+    char* str = (char*)VARDATA(t);
+    int len = VARSIZE(t) - VARHDRSZ;
     int elem_size = PG_GETARG_INT32(1);
-    imcs_iterator_h result = imcs_const_char(text_to_cstring(t), elem_size);
+    char* elem = (char*)palloc(elem_size);
+    imcs_iterator_h result;
+    if (elem_size < len) { 
+        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+    } else { 
+        memcpy(elem, str, len);
+        memset(elem + len, '\0', elem_size - len);
+    }
+    result = imcs_const_char(elem, elem_size);
+    pfree(elem);
     IMCS_TRACE(const);
     PG_RETURN_POINTER(result);
 }
@@ -3672,6 +3683,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
 static imcs_elem_typeid_t imcs_oid_to_typeid(int oid)
 {
     switch (oid) { 
+      case BOOLOID:
       case CHAROID:
         return TID_int8;
       case INT2OID:
@@ -3740,6 +3752,9 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         elog(ERROR, "Select failed with status %d", rc);
     }
     n_attrs = SPI_processed;
+    if (n_attrs == 0) { 
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Table %s doesn't exist", table_name)))); 
+    }
     attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
     attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
     attr_size = (int*)palloc(n_attrs*sizeof(int));
