@@ -54,6 +54,7 @@ declare
     create_insert_trigger text;
     create_delete_trigger text;
     create_truncate_trigger text;
+    create_is_loaded_func text;
     create_drop_func text;
     create_truncate_func text;
     create_project_func text;
@@ -111,6 +112,7 @@ begin
     create_drop_func := 'create function '||table_name||'_drop() returns void as $$
         begin
             drop function '||table_name||'_load(bool,text);
+            drop function '||table_name||'_is_loaded();
             drop function '||table_name||'_append('||timestamp_type||');
             drop function '||table_name||'_truncate();
             drop function '||table_name||'_project('||table_name||'_timeseries,timeseries,bool);';
@@ -155,6 +157,8 @@ begin
         end; $$ language plpgsql';
 
     create_load_func :=  'create function '||table_name||'_load(already_sorted bool default false, filter text default null) returns bigint as $$ begin return columnar_store_load('''||table_name||''','||id_attnum||','||timestamp_attnum||',already_sorted,filter::cstring); end; $$ language plpgsql';
+
+    create_is_loaded_func := 'create function '||table_name||'_is_loaded() returns bool as $$ begin return columnar_store_initialized('''||table_name||'-'||timestamp_id||''',false); end; $$ language plpgsql';
 
     -- PL/pgSQL version of load function is too slow... Leave it here just for reference. 
     create_load_plsql_func := 'create function '||table_name||'_load() returns bigint as $$ 
@@ -372,6 +376,7 @@ begin
 
     execute create_type;
     execute create_load_func;
+    execute create_is_loaded_func;
     execute create_get_func;
     execute create_span_func;
     if (not is_view) then 

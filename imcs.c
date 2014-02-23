@@ -770,7 +770,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     entry = (imcs_hash_entry_t*)hash_search(imcs_hash, &key, HASH_FIND, NULL);
     if (entry == NULL) { 
         if (!create) { 
-            if (autoload) { 
+            if (autoload && elem_size != 0) { /* elem_size == 0 when imcs_get_timeseries is called from columnar_store_initialized */
                 char const* sep = strchr(id, '-');
                 if (sep != NULL) { 
                     size_t table_name_len = sep - id;
@@ -809,9 +809,10 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     } else { 
         ts = &entry->value;
     }
-    if (ts->elem_type != elem_type ||
-        ts->elem_size != elem_size ||
-        ts->is_timestamp != is_timestamp)
+    if (elem_size != 0 /* elem_size == 0 when imcs_get_timeseries is called from columnar_store_initialized */
+        && (ts->elem_type != elem_type ||
+            ts->elem_size != elem_size ||
+            ts->is_timestamp != is_timestamp))
     {
         ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("data format was changed")))); 
     }
@@ -1896,8 +1897,8 @@ Datum columnar_store_initialized(PG_FUNCTION_ARGS)
 {
     char const* table_name = PG_GETARG_CSTRING(0);
     bool initialize = PG_GETARG_BOOL(1);
-    imcs_timeseries_t* ts = imcs_get_timeseries(table_name, TID_int8, false, 0, true);
-    bool is_initialized = ts->count != 0;
+    imcs_timeseries_t* ts = imcs_get_timeseries(table_name, TID_int8, false, 0, initialize);
+    bool is_initialized = ts != NULL && ts->count != 0;
     if (initialize) { 
         ts->count = 1;
     }

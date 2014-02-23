@@ -30,5 +30,6 @@ Initial version
 3. Fix incorrect construction of string constants
 4. Support bool type
 5. Fix bug in parallel executor causing crash in case of empty result
+6. Add TABLE_is_loaded() function
 
 

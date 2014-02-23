@@ -165,6 +165,13 @@ Particularly it can be used to append existed timeseries with new data.
 This function returns number of inserted timeseries elements. If <code>filter</code> is not specified then this function loads data from the table only if timeseries are not yet initialized. If <code>filter</code> is not null, then this functions always tries to load data, assuming that programmer has specified proper filter condition allowing to avoid duplicates and preserve proper timeseries order. If <code>filter</code> is null and timeseries are already initialized, then this function does nothing and immediately returns zero.</td>
 </tr>
 <tr>
+<td><code>function <b>TABLE</b>_is_loaded() returns bool</code></td>
+<td>Checks if data was already loaded to columnar store. If you just need to ensure that data is loaded,
+there is no need to call this function: you can always call <b>TABLE</b>_load, it will perform this check 
+itself and do nothing if data was already loaded. But if behavior of your application depends on state of 
+columnar store, then this function may be useful.</td>
+</tr>
+<tr>
 <td><code>function <b>TABLE</b>_append(start_from <b>TIMESTAMP_TYPE</b>) returns bigint</code></td>
 <td>Appends to timeseries records from the source table starting from <code>start_from</code> timestamp (inclusive).
 Use this function if on-update trigger is disabled (autoupdate=false in parameters of <code>cs_create</code>).
