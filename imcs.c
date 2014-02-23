@@ -1730,7 +1730,9 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     size_t ctx_offs;
     imcs_iterator_h opd[2];
     imcs_thread_pool->execute(imcs_thread_pool, imcs_parallel_job, iterator);
-    Assert(iterator->opd[1] != NULL);
+    if (iterator->opd[1] == NULL) { 
+        return false;
+    }
     Assert(iterator->iterator_size == iterator->opd[1]->iterator_size);
     ctx_offs = (char*)iterator->opd[1]->context - (char*)iterator->opd[1];
     opd[0] = iterator->opd[0]->opd[0]; /* save original operands */

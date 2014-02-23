@@ -29,4 +29,6 @@ Initial version
 2. Fix hang in case of calculating aggregates for unbounded sequence
 3. Fix incorrect construction of string constants
 4. Support bool type
+5. Fix bug in parallel executor causing crash in case of empty result
+
 
