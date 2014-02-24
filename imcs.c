@@ -699,18 +699,20 @@ static void imcs_init_hash()
 
 static void imcs_executor_end(QueryDesc *queryDesc)
 {
-    imcs_project_redundant_calls = 0;
-    imcs_project_call_count = 0;
-    if (!imcs_serializable && imcs && imcs_lock != LOCK_NONE) { 
-        if (LWLockHeldByMe(imcs->lock)) { 
-            LWLockRelease(imcs->lock);
+    if (CurrentMemoryContext == TopTransactionContext) { 
+        imcs_project_redundant_calls = 0;
+        imcs_project_call_count = 0;
+        if (!imcs_serializable && imcs && imcs_lock != LOCK_NONE) { 
+            if (LWLockHeldByMe(imcs->lock)) { 
+                LWLockRelease(imcs->lock);
+            }
+            imcs_lock = LOCK_NONE;
         }
-        imcs_lock = LOCK_NONE;
+        if (imcs_mem_ctx) {
+            MemoryContextReset(imcs_mem_ctx);
+        }     
     }
-    if (imcs_mem_ctx) {
-        MemoryContextReset(imcs_mem_ctx);
-    }     
-	if (prev_ExecutorEnd) { 
+    if (prev_ExecutorEnd) { 
 		prev_ExecutorEnd(queryDesc);
     } else { 
 		standard_ExecutorEnd(queryDesc);
@@ -1959,7 +1961,11 @@ Datum columnar_store_search_##TYPE(PG_FUNCTION_ARGS)                    \
         high_boundary = BOUNDARY_INCLUSIVE;                             \
     }                                                                   \
     result = imcs_search_##TYPE(ts, low, low_boundary, high, high_boundary); \
-    PG_RETURN_POINTER(result);                                          \
+    if (result == NULL) {                                               \
+        PG_RETURN_NULL();                                               \
+    } else {                                                            \
+        PG_RETURN_POINTER(result);                                      \
+    }                                                                   \
 }
 
 IMCS_SEARCH(int8,CHAR);

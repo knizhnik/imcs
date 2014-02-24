@@ -498,13 +498,14 @@ bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val
                                                                         \
 imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundary_kind_t low_boundary, TYPE high, imcs_boundary_kind_t high_boundary) \
 {                                                                       \
-    imcs_iterator_h iterator = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_iterator_context_t)); \
-    iterator->reset = imcs_reset_tree_iterator;                         \
-    iterator->next = imcs_next_tile;                                    \
-    iterator->elem_type = ts->elem_type;                                \
-    iterator->cs_hdr = ts;                                              \
-    iterator->flags = FLAG_CONTEXT_FREE|FLAG_RANDOM_ACCESS;             \
+    imcs_iterator_h iterator = NULL; \
     if (ts->root_page != NULL) {                                        \
+        iterator = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_iterator_context_t)); \
+        iterator->reset = imcs_reset_tree_iterator;                     \
+        iterator->next = imcs_next_tile;                                \
+        iterator->elem_type = ts->elem_type;                            \
+        iterator->cs_hdr = ts;                                          \
+        iterator->flags = FLAG_CONTEXT_FREE|FLAG_RANDOM_ACCESS;         \
         if (high_boundary != BOUNDARY_OPEN) {                           \
             iterator->next_pos = 0;                                     \
             if (!imcs_search_page_##TYPE(ts->root_page, iterator, high, BOUNDARY_INCLUSIVE + BOUNDARY_EXCLUSIVE - high_boundary, 0)) { \
@@ -527,9 +528,9 @@ imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundar
                 return iterator;                                        \
             }                                                           \
         }                                                               \
+        iterator->first_pos = iterator->next_pos = 1;                   \
+        iterator->last_pos = 0;                                         \
     }                                                                   \
-    iterator->first_pos = iterator->next_pos = 1;                       \
-    iterator->last_pos = 0;                                             \
     return iterator;                                                    \
 }                                                                       \
 

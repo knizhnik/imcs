@@ -41,15 +41,15 @@ select Quote_count('ABB');
 (1 row)
 
 select * from Quote_get('IBM');
- symbol |   day   |   open    |   high    |    low    |   close   | volume  
---------+---------+-----------+-----------+-----------+-----------+---------
- IBM    | date:{} | float4:{} | float4:{} | float4:{} | float4:{} | int4:{}
+ symbol | day | open | high | low | close | volume 
+--------+-----+------+------+-----+-------+--------
+        |     |      |      |     |       | 
 (1 row)
 
 select * from Quote_get('ABB');
- symbol |   day   |   open    |   high    |    low    |   close   | volume  
---------+---------+-----------+-----------+-----------+-----------+---------
- ABB    | date:{} | float4:{} | float4:{} | float4:{} | float4:{} | int4:{}
+ symbol | day | open | high | low | close | volume 
+--------+-----+------+------+-----+-------+--------
+        |     |      |      |     |       | 
 (1 row)
 
 select Quote_drop();
