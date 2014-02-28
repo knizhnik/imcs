@@ -2029,7 +2029,11 @@ Datum columnar_store_append_char(PG_FUNCTION_ARGS)
         }                                                               
     } else {                                                            
         text* t = PG_GETARG_TEXT_P(1);
-        imcs_append_char(ts, (char*)VARDATA(t), VARSIZE(t) - VARHDRSZ);                     
+        int len = VARSIZE(t) - VARHDRSZ;
+        if (len > elem_size) { 
+            ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d", len, elem_size))));             
+        }
+        imcs_append_char(ts, (char*)VARDATA(t), len);                     
     }                                                                   
     PG_RETURN_VOID();                                                   
 }
@@ -3904,6 +3908,9 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                                     len -= 1;
                                 }
                             }
+                            if (len > attr_size[i]) { 
+                                ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d", len, attr_size[i]))));             
+                            }
                             imcs_append_char(ts, str, len);
                         }
                         break;
@@ -4080,6 +4087,9 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                         while (len != 0 && str[len-1] == ' ') { 
                             len -= 1;
                         }
+                    }
+                    if (len > attr_size[i]) { 
+                        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d", len, attr_size[i]))));
                     }
                     imcs_append_char(ts, str, len);
                 }
