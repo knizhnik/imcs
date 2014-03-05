@@ -24,7 +24,7 @@ Initial version
 3. Support disk mode
 4. Support RLE compression
 
---- Release version 1.04 (??.01.2014) -------------------------------------
+--- Release version 1.04 (05.03.2014) -------------------------------------
 1. Add cs_trend function
 2. Fix hang in case of calculating aggregates for unbounded sequence
 3. Fix incorrect construction of string constants
@@ -32,5 +32,5 @@ Initial version
 5. Fix bug in parallel executor causing crash in case of empty result
 6. Add TABLE_is_loaded() function
 7. Fix IMCS context cleanup bug in case of nested SPI calls
-
+8. Add limit parameter to XXX_get() function
 

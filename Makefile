@@ -14,6 +14,7 @@
 MODULE_big = imcs
 
 CUSTOM_COPT = -O3 -Wall -pthread
+IMCS_VERSION=1.04
 
 ifdef USE_DISK
 OBJS = imcs.o func.o smp.o btree.o threadpool.o fileio.o disk.o
@@ -42,4 +43,4 @@ endif
 distrib:
 	rm -f *.o
 	rm -rf results/ regression.diffs regression.out tmp_check/ log/
-	cd .. ; tar --exclude=.svn -chvzf imcs-1.03.tar.gz imcs
+	cd .. ; tar --exclude=.svn -chvzf imcs-$(IMCS_VERSION).tar.gz imcs

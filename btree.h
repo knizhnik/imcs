@@ -71,7 +71,7 @@ extern imcs_count_t imcs_delete_all(imcs_timeseries_t* ts);
     extern void imcs_append_##TYPE(imcs_timeseries_t* ts, TYPE val);    \
     extern bool imcs_first_##TYPE(imcs_timeseries_t* ts, TYPE* val);    \
     extern bool imcs_last_##TYPE(imcs_timeseries_t* ts, TYPE* val);     \
-    extern imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundary_kind_t low_boundary, TYPE high, imcs_boundary_kind_t high_boundary); \
+    extern imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundary_kind_t low_boundary, TYPE high, imcs_boundary_kind_t high_boundary, imcs_count_t limit); \
     extern bool imcs_search_page_##TYPE(imcs_page_t* root, imcs_iterator_h iterator, TYPE val, imcs_boundary_kind_t boundary, int level)
 
 IMCS_BTREE_METHODS(int8);

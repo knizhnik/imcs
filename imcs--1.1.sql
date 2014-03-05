@@ -129,8 +129,8 @@ begin
 
     if (timeseries_id is not null) then
         create_drop_func := create_drop_func||'
-            drop function '||table_name||'_get('||id_type||','||timestamp_type||','||timestamp_type||');
-            drop function '||table_name||'_get('||id_type||'[],'||timestamp_type||','||timestamp_type||');
+            drop function '||table_name||'_get('||id_type||','||timestamp_type||','||timestamp_type||',bigint);
+            drop function '||table_name||'_get('||id_type||'[],'||timestamp_type||','||timestamp_type||',bigint);
             drop function '||table_name||'_span('||id_type||',bigint,bigint);
             drop function '||table_name||'_span('||id_type||'[],bigint,bigint);
             drop function '||table_name||'_concat('||id_type||'[],'||timestamp_type||','||timestamp_type||');
@@ -142,7 +142,7 @@ begin
             drop function '||table_name||'_count('||id_type||');';
     else 
         create_drop_func := create_drop_func||'
-            drop function '||table_name||'_get('||timestamp_type||','||timestamp_type||');
+            drop function '||table_name||'_get('||timestamp_type||','||timestamp_type||',bigint);
             drop function '||table_name||'_span(bigint,bigint);
             drop function '||table_name||'_delete('||timestamp_type||');
             drop function '||table_name||'_delete('||timestamp_type||','||timestamp_type||');
@@ -201,14 +201,14 @@ begin
                 n := n + 1;';
 
     if (timeseries_id is not null) then
-        create_getall_func := 'create function '||table_name||'_get(ids '||id_type||'[],from_ts '||timestamp_type||' default null,till_ts '||timestamp_type||' default null)
+        create_getall_func := 'create function '||table_name||'_get(ids '||id_type||'[],from_ts '||timestamp_type||' default null,till_ts '||timestamp_type||' default null, limit_ts bigint default null)
             returns setof '||table_name||'_timeseries as $$
             declare
                 id '||id_type||';
                 ts '||table_name||'_timeseries;
             begin
                 foreach id in array ids loop 
-                    ts:='||table_name||'_get(id,from_ts,till_ts);
+                    ts:='||table_name||'_get(id,from_ts,till_ts,limit_ts);
                     return next ts;
                 end loop;
                 return;
@@ -247,7 +247,7 @@ begin
     if (timeseries_id is not null) then
         create_get_func := create_get_func||timeseries_id||' '||id_type||', ';
     end if;
-    create_get_func := create_get_func||'from_ts '||timestamp_type||' default null, till_ts '||timestamp_type||' default null)
+    create_get_func := create_get_func||'from_ts '||timestamp_type||' default null, till_ts '||timestamp_type||' default null, limit_ts bigint default null)
         returns '||table_name||'_timeseries as $$
         declare
             result '||table_name||'_timeseries;
@@ -259,7 +259,7 @@ begin
     else
         create_get_func := create_get_func||''''||table_name||'-'||timestamp_id||'''';
     end if;
-    create_get_func := create_get_func||',from_ts,till_ts,'||timestamp_tid||');
+    create_get_func := create_get_func||',from_ts,till_ts,'||timestamp_tid||',limit_ts);
             if (search_result is null) then
                 return null;
             end if;
@@ -432,15 +432,15 @@ create function columnar_store_append_bpchar(cs_id cstring, val text, field_type
 create function columnar_store_append_varchar(cs_id cstring, val text, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_char' language C strict;
 
 
-create function columnar_store_search_char(cs_id cstring, from_ts "char", till_ts "char", field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int8' language C stable;
-create function columnar_store_search_int2(cs_id cstring, from_ts int2, till_ts int2, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int16' language C stable;
-create function columnar_store_search_int4(cs_id cstring, from_ts int4, till_ts int4, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int32' language C stable;
-create function columnar_store_search_int8(cs_id cstring, from_ts int8, till_ts int8, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int64' language C stable;
-create function columnar_store_search_date(cs_id cstring, from_ts date, till_ts date, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int32' language C stable;
-create function columnar_store_search_time(cs_id cstring, from_ts time, till_ts time, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int64' language C stable;
-create function columnar_store_search_timestamp(cs_id cstring, from_ts timestamp, till_ts timestamp, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int64' language C stable;
-create function columnar_store_search_float4(cs_id cstring, from_ts float4, till_ts float4, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_float' language C stable;
-create function columnar_store_search_float8(cs_id cstring, from_ts float8, till_ts float8, field_type integer) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_double' language C stable;
+create function columnar_store_search_char(cs_id cstring, from_ts "char", till_ts "char", field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int8' language C stable;
+create function columnar_store_search_int2(cs_id cstring, from_ts int2, till_ts int2, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int16' language C stable;
+create function columnar_store_search_int4(cs_id cstring, from_ts int4, till_ts int4, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int32' language C stable;
+create function columnar_store_search_int8(cs_id cstring, from_ts int8, till_ts int8, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int64' language C stable;
+create function columnar_store_search_date(cs_id cstring, from_ts date, till_ts date, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int32' language C stable;
+create function columnar_store_search_time(cs_id cstring, from_ts time, till_ts time, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int64' language C stable;
+create function columnar_store_search_timestamp(cs_id cstring, from_ts timestamp, till_ts timestamp, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_int64' language C stable;
+create function columnar_store_search_float4(cs_id cstring, from_ts float4, till_ts float4, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_float' language C stable;
+create function columnar_store_search_float8(cs_id cstring, from_ts float8, till_ts float8, field_type integer, limit_ts bigint default null) returns timeseries as 'MODULE_PATHNAME','columnar_store_search_double' language C stable;
 
 create function columnar_store_first_char(id cstring, field_type integer, field_size integer) returns "char" as 'MODULE_PATHNAME','columnar_store_first_int8' language C strict stable;
 create function columnar_store_first_int2(id cstring, field_type integer, field_size integer) returns int2 as 'MODULE_PATHNAME','columnar_store_first_int16' language C strict stable;
@@ -827,10 +827,10 @@ create function cs_abs(timeseries) returns timeseries as 'MODULE_PATHNAME' langu
 create operator @ (rightarg=timeseries, procedure=cs_abs);
 
 create function cs_limit(timeseries, from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
-create function cs_head(ts timeseries, n bigint) returns timeseries as $$ begin return cs_limit(ts, 0, n-1); end; $$ language plpgsql stable strict;
-create function cs_tail(ts timeseries, n bigint) returns timeseries as $$ begin return cs_limit(ts, -n); end; $$ language plpgsql stable strict;
-create function cs_cut_head(ts timeseries, n bigint) returns timeseries as $$ begin return cs_limit(ts, n); end; $$ language plpgsql stable strict;
-create function cs_cut_tail(ts timeseries, n bigint) returns timeseries as $$ begin return cs_limit(ts, 0, -n-1); end; $$ language plpgsql stable strict;
+create function cs_head(ts timeseries, n bigint default 1) returns timeseries as $$ begin return cs_limit(ts, 0, n-1); end; $$ language plpgsql stable strict;
+create function cs_tail(ts timeseries, n bigint default 1) returns timeseries as $$ begin return cs_limit(ts, -n); end; $$ language plpgsql stable strict;
+create function cs_cut_head(ts timeseries, n bigint default 1) returns timeseries as $$ begin return cs_limit(ts, n); end; $$ language plpgsql stable strict;
+create function cs_cut_tail(ts timeseries, n bigint default 1) returns timeseries as $$ begin return cs_limit(ts, 0, -n-1); end; $$ language plpgsql stable strict;
 
 create operator << (leftarg=timeseries, rightarg=bigint, procedure=cs_cut_head);
 create operator >> (leftarg=timeseries, rightarg=bigint, procedure=cs_cut_tail);

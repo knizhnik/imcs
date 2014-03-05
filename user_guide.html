@@ -245,8 +245,8 @@ Functions generated for accessing single timeseries (timeseries having no identi
 <td>Returns number of elements in timeseries.</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_get(low <b>TIMESTAMP_TYPE</b> default null, high <b>TIMESTAMP_TYPE</b> default null) returns <b>TABLE</b>_timeseries</code></td>
-<td>Returns vertical representation of the whole table or its time slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
+<td><code>function <b>TABLE</b>_get(low <b>TIMESTAMP_TYPE</b> default null, high <b>TIMESTAMP_TYPE</b> default null, limit_ts bigint default null) returns <b>TABLE</b>_timeseries</code></td>
+<td>Returns vertical representation of the whole table or its time slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open. It is possible to limit number of selected elements by specifying <code>limit_ts</code> parameter (if low boundary is open then last <code>limit_ts</code> elements will be selected, otherwise first <code>limit_ts</code> elements will be selected).</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_span(from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns <b>TABLE</b>_timeseries</code></td>
@@ -296,11 +296,11 @@ Functions generated for accessing multiple timeseries (source table contains ide
 <td>Returns number of elements in timeseries.</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>, <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null) returns <b>TABLE</b>_timeseries</code></td>
-<td>Returns timeseries with specified identifier for the corresponding table or its time slice. Returned record contains the same columns as record of original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
+<td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>, <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null, limit_ts bigint default null) returns <b>TABLE</b>_timeseries</code></td>
+<td>Returns timeseries with specified identifier for the corresponding table or its time slice. Returned record contains the same columns as record of original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open. It is possible to limit number of selected elements by specifying <code>limit_ts</code> parameter (if low boundary is open then last <code>limit_ts</code> elements will be selected, otherwise first <code>limit_ts</code> elements will be selected).</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>[], <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null) returns setof <b>TABLE</b>_timeseries</code></td>
+<td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>[], <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null, limit_ts bigint default null) returns setof <b>TABLE</b>_timeseries</code></td>
 <td>Does the same as function described above but for array of timeseries identifiers. For each timeseries identifier this function returns <code><b>TABLE</b>_timeseries</code> record, so output will contain as much rows as there are identifiers.</td>
 </tr>
 <tr>
@@ -658,19 +658,19 @@ Optional <code>elem_size</code> parameter is needed only for text array, it shou
 <td>Extracts subsequence from timeseries. Parameter <code>from_pos</code> specifies start position of subsequence (inclusive) and parameter <code>till_pos</code> specifies end position (inclusive). If <code>till_pos</code> parameter is missed, then subsequence spans till end of timeseries. Values of both <code>from_pos</code> and <code>till_pos</code> parameters can be negative. In this case position is calculated from end of timeseries, i.e. <code>cs_limit(s, from_pos:=-1)</code> extracts last element of the timeseries.</td>
 </tr>
 <tr>
-<td><code>function cs_head(timeseries, n bigint) returns timeseries</code></td>
+<td><code>function cs_head(timeseries, n bigint default 1) returns timeseries</code></td>
 <td>Extracts <code>n</code> first elements of timeseries. This function is equivalent to <code>cs_limit(0, n-1)</code>.</td>
 </tr>
 <tr>
-<td><code>function cs_tail(timeseries, n bigint) returns timeseries</code></td>
+<td><code>function cs_tail(timeseries, n bigint default 1) returns timeseries</code></td>
 <td>Extracts <code>n</code> last elements of timeseries. This function is equivalent to <code>cs_limit(-n)</code>.</td>
 </tr>
 <tr>
-<td><code>function cs_cut_head(timeseries, n bigint) returns timeseries</code></td>
+<td><code>function cs_cut_head(timeseries, n bigint default 1) returns timeseries</code></td>
 <td>Extracts all except first <code>n</code> elements of timeseries. This function is equivalent to <code>cs_limit(n)</code>.</td>
 </tr>
 <tr>
-<td><code>function cs_cut_tail(timeseries, n bigint) returns timeseries</code></td>
+<td><code>function cs_cut_tail(timeseries, n bigint default 1) returns timeseries</code></td>
 <td>Extracts all except last <code>n</code> elements of timeseries. This function is equivalent to <code>cs_limit(0,-n-1)</code>.</td>
 </tr>
 <tr>

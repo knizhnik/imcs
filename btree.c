@@ -496,7 +496,7 @@ bool imcs_search_page_##TYPE(imcs_page_t* pg, imcs_iterator_h iterator, TYPE val
     return found;                                                       \
 }                                                                       \
                                                                         \
-imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundary_kind_t low_boundary, TYPE high, imcs_boundary_kind_t high_boundary) \
+imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundary_kind_t low_boundary, TYPE high, imcs_boundary_kind_t high_boundary, imcs_count_t limit) \
 {                                                                       \
     imcs_iterator_h iterator = NULL; \
     if (ts->root_page != NULL) {                                        \
@@ -524,6 +524,13 @@ imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundar
         iterator->next_pos = 0;                                         \
         if (imcs_search_page_##TYPE(ts->root_page, iterator, low, low_boundary, 0)) { \
             if (iterator->next_pos <= iterator->last_pos) {             \
+                if (limit != 0 && iterator->next_pos + limit <= iterator->last_pos) { \
+                    if (low_boundary == BOUNDARY_OPEN) {                \
+                        iterator->next_pos = iterator->last_pos - limit + 1; \
+                    } else {                                            \
+                        iterator->last_pos = iterator->next_pos + limit - 1; \
+                    }                                                   \
+                }                                                       \
                 iterator->first_pos = iterator->next_pos;               \
                 return iterator;                                        \
             }                                                           \

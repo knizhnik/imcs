@@ -1949,6 +1949,7 @@ Datum columnar_store_search_##TYPE(PG_FUNCTION_ARGS)                    \
     TYPE low = 0, high = 0;                                             \
     imcs_boundary_kind_t low_boundary = BOUNDARY_OPEN;                  \
     imcs_boundary_kind_t high_boundary = BOUNDARY_OPEN;                 \
+    imcs_count_t limit = PG_ARGISNULL(4) ? 0 : PG_GETARG_INT64(4);      \
     if (ts == NULL) {                                                   \
         PG_RETURN_NULL();                                               \
     }                                                                   \
@@ -1960,7 +1961,7 @@ Datum columnar_store_search_##TYPE(PG_FUNCTION_ARGS)                    \
         high = PG_GETARG_##PG_TYPE(2);                                  \
         high_boundary = BOUNDARY_INCLUSIVE;                             \
     }                                                                   \
-    result = imcs_search_##TYPE(ts, low, low_boundary, high, high_boundary); \
+    result = imcs_search_##TYPE(ts, low, low_boundary, high, high_boundary, limit); \
     if (result == NULL) {                                               \
         PG_RETURN_NULL();                                               \
     } else {                                                            \
