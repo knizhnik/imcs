@@ -3002,7 +3002,13 @@ Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
     TupleDesc resultTupleDesc;
     Datum outValues[2];
     bool nulls[2] = {false, false};
-    imcs_iterator_h result[2];                              
+    imcs_iterator_h result[2];
+	if(min_occ > INT_MAX){
+		ereport(ERROR, (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("min_occurrences must not greater than %d",INT_MAX)));
+	}
+	else if(min_occ <= 0){
+		min_occ = 1;
+	}
     get_call_result_type(fcinfo, NULL, &resultTupleDesc);
     imcs_hash_dup_count(result, input, group_by, min_occ);
     result[0] = imcs_parallel_iterator(result[0]);              
