@@ -2803,7 +2803,7 @@ Datum cs_isnan(PG_FUNCTION_ARGS)
         result = imcs_isnan_double(input);
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cs_isnan is defined only for timeseries of float4 orr float8 types"))); 
+        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cs_isnan is defined only for timeseries of float4 or float8 types"))); 
     }                                                     
     PG_RETURN_POINTER(result);
 }
