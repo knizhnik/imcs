@@ -2803,7 +2803,7 @@ Datum cs_isnan(PG_FUNCTION_ARGS)
         result = imcs_isnan_double(input);
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cs_isnan is defined only for timeseries of float4 orr float8 types"))); 
+        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cs_isnan is defined only for timeseries of float4 or float8 types"))); 
     }                                                     
     PG_RETURN_POINTER(result);
 }
@@ -3002,7 +3002,10 @@ Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
     TupleDesc resultTupleDesc;
     Datum outValues[2];
     bool nulls[2] = {false, false};
-    imcs_iterator_h result[2];                              
+    imcs_iterator_h result[2];
+	if(min_occ <= 0){
+		min_occ = 1;
+	}
     get_call_result_type(fcinfo, NULL, &resultTupleDesc);
     imcs_hash_dup_count(result, input, group_by, min_occ);
     result[0] = imcs_parallel_iterator(result[0]);              
