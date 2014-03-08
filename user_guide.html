@@ -985,7 +985,7 @@ Execution of these functions can be parallelized.
 <tr>
 <td><code>function cs_hash_dup_count(input timeseries, group_by timeseries, out count timeseries, out groups timeseries, min_occurrences integer default 1) returns record</code></td>
 <td>Counts number of duplicates for each group. Groups are identified by <code>group_by</code> timeseries. 
-This function has two output parameters: <code>count</code> timeseries contains counters and <code>groups</code> timeseries contains corresponding group key values. Parameter <code>min_occurrences</code> specifies minimal number of occurrences of element in each group. With default value 1 of <code>min_occurrences</code> this function calculates number of distinct values.</td>
+This function has two output parameters: <code>count</code> timeseries contains counters and <code>groups</code> timeseries contains corresponding group key values. Parameter <code>min_occurrences</code> specifies minimal number of occurrences of element in each group. It dshould be positive number. With default value 1 of <code>min_occurrences</code> this function calculates number of distinct values.</td>
 </tr>
 <tr>
 <td><code>function cs_hash_max(input timeseries, group_by timeseries, out max timeseries, out groups timeseries) returns record</code></td>
