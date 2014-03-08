@@ -5729,18 +5729,18 @@ static bool imcs_dup_hash_initialize(imcs_iterator_h iterator)
                     table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
                     memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
                     for (j = 0; j < hash_table_size; j++) {             
-                        imcs_hash_elem_t* next;                      
-                        for (elem = hash->table[j]; elem != NULL; elem = next) { 
+                        imcs_hash_elem_t *curr, *next;                      
+                        for (curr = hash->table[j]; curr != NULL; curr = next) { 
                             imcs_hash_elem_t* ep;      
-                            next = elem->collision;                     
-                            pprev = &table[elem->grp_hash % new_hash_table_size];    
+                            next = curr->collision;                     
+                            pprev = &table[curr->grp_hash % new_hash_table_size];    
                             if (grp_elem_size <= sizeof(imcs_key_t)) {                   
-                                for (ep = *pprev; ep != NULL && (diff = ep->grp.val_int64 - elem->grp.val_int64) < 0; ep = *(pprev = &ep->collision));
+                                for (ep = *pprev; ep != NULL && (diff = ep->grp.val_int64 - curr->grp.val_int64) < 0; ep = *(pprev = &ep->collision));
                             } else {                                                    
-                                for (ep = *pprev; ep != NULL && (diff = memcmp(ep->grp.val_ptr, elem->grp.val_ptr, grp_elem_size)) < 0; ep = *(pprev = &ep->collision));
+                                for (ep = *pprev; ep != NULL && (diff = memcmp(ep->grp.val_ptr, curr->grp.val_ptr, grp_elem_size)) < 0; ep = *(pprev = &ep->collision));
                             }
-                            elem->collision = *pprev;
-                            *pprev = elem;
+                            curr->collision = *pprev;
+                            *pprev = curr;
                         }                                               
                     }                                                   
                     hash->table_size = hash_table_size = new_hash_table_size; 
