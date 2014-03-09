@@ -35,4 +35,4 @@ Initial version
 8. Add limit parameter to XXX_get() function
 
 --- Release version 1.05 (??.03.2014) -------------------------------------
-1. Fix bug in cs_hash_dup_count
+1. Fix bugs in cs_hash_dup_count

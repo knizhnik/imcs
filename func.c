@@ -5776,7 +5776,7 @@ static bool imcs_dup_hash_initialize(imcs_iterator_h iterator)
                 }                                                       
                 if (++agg_distinct_count >= agg_threshold) {                    
                     imcs_hash_elem_t** table;                         
-                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);                     
+                    size_t new_hash_table_size = imcs_next_prime_number(agg_hash_table_size);                     
                     size_t j;                                   
                     table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
                     memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
