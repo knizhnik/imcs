@@ -3284,26 +3284,50 @@ typedef struct {
 } imcs_project_context;
 
 Datum cs_project(PG_FUNCTION_ARGS)
-{
-    HeapTupleHeader t = PG_ARGISNULL(0) ? NULL : PG_GETARG_HEAPTUPLEHEADER(0); 
+{ 
+    HeapTupleHeader t = NULL;
     imcs_iterator_h positions = PG_ARGISNULL(1) ? (imcs_iterator_h)NULL : (imcs_iterator_h)PG_GETARG_POINTER(1);
     bool disable_caching = PG_GETARG_BOOL(2);
     FuncCallContext* funcctx;
     imcs_project_context* usrfctx;
-    int i, n;
+    int i;
     Datum elem;
     HeapTuple tuple;
     bool is_first_call = SRF_IS_FIRSTCALL();
     bool is_null = false;
-    if (t == NULL) { 
+    Oid	argtype;
+    int n_attrs = 0;
+    int n_iters;
+    TupleDesc attr_desc = NULL;
+    Oid	timeseries_oid = 0;
+
+    if (PG_ARGISNULL(0)) { 
         PG_RETURN_NULL();
+    }
+    if (is_first_call) { 
+        char typtype;
+        timeseries_oid = TypenameGetTypid("timeseries");
+        argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
+        typtype = get_typtype(argtype);
+        if (typtype == 'c' || typtype == 'p') { 
+            t = PG_GETARG_HEAPTUPLEHEADER(0); 
+            attr_desc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(t), HeapTupleHeaderGetTypMod(t));
+            n_attrs = attr_desc->natts;
+        } else { 
+            if (argtype != timeseries_oid) { 
+                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First argument of cs_project should be compound type or timeseries"))));
+            }
+            n_attrs = 1;
+        }
+    } else { 
+        t = PG_GETARG_HEAPTUPLEHEADER(0); 
     }
     if (!disable_caching && imcs_project_caching) { 
         if (is_first_call) { 
             if (imcs_project_call_count == 1) { 
                 /* cs_project() is redundantly called second time in (cs_project(...)).* expression - PostgreSQL behavour */
                 /* This condition may be true also when cs_project() is used twice in the same query - disable caching in this case */ 
-                imcs_project_redundant_calls = HeapTupleHeaderGetNatts(t); /* number of attributes of projected tuple */
+                imcs_project_redundant_calls = n_attrs; /* number of attributes of projected tuple */
             } else if (imcs_project_redundant_calls > 1 && imcs_project_call_count >= imcs_project_redundant_calls) { 
                 /* iteratation is not yet completed, but first function call is encountered */
                 ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Multiple usage of cs_project_agg in select column list are not supported")));
@@ -3316,6 +3340,9 @@ Datum cs_project(PG_FUNCTION_ARGS)
             }
             if (imcs_project_call_count++ % imcs_project_redundant_calls != 0) {
                 funcctx = is_first_call ? SRF_FIRSTCALL_INIT() : SRF_PERCALL_SETUP();
+                if (attr_desc != NULL) { 
+                    ReleaseTupleDesc(attr_desc);
+                }
                 if (imcs_project_result_cache) { 
                     SRF_RETURN_NEXT(funcctx, imcs_project_result_cache);    
                 } else { 
@@ -3333,55 +3360,67 @@ Datum cs_project(PG_FUNCTION_ARGS)
     if (is_first_call)
     {
         MemoryContext oldcontext;
-        TupleDesc attr_desc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(t), HeapTupleHeaderGetTypMod(t));
-        Oid	timeseries_oid = TypenameGetTypid("timeseries");
-        int i, n = attr_desc->natts;
         int n_timeseries = 0;
+
         IMCS_TRACE(project);
         imcs_project_call_count = 1; /* initialize counter */
         funcctx = SRF_FIRSTCALL_INIT();
         oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);       
         usrfctx = (imcs_project_context*)palloc(sizeof(imcs_project_context));
-        usrfctx->iterators = (imcs_iterator_h*)palloc(sizeof(imcs_iterator_h)*n);
-        usrfctx->values = (Datum*)palloc(sizeof(Datum)*n);
-        usrfctx->nulls = (bool*)palloc(sizeof(bool)*n);
-        usrfctx->desc = CreateTemplateTupleDesc(n, false);
+        usrfctx->iterators = (imcs_iterator_h*)palloc(sizeof(imcs_iterator_h)*n_attrs);
+        usrfctx->values = (Datum*)palloc(sizeof(Datum)*n_attrs);
+        usrfctx->nulls = (bool*)palloc(sizeof(bool)*n_attrs);
+        usrfctx->desc = CreateTemplateTupleDesc(n_attrs, false);
         funcctx->user_fctx = usrfctx;
-        usrfctx->n_iterators = n;
-        for (i = 0; i < n; i++) { 
-            Form_pg_attribute attr = attr_desc->attrs[i];
-            Datum datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
-            if (attr->atttypid != timeseries_oid) { 
-                usrfctx->iterators[i] = NULL;
-                usrfctx->values[i] = datum;
-                TupleDescInitEntry(usrfctx->desc, attr->attnum, attr->attname.data, attr->atttypid, attr->atttypmod, attr->attndims);
-            } else if (usrfctx->nulls[i]) { /* if of some of iterators is null, then return null */
-                is_null = true;
-                break;
+        usrfctx->n_iterators = n_attrs;
+        for (i = 0; i < n_attrs; i++) {
+            Datum datum;
+            imcs_iterator_h attr_iterator;
+            int attnum;
+            char const* attname;
+            if (attr_desc != NULL) { 
+                Form_pg_attribute attr = attr_desc->attrs[i];
+                datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
+                if (attr->atttypid != timeseries_oid) { 
+                    usrfctx->iterators[i] = NULL;
+                    usrfctx->values[i] = datum;
+                    TupleDescInitEntry(usrfctx->desc, attr->attnum, attr->attname.data, attr->atttypid, attr->atttypmod, attr->attndims);
+                    continue;
+                } else if (usrfctx->nulls[i]) { /* if of some of iterators is null, then return null */
+                    is_null = true;
+                    break;
+                }
+                attnum = attr->attnum;
+                attname = attr->attname.data;
             } else { 
-                imcs_iterator_h attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);   
-                if (positions != NULL) { 
-                    if (i+1 < n) {
-                        imcs_iterator_h tee_iterators[2];
-                        imcs_tee(tee_iterators, positions);
-                        usrfctx->iterators[i] = imcs_project(attr_iterator, tee_iterators[0]);
-                        positions = tee_iterators[1];
-                    } else { 
-                        usrfctx->iterators[i] = imcs_project(attr_iterator, positions);
-                    }
-                } else { 
-                    usrfctx->iterators[i] = imcs_operand(attr_iterator);
-                } 
-                TupleDescInitEntry(usrfctx->desc, attr->attnum, attr->attname.data, imcs_elem_type_to_oid[usrfctx->iterators[i]->elem_type], -1, 0);
-                n_timeseries += 1;
+                datum = PG_GETARG_DATUM(0);
+                attnum = 1;
+                attname = "timeseries";
             }
+            attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);   
+            if (positions != NULL) { 
+                if (i+1 < n_attrs) {
+                    imcs_iterator_h tee_iterators[2];
+                    imcs_tee(tee_iterators, positions);
+                    usrfctx->iterators[i] = imcs_project(attr_iterator, tee_iterators[0]);
+                    positions = tee_iterators[1];
+                } else { 
+                    usrfctx->iterators[i] = imcs_project(attr_iterator, positions);
+                }
+            } else { 
+                usrfctx->iterators[i] = imcs_operand(attr_iterator);
+            } 
+            TupleDescInitEntry(usrfctx->desc, attnum, attname, imcs_elem_type_to_oid[usrfctx->iterators[i]->elem_type], -1, 0);
+            n_timeseries += 1;
         }  
         usrfctx->n_timeseries = n_timeseries;
         if (!is_null) { 
             TupleDescGetAttInMetadata(usrfctx->desc);
         }
-        ReleaseTupleDesc(attr_desc);
         MemoryContextSwitchTo(oldcontext);      
+        if (attr_desc != NULL) { 
+            ReleaseTupleDesc(attr_desc);
+        }
     } 
     funcctx = SRF_PERCALL_SETUP();
     usrfctx = (imcs_project_context*)funcctx->user_fctx;
@@ -3389,7 +3428,7 @@ Datum cs_project(PG_FUNCTION_ARGS)
     if (is_null || (!is_first_call && usrfctx->n_timeseries == 0)) { 
         SRF_RETURN_DONE(funcctx);      
     }
-    for (i = 0, n = usrfctx->n_iterators; i < n; i++) { 
+    for (i = 0, n_iters = usrfctx->n_iterators; i < n_iters; i++) { 
         if (usrfctx->iterators[i] != NULL) { 
             switch (usrfctx->iterators[i]->elem_type) {
             case TID_int8:
