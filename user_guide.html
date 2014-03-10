@@ -637,8 +637,8 @@ Functions performing various transformations of input timeseries.
 <table border width='100%'>
 <tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
 <tr>
-<td><code>function cs_cast(input timeseries, elem_type cs_elem_type) returns timeseries</code></td>
-<td>Casts timeseries elements to the specified type defined in cs_elem_type enum: ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'money', 'float4', 'float8', 'bpchar'). Explicit casts are rarely needed, in most cases IMCS performs implicit type conversion.</td>
+<td><code>function cs_cast(input timeseries, elem_type cs_elem_type, elem_size default 0) returns timeseries</code></td>
+<td>Casts timeseries elements to the specified type defined in cs_elem_type enum: ('char', 'int2', 'int4', 'date', 'int8', 'time', 'timestamp', 'money', 'float4', 'float8', 'bpchar'). For character type it is necessary to specify element size. If converted value doesn't fit in specified size, it will be truncated. Explicit casts are rarely needed, in most cases IMCS performs implicit type conversion.</td>
 </tr>
 <tr>
 <td><code>function cs_to_<b>TYPE</b>_array(timeseries) returns <b>TYPE</b>[]</code></td>
