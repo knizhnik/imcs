@@ -80,7 +80,7 @@ static ExecutorEnd_hook_type prev_ExecutorEnd = NULL;
 
 static int imcs_command_profile[imcs_cmd_last_command];
 
-static Oid imcs_elem_type_to_oid[] = {CHAROID, INT2OID, INT4OID, DATEOID, INT8OID, TIMEOID, TIMESTAMPOID, CASHOID, FLOAT4OID, FLOAT8OID, BPCHAROID};
+const Oid imcs_elem_type_to_oid[] = {CHAROID, INT2OID, INT4OID, DATEOID, INT8OID, TIMEOID, TIMESTAMPOID, CASHOID, FLOAT4OID, FLOAT8OID, BPCHAROID};
 
 const char const* imcs_type_mnems[] = {"char", "int2", "int4", "date", "int8", "time", "timestamp", "money", "float4", "float8", "bpchar"};
 static const int imcs_type_mnem_lens[] = {4, 4, 4, 4, 4, 4, 8, 5, 6, 6, 6};
@@ -1343,9 +1343,9 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
     imcs_iterator_h result;                                             \
     if (left->elem_type != right->elem_type) {                          \
         if (left->elem_type < right->elem_type) {                       \
-            left = imcs_cast(left, right->elem_type);                   \
+            left = imcs_cast(left, right->elem_type, right->elem_size); \
         } else {                                                        \
-            right = imcs_cast(right, left->elem_type);                  \
+            right = imcs_cast(right, left->elem_type, left->elem_size); \
         }                                                               \
     }                                                                   \
     IMCS_APPLY(func, left->elem_type, (left, right));                   \
@@ -1361,9 +1361,9 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
     imcs_iterator_h result;                                             \
     if (left->elem_type != right->elem_type) {                          \
         if (left->elem_type < right->elem_type) {                       \
-            left = imcs_cast(left, right->elem_type);                   \
+            left = imcs_cast(left, right->elem_type, right->elem_size); \
         } else {                                                        \
-            right = imcs_cast(right, left->elem_type);                  \
+            right = imcs_cast(right, left->elem_type, left->elem_size); \
         }                                                               \
     }                                                                   \
     IMCS_APPLY_INT(func, left->elem_type, (left, right));               \
@@ -1380,9 +1380,9 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
     double val;                                                         \
     if (left->elem_type != right->elem_type) {                          \
         if (left->elem_type < right->elem_type) {                       \
-            left = imcs_cast(left, right->elem_type);                   \
+            left = imcs_cast(left, right->elem_type, right->elem_size); \
         } else {                                                        \
-            right = imcs_cast(right, left->elem_type);                  \
+            right = imcs_cast(right, left->elem_type, left->elem_size); \
         }                                                               \
     }                                                                   \
     IMCS_APPLY(func, left->elem_type, (left, right));                   \
@@ -1403,9 +1403,9 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
     imcs_iterator_h result;                                             \
     if (left->elem_type != right->elem_type) {                          \
         if (left->elem_type < right->elem_type) {                       \
-            left = imcs_cast(left, right->elem_type);                   \
+            left = imcs_cast(left, right->elem_type, right->elem_size); \
         } else {                                                        \
-            right = imcs_cast(right, left->elem_type);                  \
+            right = imcs_cast(right, left->elem_type, left->elem_size); \
         }                                                               \
     }                                                                   \
     IMCS_APPLY_CHAR(func, left->elem_type, (left, right));              \
@@ -1491,7 +1491,7 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
 {                                                                       \
     imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);      \
     if (input->elem_type != TID_double) {                               \
-        input = imcs_cast(input, TID_double);                           \
+        input = imcs_cast(input, TID_double, 0);                        \
     }                                                                   \
     IMCS_TRACE(func);                                                   \
     PG_RETURN_POINTER(imcs_func_double(input, &func));                  \
@@ -1505,10 +1505,10 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
     imcs_iterator_h right = (imcs_iterator_h)PG_GETARG_POINTER(1);      \
     double result;                                                      \
     if (left->elem_type != TID_double) {                                \
-        left = imcs_cast(left, TID_double);                             \
+        left = imcs_cast(left, TID_double, 0);                          \
     }                                                                   \
     if (right->elem_type != TID_double) {                               \
-        right = imcs_cast(right, TID_double);                           \
+        right = imcs_cast(right, TID_double, 0);                        \
     }                                                                   \
     IMCS_TRACE(func);                                                   \
     PG_RETURN_POINTER(imcs_func2_double(input, &func));                 \
@@ -1833,7 +1833,7 @@ static double imcs_double2money(double money) {
 }
 
 
-imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type) 
+imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type, int elem_size) 
 {
     imcs_iterator_h result;
     if (elem_type == input->elem_type) { 
@@ -1885,7 +1885,11 @@ imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type)
             break;                                              
           case TID_double:                                      
             IMCS_APPLY(double_from, input->elem_type, (input));
-            break;                                              
+            break;  
+          case TID_char:
+            IMCS_TRACE(cast);                                                   
+            result = imcs_cast_to_char(input, elem_size);
+            break;             
           default:                                              
             ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cast to timeseries of CHAR(N) is not supported"))); 
         }                    
@@ -2248,7 +2252,8 @@ Datum cs_cast_tid(PG_FUNCTION_ARGS)
 {
     imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1);
-    imcs_iterator_h result = imcs_cast(input, elem_type);
+    int elem_size = (imcs_elem_typeid_t)PG_GETARG_INT32(2);
+    imcs_iterator_h result = imcs_cast(input, elem_type, elem_size);
     PG_RETURN_POINTER(result);
 }
 Datum cs_type(PG_FUNCTION_ARGS)
@@ -2831,9 +2836,9 @@ Datum cs_iif(PG_FUNCTION_ARGS)
     imcs_iterator_h otherwise = (imcs_iterator_h)PG_GETARG_POINTER(2);
     imcs_iterator_h result;
     if (then->elem_type < otherwise->elem_type) { 
-        then = imcs_cast(then, otherwise->elem_type);
+        then = imcs_cast(then, otherwise->elem_type, otherwise->elem_size);
     } else if (then->elem_type > otherwise->elem_type) { 
-        otherwise = imcs_cast(otherwise, then->elem_type);
+        otherwise = imcs_cast(otherwise, then->elem_type, then->elem_size);
     }
     IMCS_APPLY_CHAR(iif, then->elem_type, (cond, then, otherwise));
     PG_RETURN_POINTER(result);
@@ -2845,9 +2850,9 @@ Datum cs_if(PG_FUNCTION_ARGS)
     imcs_iterator_h otherwise = (imcs_iterator_h)PG_GETARG_POINTER(2);
     imcs_iterator_h result;
     if (then->elem_type < otherwise->elem_type) { 
-        then = imcs_cast(then, otherwise->elem_type);
+        then = imcs_cast(then, otherwise->elem_type, otherwise->elem_size);
     } else if (then->elem_type > otherwise->elem_type) { 
-        otherwise = imcs_cast(otherwise, then->elem_type);
+        otherwise = imcs_cast(otherwise, then->elem_type, then->elem_size);
     }
     IMCS_APPLY_CHAR(if, then->elem_type, (cond, then, otherwise));
     PG_RETURN_POINTER(result);
@@ -4621,8 +4626,8 @@ Datum cs_call(PG_FUNCTION_ARGS)
 
     arg_elem_type = imcs_oid_to_typeid(arg_typid);
     ret_elem_type = imcs_oid_to_typeid(ret_typid);
-    if (arg_elem_type != input->elem_type) { 
-        input = imcs_cast(input, arg_elem_type);
+    if (arg_elem_type != input->elem_type) {         
+        input = imcs_cast(input, arg_elem_type, get_typmodin(arg_typid));
     }
     switch (ret_elem_type) {
       case TID_int8:                                       

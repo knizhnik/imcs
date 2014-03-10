@@ -1035,6 +1035,112 @@ IMCS_CASTS_DEF(int64)
 IMCS_CASTS_DEF(float)
 IMCS_CASTS_DEF(double)
 
+#define SPRINTF_BUF_SIZE 64
+
+static bool imcs_cast_to_char_next(imcs_iterator_h iterator) 
+{                                                                       
+    size_t i, tile_size;       
+    int elem_size = iterator->elem_size;
+    int elem_type = iterator->opd[0]->elem_type;
+    int ndig = 0;
+    Oid type_out;
+    bool is_varlena;
+    int len = 0;
+    char buf[SPRINTF_BUF_SIZE];
+    char* src = buf;
+
+    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
+        return false;                                                   
+    }  
+
+    switch (elem_type) { 
+      case TID_date:
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
+        getTypeOutputInfo(imcs_elem_type_to_oid[elem_type], &type_out, &is_varlena);
+        break;
+      case TID_float:
+      case TID_double:
+        ndig = FLT_DIG + extra_float_digits;
+        if (ndig < 1) { 
+            ndig = 1;         
+        }  
+        break;
+      case TID_char:
+        len = iterator->opd[0]->elem_size;
+        break;
+      default:
+        break;
+    };
+    tile_size = iterator->opd[0]->tile_size;                            
+    for (i = 0; i < tile_size; i++) {                                   
+        switch (elem_type) { 
+          case TID_int8:
+            len = sprintf(buf, "%d", iterator->opd[0]->tile.arr_int8[i]);
+            break;
+          case TID_int16:                                                   
+            len = sprintf(buf, "%d", iterator->opd[0]->tile.arr_int16[i]);
+            break;
+          case TID_int32:                                                   
+            len = sprintf(buf, "%d", iterator->opd[0]->tile.arr_int32[i]);
+            break;
+          case TID_int64:
+            len = sprintf(buf, "%lld", (long long)iterator->opd[0]->tile.arr_int64[i]);
+            break;
+          case TID_float:
+            len = sprintf(buf, "%.*g", ndig, iterator->opd[0]->tile.arr_float[i]);
+            break;
+          case TID_double:
+            len = sprintf(buf, "%.*g", ndig, iterator->opd[0]->tile.arr_double[i]);
+            break;
+          case TID_char:
+            src = iterator->opd[0]->tile.arr_char + i*len;
+            break;
+          case TID_date:
+            src = OidOutputFunctionCall(type_out, Int32GetDatum(iterator->opd[0]->tile.arr_int32[i]));
+            len = strlen(src);
+            break;
+          case TID_time:
+          case TID_timestamp:
+          case TID_money:
+            src = OidOutputFunctionCall(type_out, Int64GetDatum(iterator->opd[0]->tile.arr_int64[i]));
+            len = strlen(src);
+            break;
+          default:
+            Assert(false);                  
+        }
+        if (len <= elem_size) { 
+            memcpy(iterator->tile.arr_char + i*elem_size, src, len);
+            memset(iterator->tile.arr_char + i*elem_size + len, 0, elem_size - len);
+        } else { 
+            memcpy(iterator->tile.arr_char + i*elem_size, src, elem_size);
+        }
+    }                                                                   
+    iterator->tile_size = tile_size;                                    
+    iterator->next_pos += tile_size;                                    
+    return true;                                                        
+}                                                                       
+                                                                        
+imcs_iterator_h imcs_cast_to_char(imcs_iterator_h input, int elem_size)
+{                                                                       
+    imcs_iterator_h result = imcs_new_iterator(elem_size, 0);     
+    result->elem_type = TID_char;                                  
+    result->opd[0] = imcs_operand(input);                               
+    result->next = imcs_cast_to_char_next;          
+    switch (input->elem_type) { 
+      case TID_date:
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
+        break;
+      default:
+        result->flags = FLAG_CONTEXT_FREE;                                  
+    }
+    return result;                                                      
+}                                                                       
+
+
 typedef struct { 
     void* arr;
 } imcs_array_context_t;

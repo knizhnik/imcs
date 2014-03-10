@@ -224,6 +224,8 @@ void imcs_tee(imcs_iterator_h out_iterators[2], imcs_iterator_h in_iterator);
 void imcs_from_array(imcs_iterator_h result, void const* buf, size_t buf_size);
 void imcs_to_array(imcs_iterator_h iterator, void* buf, size_t buf_size);
 
+imcs_iterator_h imcs_cast_to_char(imcs_iterator_h iterator, int elem_size);
+
 #define IMCS_CAST_DECL(FROM_TYPE, TO_TYPE)                              \
     imcs_iterator_h imcs_##TO_TYPE##_from_##FROM_TYPE(imcs_iterator_h input)
 

@@ -481,7 +481,7 @@ create function cs_parse_tid(str text, elem_type integer, elem_size integer) ret
 create function cs_const_num(val float8, elem_type integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_const_dt(val timestamp, elem_type integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_const_str(val text, elem_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
-create function cs_cast_tid(input timeseries, elem_type integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_cast_tid(input timeseries, elem_type integer, elem_size integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_type(timeseries) returns integer  as 'MODULE_PATHNAME' language C stable strict;
 create function cs_elem_size(timeseries) returns integer  as 'MODULE_PATHNAME' language C stable strict;
 
@@ -992,9 +992,9 @@ create function cs_join(ts1 timeseries, ts2 timeseries, vals timeseries) returns
 create function cs_join_pos(ts1 timeseries, ts2 timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create operator <-> (leftarg=timeseries, rightarg=timeseries, procedure=cs_join_pos);
 
-create function cs_cast(input timeseries, elem_type cs_elem_type) returns timeseries as $$
+create function cs_cast(input timeseries, elem_type cs_elem_type, elem_size integer default 0) returns timeseries as $$
 begin
-    return cs_cast_tid(input, cs_get_tid(elem_type));
+    return cs_cast_tid(input, cs_get_tid(elem_type), elem_size);
 end;
 $$ language plpgsql stable strict;
 

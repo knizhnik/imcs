@@ -70,6 +70,7 @@ typedef enum
 
 extern const imcs_elem_typeid_t imcs_underlying_type[];
 extern const char const* imcs_type_mnems[];
+extern const Oid         imcs_elem_type_to_oid[];
 
 typedef enum {
     IMCS_ASC_ORDER,
@@ -313,7 +314,7 @@ imcs_iterator_h    imcs_new_iterator(size_t elem_size, size_t context_size);
 imcs_iterator_h    imcs_clone_iterator(imcs_iterator_h iterator);
 void               imcs_reset_iterator(imcs_iterator_h);
 
-imcs_iterator_h    imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type);
+imcs_iterator_h    imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type, int elem_size);
 imcs_count_t       imcs_count(imcs_iterator_h input);
 
 imcs_iterator_h    imcs_parallel_iterator(imcs_iterator_h iterator);
