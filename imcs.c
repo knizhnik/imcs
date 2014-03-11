@@ -4324,7 +4324,7 @@ Datum cs_as(PG_FUNCTION_ARGS)
         nulls[i] = false;
         if (attr->atttypid == BPCHAROID) { 
             values[i] = CStringGetTextDatum(src);
-            src += attr->atttypmod  - VARHDRSZ;
+            src += attr->atttypmod - VARHDRSZ;
         } else {             
             memcpy(&value, src, attr->attlen);
             switch (attr->atttypid) { 
@@ -4627,7 +4627,7 @@ Datum cs_call(PG_FUNCTION_ARGS)
     arg_elem_type = imcs_oid_to_typeid(arg_typid);
     ret_elem_type = imcs_oid_to_typeid(ret_typid);
     if (arg_elem_type != input->elem_type) {         
-        input = imcs_cast(input, arg_elem_type, get_typmodin(arg_typid));
+        input = imcs_cast(input, arg_elem_type, get_typmodin(arg_typid) - VARHDRSZ);
     }
     switch (ret_elem_type) {
       case TID_int8:                                       
