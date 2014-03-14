@@ -290,7 +290,7 @@ begin
     create_delete_trigger := 'create trigger '||table_name||'_delete before delete on '||table_name||' for each row execute procedure '||table_name||'_delete_trigger()';
     create_truncate_trigger := 'create trigger '||table_name||'_truncate before truncate on '||table_name||' for each statement execute procedure '||table_name||'_truncate_trigger()';
 
-    for meta in select attname,atttypid,attnum,typname,attlen,atttypmod from pg_attribute,pg_type where relid=pg_attribute.attrelid and pg_attribute.atttypid=pg_type.oid and attnum>0 loop
+    for meta in select attname,atttypid,attnum,typname,attlen,atttypmod from pg_attribute,pg_type where relid=pg_attribute.attrelid and pg_attribute.atttypid=pg_type.oid and attnum>0 order by attnum loop
         attr_tid := cs_get_tid(meta.typname::cs_elem_type);
         is_timestamp := false;
         attr_len := meta.attlen;
