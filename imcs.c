@@ -3401,6 +3401,7 @@ Datum cs_project(PG_FUNCTION_ARGS)
                 datum = PG_GETARG_DATUM(0);
                 attnum = 1;
                 attname = "timeseries";
+                usrfctx->nulls[i] = false;
             }
             attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);   
             if (positions != NULL) { 
