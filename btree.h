@@ -26,14 +26,14 @@ struct imcs_page_t_ {
     uint32 n_items : 31;    
     uint32 is_leaf : 1;
     union {
-        char   val_char[1];
-        int8   val_int8[1];
-        int16  val_int16[1];
-        int32  val_int32[1];
-        int64  val_int64[1];
-        float  val_float[1];
-        double val_double[1];
-        imcs_node_t child[1]; /* filled from the end of the page: child[imcs_page_size / sizeof(imcs_node_t) - index] */
+        char   val_char[2];
+        int8   val_int8[2];
+        int16  val_int16[2];
+        int32  val_int32[2];
+        int64  val_int64[2];
+        float  val_float[2];
+        double val_double[2];
+        imcs_node_t child[2]; /* filled from the end of the page: child[imcs_page_size / sizeof(imcs_node_t) - index] */
     } u;
 };    
 

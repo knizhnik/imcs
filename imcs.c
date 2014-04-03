@@ -82,12 +82,12 @@ static int imcs_command_profile[imcs_cmd_last_command];
 
 const Oid imcs_elem_type_to_oid[] = {CHAROID, INT2OID, INT4OID, DATEOID, INT8OID, TIMEOID, TIMESTAMPOID, CASHOID, FLOAT4OID, FLOAT8OID, BPCHAROID};
 
-const char const* imcs_type_mnems[] = {"char", "int2", "int4", "date", "int8", "time", "timestamp", "money", "float4", "float8", "bpchar"};
+const char* const imcs_type_mnems[] = {"char", "int2", "int4", "date", "int8", "time", "timestamp", "money", "float4", "float8", "bpchar"};
 static const int imcs_type_mnem_lens[] = {4, 4, 4, 4, 4, 4, 8, 5, 6, 6, 6};
 
 static const int imcs_type_sizeof[] = {1,2,4,4,8,8,8,8,4,8,0};
 
-static const char const* imcs_command_mnem[] = 
+static const char* const imcs_command_mnem[] = 
 {
     "parse",
     "const",

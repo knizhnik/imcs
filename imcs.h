@@ -69,7 +69,7 @@ typedef enum
 } imcs_elem_typeid_t;
 
 extern const imcs_elem_typeid_t imcs_underlying_type[];
-extern const char const* imcs_type_mnems[];
+extern const char* const imcs_type_mnems[];
 extern const Oid         imcs_elem_type_to_oid[];
 
 typedef enum {
