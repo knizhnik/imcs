@@ -3958,7 +3958,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                                 }
                             }
                             if (len > attr_size[i]) { 
-                                ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d", len, attr_size[i]))));             
+                                ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]))));             
                             }
                             imcs_append_char(ts, str, len);
                         }
@@ -4138,7 +4138,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                         }
                     }
                     if (len > attr_size[i]) { 
-                        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d", len, attr_size[i]))));
+                        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]))));
                     }
                     imcs_append_char(ts, str, len);
                 }
