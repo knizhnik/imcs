@@ -58,6 +58,8 @@ declare
     create_drop_func text;
     create_truncate_func text;
     create_project_func text;
+    create_id_func text;
+    create_timestamp_func text;
     trigger_args text := '';
     sep text;
     perf text;
@@ -102,12 +104,14 @@ begin
             begin
                 perform columnar_store_truncate('''||lower(table_name)||'''); 
             end; $$ language plpgsql';
+        create_id_func :=  'create function '||table_name||'_id() returns varchar as $$ begin return '''||timeseries_id||'''; end;  $$ language plpgsql';
     else 
         create_truncate_func := 'create function '||table_name||'_truncate() returns void as $$
             begin
                 perform '||table_name||'_delete(); 
             end; $$ language plpgsql';
     end if;
+    create_timestamp_func :=  'create function '||table_name||'_timestamp() returns varchar as $$ begin return '''||timestamp_id||'''; end;  $$ language plpgsql';
     
     create_drop_func := 'create function '||table_name||'_drop() returns void as $$
         begin
@@ -139,6 +143,7 @@ begin
             drop function '||table_name||'_first('||id_type||');
             drop function '||table_name||'_last('||id_type||');
             drop function '||table_name||'_join('||id_type||',timeseries,integer);
+            drop function '||table_name||'_id();
             drop function '||table_name||'_count('||id_type||');';
     else 
         create_drop_func := create_drop_func||'
@@ -153,6 +158,7 @@ begin
     end if;
     create_drop_func := create_drop_func||'
             drop type '||table_name||'_timeseries;
+            drop function '||table_name||'_timestamp();
             drop function '||table_name||'_drop(); 
         end; $$ language plpgsql';
 
@@ -379,6 +385,7 @@ begin
     execute create_is_loaded_func;
     execute create_get_func;
     execute create_span_func;
+    execute create_timestamp_func;
     if (not is_view) then 
         execute create_insert_trigger_func;
         execute create_insert_trigger;
@@ -401,6 +408,7 @@ begin
         execute create_getall_func;
         execute create_spanall_func;
         execute create_concat_func;
+        execute create_id_func;
     end if;
     if (not autoupdate and not is_view) then 
         execute 'alter table '||table_name||' disable trigger user';

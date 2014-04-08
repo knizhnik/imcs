@@ -142,6 +142,9 @@ allocation requests of columnar store. This function returns total number of rem
 <td>Returns number of calls of each IMCS command. If <code>parameter</code> is true, then all counters
 are reset after execution of this call.</td>
 </tr>
+<tr>
+<td><code>function <b>TABLE</b>_timestamp() returns varchar</code></td><td>Returns name of timeserties timestamp column for this table</td>
+</tr>
 </table>
 </p>
 
@@ -329,12 +332,15 @@ deteriorated are thrown away. This function returns number of deleted elements.<
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_join(id <b>TIMESERIES_ID_TYPE</b>, other timeseries) returns timeseries</code></td>
-Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp  matches correspodent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
+<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp  matches correspodent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
 <ul>
 <li>If <code>direction</code> is less than zero, then this timestamp should be less or equal than other timestamp (locate timeseries element preceding timestamp).</li>
 <li>If <code>direction</code> is zero, then this timestamp should be equal to other timestamp (exact match of timestamps). </li>
 <li>If <code>direction</code> is greater than zero, then this timestamp should be greater or equal than other timestamp (locate timeseries element succeeding timestamp).</li>
 </ul></td>
+</tr>
+<tr>
+<td><code>function <b>TABLE</b>_id() returns varchar</code></td><td>Returns name of timeserties identifier for this table</td>
 </tr>
 </table>
 </p>
