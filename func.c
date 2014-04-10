@@ -47,7 +47,7 @@ const imcs_elem_typeid_t imcs_underlying_type[] = {TID_int8, TID_int16, TID_int3
 
 #define IMCS_CHECK_TYPE(arg_type, expected_type)                        \
     if (imcs_underlying_type[arg_type] != expected_type) {              \
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("unexpected timeseries data type %s instead of expected %s", imcs_type_mnems[arg_type], imcs_type_mnems[expected_type])))); \
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "unexpected timeseries data type %s instead of expected %s", imcs_type_mnems[arg_type], imcs_type_mnems[expected_type]); \
     }                                                                   
 
 
@@ -417,7 +417,7 @@ static bool imcs_parse_##TYPE##_next(imcs_iterator_h iterator)          \
         int n;                                                          \
         int rc = sscanf(ptr, SCAN_FORMAT "%n", &value, &n);             \
         if (rc != 1) {                                                  \
-            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), (errmsg("invalid input format of timeseries literal %s", ptr)))); \
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "invalid input format of timeseries literal %s", ptr); \
         }                                                               \
         iterator->tile.arr_##TYPE[i] = (TYPE)value;                     \
         ptr += n;                                                       \
@@ -463,10 +463,10 @@ static bool imcs_parse_char_next(imcs_iterator_h iterator)
             char quote = *ptr++;
             while (*ptr != quote) { 
                 if (*ptr == '\0') { 
-                    ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), (errmsg("unterminated string literal %s", ctx->cur)))); 
+                    imcs_ereport(ERRCODE_SYNTAX_ERROR, "unterminated string literal %s", ctx->cur); 
                 }
                 if (n == elem_size) { 
-                    ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
                 }
                 *dst++ = *ptr++;
                 n += 1;
@@ -475,7 +475,7 @@ static bool imcs_parse_char_next(imcs_iterator_h iterator)
         } else { 
             while (*ptr != ',' && *ptr != '}' && *ptr != '\0') {
                 if (n == elem_size) { 
-                    ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
                 }
                 *dst++ = *ptr++;
                 n += 1;
@@ -530,7 +530,7 @@ static bool imcs_adt_parse_##TYPE##_next(imcs_iterator_h iterator)      \
             char quote = *ptr++;                                        \
             char* end = strchr(ptr, quote);                             \
             if (end == NULL) {                                          \
-                ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), (errmsg("unterminated string literal %s", ptr-1)))); \
+                imcs_ereport(ERRCODE_SYNTAX_ERROR, "unterminated string literal %s", ptr-1); \
             }                                                           \
             *end = '\0';                                                \
             datum = ctx->parser->parse(ctx->parser, ptr);               \
@@ -975,7 +975,7 @@ imcs_iterator_h imcs_##MNEM##_char(imcs_iterator_h left, imcs_iterator_h right) 
     IMCS_CHECK_TYPE(left->elem_type, TID_char);                         \
     IMCS_CHECK_TYPE(right->elem_type, TID_char);                        \
     if (left->elem_size != right->elem_size) {                          \
-        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("timeseries of CHAR have different element size")))); \
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); \
     }                                                                   \
     result->elem_type = TID_int8;                                       \
     result->opd[0] = imcs_operand(left);                                \
@@ -1177,7 +1177,7 @@ void imcs_to_array(imcs_iterator_h input, void* buf, size_t buf_size)
     while (buf_size != 0) {                                              
         if (input->tile_offs >= input->tile_size) {                     
             if (!input->next(input)) {                
-                ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("failed to extract array at position %ld", count)))); \
+                imcs_ereport(ERRCODE_INTERNAL_ERROR, "failed to extract array at position %ld", count); 
                 break;                                                  
             } else {                                                    
                 Assert(input->tile_size > 0);          
@@ -2027,12 +2027,12 @@ IMCS_GROUP_AGG_DEF(int64, int64, group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_
 
 imcs_iterator_h imcs_group_all_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ALL is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types"); 
     return NULL;
 }
 imcs_iterator_h imcs_group_all_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ALL is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types"); 
     return NULL;
 }
 
@@ -2044,12 +2044,12 @@ IMCS_GROUP_AGG_DEF(int64, int64, group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_
 
 imcs_iterator_h imcs_group_any_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ANY is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types"); 
     return NULL;
 }
 imcs_iterator_h imcs_group_any_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_GROUP_ANY is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types"); 
     return NULL;
 }
 
@@ -2437,7 +2437,7 @@ imcs_iterator_h imcs_concat(imcs_iterator_h left, imcs_iterator_h right)
     imcs_concat_context_t* ctx = (imcs_concat_context_t*)result->context; 
     IMCS_CHECK_TYPE(left->elem_type, right->elem_type);
     if (left->elem_size != right->elem_size) {                          
-        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("timeseries of CHAR have different element size")))); 
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); 
     }                                                                   
     result->elem_type = left->elem_type;
     ctx->opd[0] = result->opd[0] = imcs_operand(left);                                                
@@ -2534,7 +2534,7 @@ imcs_iterator_h imcs_iif_char(imcs_iterator_h cond, imcs_iterator_h then_iter, i
     IMCS_CHECK_TYPE(then_iter->elem_type, TID_char);
     IMCS_CHECK_TYPE(else_iter->elem_type, TID_char);
     if (then_iter->elem_size != else_iter->elem_size) {                
-        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("timeseries of CHAR have different element size")))); 
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); 
     }                                                                   
     result->elem_type = TID_char;                       
     result->opd[0] = imcs_operand(cond);                                                
@@ -2652,7 +2652,7 @@ imcs_iterator_h imcs_if_char(imcs_iterator_h cond, imcs_iterator_h then_iter, im
     IMCS_CHECK_TYPE(then_iter->elem_type, TID_char);
     IMCS_CHECK_TYPE(else_iter->elem_type, TID_char);
     if (then_iter->elem_size != else_iter->elem_size) {                
-        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("timeseries of CHAR have different element size")))); 
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); 
     }                                                                   
     result->elem_type = TID_char;                       
     result->opd[0] = imcs_operand(cond);                                                
@@ -2957,7 +2957,7 @@ imcs_iterator_h imcs_filter_first_pos(imcs_iterator_h cond, size_t n)
     imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_pos_t), 0); 
     IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
     if (n > imcs_tile_size) {                                         
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("N should not be larger than tile size")))); 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "N should not be larger than tile size"); 
     }                                                                   
     result->elem_type = TID_int64;                        
     result->opd[0] = imcs_operand(cond);                                                    
@@ -3053,7 +3053,7 @@ imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, size_t top) \
     imcs_iterator_h result = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_top_context_t)); \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     if (top > imcs_tile_size) {                                         \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("TOP value should not be larger than tile size")))); \
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "TOP value should not be larger than tile size"); \
     }                                                                   \
     result->elem_type = input->elem_type;                               \
     result->opd[0] = imcs_operand(input);                               \
@@ -3175,7 +3175,7 @@ imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, size_t top) \
     imcs_top_pos_##MNEM##_##TYPE##_context_t* ctx = (imcs_top_pos_##MNEM##_##TYPE##_context_t*)result->context; \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     if (top > imcs_tile_size) {                                         \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("TOP value should not be larger than tile size")))); \
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "TOP value should not be larger than tile size"); \
     }                                                                   \
     result->elem_type = TID_int64;                                      \
     result->opd[0] = imcs_operand(input);                               \
@@ -3584,7 +3584,7 @@ typedef struct {
         imcs_iterator_h result = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_array_context_t)); \
         IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                  \
         if (q_num == 0) {                                               \
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Number of quantiles should be greater than zero")))); \
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Number of quantiles should be greater than zero"); \
         }                                                               \
         result->elem_type = input->elem_type;                           \
         result->opd[0] = imcs_operand(input);                           \
@@ -4093,10 +4093,10 @@ imcs_iterator_h imcs_histogram_##TYPE(imcs_iterator_h input, TYPE min_value, TYP
     imcs_histogram_##TYPE##_context_t* ctx = (imcs_histogram_##TYPE##_context_t*)result->context; \
     IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
     if (n_intervals-1 >= (size_t)imcs_tile_size) {                      \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("number of histogram intervals should not be larger than tile size")))); \
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "number of histogram intervals should not be larger than tile size"); \
     }                                                                   \
     if (max_value <= min_value) {                                       \
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("max_value shouldbegreater or equal thanmin_value")))); \
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "max_value shouldbegreater or equal thanmin_value"); \
     }                                                                   \
     result->elem_type = TID_int64;                                      \
     result->opd[0] = imcs_operand(input);                               \
@@ -4322,7 +4322,7 @@ static bool imcs_stretch_##TS_TYPE##_##VAL_TYPE##_next(imcs_iterator_h iterator)
                     Assert(iterator->opd[1]->tile_size > 0);            \
                     ctx->offs = 0;                                      \
                     if (!iterator->opd[2]->next(iterator->opd[2]) || iterator->opd[2]->tile_size != iterator->opd[1]->tile_size) {    \
-                        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("values timeseries is too short")))); \
+                        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "values timeseries is too short"); \
                     }                                                   \
                     ctx->next_timestamp = iterator->opd[1]->tile.arr_##TS_TYPE[0]; \
                     ctx->next_value = iterator->opd[2]->tile.arr_##VAL_TYPE[0]; \
@@ -4426,7 +4426,7 @@ static bool imcs_stretch0_##TS_TYPE##_##VAL_TYPE##_next(imcs_iterator_h iterator
             } else {                                                    \
                 Assert(iterator->opd[1]->tile_size > 0);                \
                 if (!iterator->opd[2]->next(iterator->opd[2]) || iterator->opd[2]->tile_size != iterator->opd[1]->tile_size) {        \
-                    ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("values timeseries is too short")))); \
+                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "values timeseries is too short"); \
                 }                                                       \
                 ctx->right_offs = 0;                                    \
             }                                                           \
@@ -4518,7 +4518,7 @@ static bool imcs_asof_join_##TS_TYPE##_##VAL_TYPE##_next(imcs_iterator_h iterato
                     Assert(iterator->opd[1]->tile_size > 0);            \
                     ctx->offs = 0;                                      \
                     if (!iterator->opd[2]->next(iterator->opd[2]) || iterator->opd[2]->tile_size != iterator->opd[1]->tile_size) {     \
-                        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("values timeseries is too short")))); \
+                        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "values timeseries is too short"); \
                     }                                                   \
                     ctx->next_timestamp = iterator->opd[1]->tile.arr_##TS_TYPE[0]; \
                     ctx->next_value = iterator->opd[2]->tile.arr_##VAL_TYPE[0]; \
@@ -4732,7 +4732,7 @@ static bool imcs_join_##TS_TYPE##_##VAL_TYPE##_next(imcs_iterator_h iterator) \
                 break;                                                  \
             }                                                           \
             if (!iterator->opd[2]->next(iterator->opd[2]) || iterator->opd[2]->tile_size != iterator->opd[1]->tile_size) { \
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("values timeseries is too short")))); \
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "values timeseries is too short"); \
             }                                                           \
             ctx->right_offs = 0;                                        \
         }                                                               \
@@ -4984,7 +4984,7 @@ static bool imcs_group_approxdc_next(imcs_iterator_h iterator)
                     return false;                                              
                 }                                                       
                 if (iterator->opd[1]->tile_size > iterator->opd[0]->tile_size) { 
-                    ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); \
+                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); \
                 }
             }                                                           
             ctx->offset = 0;                                            
@@ -5121,7 +5121,7 @@ static bool imcs_hash_initialize_##OP##_##IN_TYPE(imcs_iterator_h iterator) \
     while (iterator->opd[1]->next(iterator->opd[1])) {                  \
         if (iterator->opd[0] != 0) {                                    \
             if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { \
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); \
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); \
             }                                                           \
         }                                                               \
         tile_size = iterator->opd[1]->tile_size;                        \
@@ -5402,11 +5402,11 @@ IMCS_HASH_AGG_DEF(int64, int64, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULAT
 
 void imcs_hash_any_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ANY is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ANY is supported only for integer types"); 
 }
 void imcs_hash_any_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ANY is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ANY is supported only for integer types"); 
 }
 
 #define IMCS_HASH_ALL_ACCUMULATE(acc, val) acc &= val
@@ -5417,11 +5417,11 @@ IMCS_HASH_AGG_DEF(int64, int64, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULAT
 
 void imcs_hash_all_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ALL is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ALL is supported only for integer types"); 
 }
 void imcs_hash_all_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), (errmsg("Aggregate CS_HASH_ALL is supported only for integer types")))); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ALL is supported only for integer types"); 
 }
 
 #define IMCS_HASH_AVG_RESULT(acc, count) acc/count
@@ -5471,7 +5471,7 @@ static bool imcs_hash_initialize_approxdc(imcs_iterator_h iterator)
     while (iterator->opd[1]->next(iterator->opd[1])) { 
         if (iterator->opd[0] != 0) {                                      
             if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { 
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); 
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); 
             }                                                           
         }                                                               
         tile_size = iterator->opd[1]->tile_size;                         
@@ -5779,7 +5779,7 @@ static bool imcs_dup_hash_initialize(imcs_iterator_h iterator)
 
     while (iterator->opd[1]->next(iterator->opd[1])) {   
         if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { 
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("group by sequence doesn't match values sequence")))); 
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); 
         }
         tile_size = iterator->opd[1]->tile_size; 
         for (i = 0; i < tile_size; i++) {      
@@ -6213,7 +6213,7 @@ static bool imcs_##RET_TYPE##_call_##ARG_TYPE##_next(imcs_iterator_h iterator) \
         fcinfo->arg[0] = PG_ARG_TYPE##GetDatum(iterator->opd[0]->tile.arr_##ARG_TYPE[i]); \
         iterator->tile.arr_##RET_TYPE[i] = DatumGet##PG_RET_TYPE(FunctionCallInvoke(fcinfo)); \
         if (fcinfo->isnull) {                                           \
-            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("function returns null")))); \
+            imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "function returns null"); \
         }                                                               \
     }                                                                   \
     iterator->tile_size = tile_size;                                    \
@@ -6418,7 +6418,7 @@ static bool imcs_join_unsorted_##TYPE##_next(imcs_iterator_h iterator)  \
         for (i = 0; i < tile_size; i++) {                               \
             iterator->next_pos = 0;                                     \
             if (!imcs_search_page_##TYPE(root_page, iterator, iterator->opd[0]->tile.arr_##TYPE[i], BOUNDARY_EXCLUSIVE, 0) || iterator->next_pos == 0) { \
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no matching timestamp in timeseries"))); \
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "no matching timestamp in timeseries"); \
             }                                                           \
             iterator->tile.arr_int64[i] = iterator->next_pos-1;         \
         }                                                               \
@@ -6427,7 +6427,7 @@ static bool imcs_join_unsorted_##TYPE##_next(imcs_iterator_h iterator)  \
         for (i = 0; i < tile_size; i++) {                               \
             iterator->next_pos = 0;                                     \
             if (!imcs_search_page_##TYPE(root_page, iterator, iterator->opd[0]->tile.arr_##TYPE[i], boundary, 0)) { \
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no matching timestamp in timeseries"))); \
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "no matching timestamp in timeseries"); \
             }                                                           \
             iterator->tile.arr_int64[i] = iterator->next_pos;           \
         }                                                               \

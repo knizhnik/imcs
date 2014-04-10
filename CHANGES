@@ -38,3 +38,5 @@ Initial version
 1. Fix bugs in cs_hash_dup_count
 2. Fix handling of scalar types in cs_project
 3. Support cast to character type
+4. Thread safe error reporting
+5. Add TABLE_id() and TABLE_timestamp() functions

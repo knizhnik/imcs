@@ -30,6 +30,7 @@ extern int   imcs_cache_size;
 extern char* imcs_file_path;
 
 #define IMCS_INFINITY (-1)
+#define IMCS_MAX_ERROR_MSG_LEN 256
 
 typedef union 
 { 
@@ -102,6 +103,15 @@ typedef enum
     FLAG_PREPARED      = 4, /* result was already prepared by prepare() function during parallel query execution */
     FLAG_CONSTANT      = 8  /* timeries of repeated costant element */
 } imcs_flags_t;
+
+typedef struct
+{
+    jmp_buf unwind_buf;
+    int  err_code;
+    char err_msg[IMCS_MAX_ERROR_MSG_LEN];
+} imcs_error_handler_t;
+
+extern void imcs_ereport(int err_code, char const* err_msg,...);
 
 enum imcs_commands 
 {

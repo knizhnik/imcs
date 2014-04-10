@@ -248,7 +248,7 @@ static bool imcs_map_next(imcs_iterator_h iterator)
         imcs_page_t* pg;
         if (next_pos - prev_page_pos >= prev_page_size) { 
             if (!imcs_subseq_page(iterator, ctx->stack[0].page, next_pos, 0)) { 
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid position in timeseries"))); 
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "invalid position in timeseries"); 
             }
             prev_page_pos = next_pos - ctx->stack[ctx->stack_size-1].pos;
         }
@@ -279,7 +279,7 @@ static bool imcs_map_next_rle(imcs_iterator_h iterator)
         imcs_pos_t next_pos = iterator->first_pos + map->tile.arr_int64[i]; 
         imcs_page_t* pg;
         if (!imcs_subseq_page(iterator, ctx->stack[0].page, next_pos, 0)) { 
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid position in timeseries"))); 
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "invalid position in timeseries"); 
         }
         pg = ctx->stack[ctx->stack_size-1].page; 
         IMCS_LOAD_PAGE(pg);
@@ -351,7 +351,7 @@ static bool imcs_append_page_##TYPE(imcs_page_t** root_page, TYPE val, bool is_t
     Assert(n_items > 0);                                                \
     if (is_timestamp && pg->u.val_##TYPE[n_items-1] > val) {            \
         IMCS_UNLOAD_PAGE(pg);                                           \
-        ereport(ERROR, (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("value out of timeseries order"))); \
+        imcs_ereport(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE, "value out of timeseries order"); \
     }                                                                   \
     if (!pg->is_leaf) {                                                 \
         imcs_page_t* child = CHILD(pg, n_items-1).page;                 \

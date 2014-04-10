@@ -69,7 +69,7 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
         int* pp;
         pid = cache->items->prev; /* LRU victim */
         if (pid == 0) { /* no free pages */
-            ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("no available page in cache")));
+            imcs_ereport(ERRCODE_OUT_OF_MEMORY, "no available page in cache");
         }
         item = &cache->items[pid];
 
@@ -134,21 +134,21 @@ void imcs_disk_initialize(imcs_disk_cache_t* cache)
     memset(cache, 0, sizeof(*cache));
     cache->items = (imcs_cache_item_t*)ShmemAlloc((imcs_cache_size+1)*sizeof(imcs_cache_item_t));
     if (cache->items == NULL) { 
-        ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
+        imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for disk cache");
     }
     cache->data = (char*)ShmemAlloc((size_t)imcs_cache_size*imcs_page_size);
     if (cache->data == NULL) { 
-        ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
+        imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for disk cache");
     }
     cache->hash_table = (int*)ShmemAlloc(imcs_cache_size*sizeof(int));
     if (cache->hash_table == NULL) { 
-        ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
+        imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for disk cache");
     }
     memset(cache->hash_table, 0, imcs_cache_size*sizeof(int));
 
     cache->dirty_pages = (int*)ShmemAlloc(imcs_cache_size*sizeof(int));
     if (cache->dirty_pages == NULL) { 
-        ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory for disk cache")));
+        imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for disk cache");
     }
     cache->file_size = imcs_page_size; /* reserve first page to make address not NULL */
     SpinLockInit(&cache->mutex);
@@ -202,7 +202,7 @@ imcs_page_t* imcs_new_page(void)
             cache->free_pages_chain_head = cache->free_pages_chain_tail = 0;
         } else { 
             if (!imcs_file_read(imcs_file, &cache->free_pages_chain_head, sizeof cache->free_pages_chain_head, addr)) { 
-                ereport(ERROR, (errcode(ERRCODE_IO_ERROR), errmsg("Failed to read free page")));
+                imcs_ereport(ERRCODE_IO_ERROR, "Failed to read free page");
             }
             Assert(cache->free_pages_chain_tail != 0);
         }

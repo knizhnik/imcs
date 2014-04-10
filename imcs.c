@@ -54,6 +54,8 @@ static imcs_thread_pool_t* imcs_thread_pool;
 static imcs_lock_t imcs_lock = LOCK_NONE;
 static imcs_mutex_t* imcs_alloc_mutex;
 static MemoryContext imcs_mem_ctx;
+static imcs_tls_t* imcs_tls;
+static imcs_error_handler_t* imcs_error_handlers;
 
 static Datum  imcs_project_result_cache;
 static size_t imcs_project_redundant_calls;
@@ -654,6 +656,23 @@ Datum cs_rank(PG_FUNCTION_ARGS);
 Datum cs_dense_rank(PG_FUNCTION_ARGS);
 Datum cs_quantile(PG_FUNCTION_ARGS);
 
+void imcs_ereport(int err_code, char const* err_msg,...)
+{
+    static char err_buf[IMCS_MAX_ERROR_MSG_LEN];
+    va_list args;
+    imcs_error_handler_t* hnd = imcs_tls != NULL ? (imcs_error_handler_t*)imcs_tls->get(imcs_tls) : NULL;
+    va_start(args, err_msg);
+    if (hnd != NULL) { 
+        vsprintf(hnd->err_msg, err_msg, args);
+        va_end(args);
+        hnd->err_code = err_code;
+        longjmp(hnd->unwind_buf, 1);
+    } else {
+        vsprintf(err_buf, err_msg, args);
+        va_end(args);
+        ereport(ERROR, (errcode(err_code), errmsg(err_buf)));
+    }
+}
 
 static void imcs_shmem_startup(void);
 
@@ -753,7 +772,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
         return NULL;
     }
     if (imcs == NULL) { 
-        ereport(ERROR, (errcode(ERRCODE_LOCK_NOT_AVAILABLE), errmsg("Colunmar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list")));
+        imcs_ereport(ERRCODE_LOCK_NOT_AVAILABLE, "Colunmar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list");
     }
     if (create) { 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
@@ -816,7 +835,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
             ts->elem_size != elem_size ||
             ts->is_timestamp != is_timestamp))
     {
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("data format was changed")))); 
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "data format was changed"); 
     }
     return ts;
 }
@@ -852,7 +871,7 @@ imcs_page_t* imcs_new_page(void)
     if (pg == NULL) { 
         pg = (imcs_free_page_t*)ShmemAlloc(imcs_page_size);        
         if (pg == NULL) { 
-            ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("not enough shared memory")));
+            imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory");
         }
     } else { 
         imcs->free_pages = pg->next;
@@ -1144,6 +1163,10 @@ void _PG_fini(void)
         imcs_thread_pool->destroy(imcs_thread_pool);
         imcs_thread_pool = NULL;
     }
+    if (imcs_tls) {
+        imcs_tls->destroy(imcs_tls);
+    }
+    free(imcs_error_handlers);
     if (imcs_alloc_mutex) { 
         imcs_alloc_mutex->destroy(imcs_alloc_mutex);
         imcs_alloc_mutex = NULL;
@@ -1223,7 +1246,7 @@ static void imcs_shmem_startup(void)
         result = imcs_##func##_double params;                           \
         break;                                                          \
       default:                                                          \
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("operation is not supported for timeseries of CHAR(N) type"))); \
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "operation is not supported for timeseries of CHAR(N) type"); \
         result = NULL;                                                  \
     }                                                       
 
@@ -1244,7 +1267,7 @@ static void imcs_shmem_startup(void)
         result = imcs_##func##_int64 params;                            \
         break;                                                          \
       default:                                                          \
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("operation is supported for timeseries of integer type"))); \
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "operation is supported for timeseries of integer type"); \
         result = NULL;                                                  \
     }                                                       
 
@@ -1275,7 +1298,7 @@ static void imcs_shmem_startup(void)
         imcs_##func##_double params;                                    \
         break;                                                          \
       default:                                                          \
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("operation is not supported for timeseries of CHAR(N) type"))); \
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "operation is not supported for timeseries of CHAR(N) type"); \
     }                                                       
 
 /* Function for timeseries of scalar or character type */
@@ -1718,13 +1741,17 @@ static void imcs_merge_job_results(void* arg, void* result)
 
 static void imcs_parallel_job(int worker_id, int n_workers, void* arg)
 {
-    imcs_iterator_h par_iterator = (imcs_iterator_h)arg;
-    imcs_iterator_h iterator = par_iterator->opd[0];
-    uint64 interval = (par_iterator->last_pos - par_iterator->first_pos + n_workers)/n_workers; /* round up */
-    imcs_iterator_h clone_iterator = imcs_clone_tree(iterator, worker_id, interval);
-    if (clone_iterator->prepare(clone_iterator)) { 
-        imcs_thread_pool->merge(imcs_thread_pool, imcs_merge_job_results, clone_iterator);
-    }
+    imcs_error_handlers[worker_id].err_code = ERRCODE_SUCCESSFUL_COMPLETION;
+    imcs_tls->set(imcs_tls, &imcs_error_handlers[worker_id]);
+    if (!setjmp(imcs_error_handlers[worker_id].unwind_buf)) { 
+        imcs_iterator_h par_iterator = (imcs_iterator_h)arg;
+        imcs_iterator_h iterator = par_iterator->opd[0];
+        uint64 interval = (par_iterator->last_pos - par_iterator->first_pos + n_workers)/n_workers; /* round up */
+        imcs_iterator_h clone_iterator = imcs_clone_tree(iterator, worker_id, interval);
+        if (clone_iterator->prepare(clone_iterator)) { 
+            imcs_thread_pool->merge(imcs_thread_pool, imcs_merge_job_results, clone_iterator);
+        }
+    } 
 }
 
 static bool imcs_parallel_execute(imcs_iterator_h iterator)
@@ -1732,9 +1759,17 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     bool result;
     size_t ctx_offs;
     imcs_iterator_h opd[2];
-    imcs_thread_pool->execute(imcs_thread_pool, imcs_parallel_job, iterator);
+    int i;
+    imcs_thread_pool->execute(imcs_thread_pool, imcs_parallel_job, iterator);    
     if (iterator->opd[1] == NULL) { 
         return false;
+    }
+    if (imcs_error_handlers != NULL) { 
+        for (i = 0; i < n_threads;  i++) { 
+            if (imcs_error_handlers[i].err_code != ERRCODE_SUCCESSFUL_COMPLETION) { 
+                ereport(ERROR, (errcode(imcs_error_handlers[i].err_code), errmsg(imcs_error_handlers[i].err_msg)));
+            }            
+        }
     }
     Assert(iterator->iterator_size == iterator->opd[1]->iterator_size);
     ctx_offs = (char*)iterator->opd[1]->context - (char*)iterator->opd[1];
@@ -1772,13 +1807,16 @@ imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator)
 {
     imcs_visitor_context_t ctx;
     if (imcs_is_unlimited(iterator)) { 
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Value can not be caclualted for unbounded sequence"))));    
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Value can not be caclualted for unbounded sequence");    
     } 
     if (n_threads == 1 || iterator->merge == NULL) {                  
         return iterator;
     }    
     if (imcs_thread_pool == NULL) { 
         imcs_thread_pool = imcs_create_thread_pool(n_threads);
+        n_threads = imcs_thread_pool->get_number_of_threads(imcs_thread_pool);
+        imcs_error_handlers = (imcs_error_handler_t*)malloc(sizeof(imcs_error_handler_t)*n_threads);
+        imcs_tls = imcs_create_tls();
     }
     ctx.interval = IMCS_INFINITY;                    
     if (imcs_parallel_execution_possible_for_operator(iterator->opd[0], &ctx) 
@@ -1891,7 +1929,7 @@ imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type, i
             result = imcs_cast_to_char(input, elem_size);
             break;             
           default:                                              
-            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cast to timeseries of CHAR(N) is not supported"))); 
+            imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "cast to timeseries of CHAR(N) is not supported"); 
         }                    
     }
     result->elem_type = elem_type;
@@ -2004,7 +2042,7 @@ Datum columnar_store_append_##TYPE(PG_FUNCTION_ARGS)                    \
         if (imcs_substitute_nulls) {                                    \
             imcs_append_##TYPE(ts, 0);                                  \
         } else {                                                        \
-            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("NULL values are not supported by columnar store")))); \
+            imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); \
         }                                                               \
     } else {                                                            \
         imcs_append_##TYPE(ts, PG_GETARG_##PG_TYPE(1));                 \
@@ -2030,13 +2068,13 @@ Datum columnar_store_append_char(PG_FUNCTION_ARGS)
         if (imcs_substitute_nulls) {                                    
             imcs_append_char(ts, NULL, 0); /* substitute NULL with empty string */
         } else {                                                        
-            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("NULL values are not supported by columnar store")))); 
+            imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); 
         }                                                               
     } else {                                                            
         text* t = PG_GETARG_TEXT_P(1);
         int len = VARSIZE(t) - VARHDRSZ;
         if (len > elem_size) { 
-            ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d", len, elem_size))));             
+            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d", len, elem_size);             
         }
         imcs_append_char(ts, (char*)VARDATA(t), len);                     
     }                                                                   
@@ -2162,7 +2200,7 @@ Datum cs_const_str(PG_FUNCTION_ARGS)
     char* elem = (char*)palloc(elem_size);
     imcs_iterator_h result;
     if (elem_size < len) { 
-        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("CHAR literal too long")))); 
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
     } else { 
         memcpy(elem, str, len);
         memset(elem + len, '\0', elem_size - len);
@@ -2203,7 +2241,7 @@ Datum cs_const_num(PG_FUNCTION_ARGS)
         break;
       default:
         result = NULL;
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("numeric value expected"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "numeric value expected");
     }
     result->elem_type = elem_type;
     PG_RETURN_POINTER(result);
@@ -2243,7 +2281,7 @@ Datum cs_const_dt(PG_FUNCTION_ARGS)
         break;
       default:
         result = NULL;
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("numeric value expected"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "numeric value expected");
     }
     result->elem_type = elem_type;
     PG_RETURN_POINTER(result);
@@ -2283,18 +2321,18 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
     if (strncmp(str, "bpchar", 6) == 0) { 
         elem_type = TID_char;
         if (sscanf(str+6, "%d:%n", &elem_size, &n) != 1) { 
-            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), errmsg("failed to parse timeseries '%s'", str)));
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse timeseries '%s'", str);
         }
         n += 6; /* strlen("bpchar") */
     } else { 
         char* col = strchr(str, ':');
         if (col == NULL) { 
-            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), errmsg("failed to parse timeseries '%s'", str)));
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse timeseries '%s'", str);
         }
         n = col - str;
         for (elem_type = TID_int8; n != imcs_type_mnem_lens[elem_type] || strncmp(imcs_type_mnems[elem_type], str, n) != 0; elem_type++) { 
             if (elem_type == TID_char) { /* last TID */
-                ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), errmsg("invalid element type name %.*s", n, str)));
+                imcs_ereport(ERRCODE_SYNTAX_ERROR, "invalid element type name %.*s", n, str);
             }
         }
         n += 1; /* skip column */
@@ -2808,7 +2846,7 @@ Datum cs_isnan(PG_FUNCTION_ARGS)
         result = imcs_isnan_double(input);
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cs_isnan is defined only for timeseries of float4 or float8 types"))); 
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "cs_isnan is defined only for timeseries of float4 or float8 types"); 
     }                                                     
     PG_RETURN_POINTER(result);
 }
@@ -3009,7 +3047,7 @@ Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
     bool nulls[2] = {false, false};
     imcs_iterator_h result[2]; 
     if (min_occ <= 0) { 
-        ereport(ERROR, (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("min_occurrences should be positive number")));
+        imcs_ereport(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE, "min_occurrences should be positive number");
     }
     get_call_result_type(fcinfo, NULL, &resultTupleDesc);
     imcs_hash_dup_count(result, input, group_by, min_occ);
@@ -3080,7 +3118,7 @@ Datum cs_stretch(PG_FUNCTION_ARGS)
         IMCS_APPLY(stretch_int64, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First and second arguments of cs_stretch should be timeseries of int4, int8, date, time or timestamp type"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First and second arguments of cs_stretch should be timeseries of int4, int8, date, time or timestamp type");
     }
     PG_RETURN_POINTER(result);
 }
@@ -3103,7 +3141,7 @@ Datum cs_stretch0(PG_FUNCTION_ARGS)
         IMCS_APPLY(stretch0_int64, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First and second arguments of cs_stretch0 should be timeseries of int4, int8, date, time or timestamp type"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First and second arguments of cs_stretch0 should be timeseries of int4, int8, date, time or timestamp type");
     }
     PG_RETURN_POINTER(result);
 }
@@ -3125,7 +3163,7 @@ Datum cs_asof_join(PG_FUNCTION_ARGS)
         IMCS_APPLY(asof_join_int64, vals->elem_type, (ts1, ts2, vals));
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First and second arguments of cs_asof_join should be timeseries of int4, int8, date, time or timestamp type"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First and second arguments of cs_asof_join should be timeseries of int4, int8, date, time or timestamp type");
     }
     PG_RETURN_POINTER(result);
 }
@@ -3147,7 +3185,7 @@ Datum cs_asof_join_pos(PG_FUNCTION_ARGS)
         result = imcs_asof_join_pos_int64(ts1, ts2);
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First and second arguments of cs_asof_join_pos should be timeseries of int4, int8, date, time or timestamp type"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First and second arguments of cs_asof_join_pos should be timeseries of int4, int8, date, time or timestamp type");
     }
     PG_RETURN_POINTER(result);
 }
@@ -3169,7 +3207,7 @@ Datum cs_join(PG_FUNCTION_ARGS)
         IMCS_APPLY(join_int64, vals->elem_type, (ts1, ts2, vals));
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First and second arguments of cs_join should be timeseries of int4, int8, date, time or timestamp type"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First and second arguments of cs_join should be timeseries of int4, int8, date, time or timestamp type");
     }
     PG_RETURN_POINTER(result);
 }
@@ -3191,7 +3229,7 @@ Datum cs_join_pos(PG_FUNCTION_ARGS)
         result = imcs_join_pos_int64(ts1, ts2);
         break;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First and second arguments of cs_join_pos should be timeseries of int4, int8, date, time or timestamp type"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First and second arguments of cs_join_pos should be timeseries of int4, int8, date, time or timestamp type");
     }
     PG_RETURN_POINTER(result);
 }
@@ -3320,7 +3358,7 @@ Datum cs_project(PG_FUNCTION_ARGS)
             n_attrs = attr_desc->natts;
         } else { 
             if (argtype != timeseries_oid) { 
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("First argument of cs_project should be compound type or timeseries"))));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First argument of cs_project should be compound type or timeseries");
             }
             n_attrs = 1;
         }
@@ -3335,13 +3373,13 @@ Datum cs_project(PG_FUNCTION_ARGS)
                 imcs_project_redundant_calls = n_attrs; /* number of attributes of projected tuple */
             } else if (imcs_project_redundant_calls > 1 && imcs_project_call_count >= imcs_project_redundant_calls) { 
                 /* iteratation is not yet completed, but first function call is encountered */
-                ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Multiple usage of cs_project_agg in select column list are not supported")));
+                imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project_agg in select column list are not supported");
             }
         }
         if (imcs_project_redundant_calls > 1) { 
             Assert(imcs_project_call_count > 0);
             if (imcs_project_call_count < imcs_project_redundant_calls && !is_first_call) {
-                ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Multiple usage of cs_project in select column list are not supported")));
+                imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project in select column list are not supported");
             }
             if (imcs_project_call_count++ % imcs_project_redundant_calls != 0) {
                 funcctx = is_first_call ? SRF_FIRSTCALL_INIT() : SRF_PERCALL_SETUP();
@@ -3553,13 +3591,13 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
                 funcctx = SRF_FIRSTCALL_INIT(); /* context will be needed for SRF_RETURN_NEXT */
             } else if (imcs_project_redundant_calls != 0 && imcs_project_call_count >= imcs_project_redundant_calls) { 
                 /* iteratation is not yet completed, but first function call is encountered */
-                ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Multiple usage of cs_project_agg in select column list are not supported")));
+                imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project_agg in select column list are not supported");
             }
         }
         if (imcs_project_redundant_calls != 0) { 
             Assert(imcs_project_call_count > 0);
             if (imcs_project_call_count < 2 && !is_first_call) {
-                ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Multiple usage of cs_project_agg in select column list are not supported")));
+                imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project_agg in select column list are not supported");
             }
             if (imcs_project_call_count++ % 2 != 0) { /* 2 - number of attributes */
                 funcctx = SRF_PERCALL_SETUP();
@@ -3585,7 +3623,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
         attr_desc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(t), HeapTupleHeaderGetTypMod(t));
         timeseries_oid = TypenameGetTypid("timeseries");
         if (attr_desc->natts != 2) { 
-            ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("Expect record with two columns"))));
+            imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Expect record with two columns");
         }
         oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);       
         usrfctx = (imcs_project_agg_context*)palloc(sizeof(imcs_project_agg_context));
@@ -3595,7 +3633,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
             Form_pg_attribute attr = attr_desc->attrs[i];
             Datum datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
             if (attr->atttypid != timeseries_oid) {
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("Expect column with timeseries type"))));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Expect column with timeseries type");
             } else if (usrfctx->nulls[i]) { 
                 is_null = true;
                 break;
@@ -3684,7 +3722,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
               break;
           }
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("Scalar value is expected"))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Scalar value is expected");
     }
 
     size = VARHDRSZ + usrfctx->iterators[1]->elem_size;
@@ -3771,7 +3809,7 @@ static imcs_elem_typeid_t imcs_oid_to_typeid(int oid)
       case TEXTOID:
         return TID_char;
       default:
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("Unsupported type oid %d", oid))));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Unsupported type oid %d", oid);
     }
     return TID_int8; 
 }
@@ -3815,7 +3853,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     }
     n_attrs = SPI_processed;
     if (n_attrs == 0) { 
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Table %s doesn't exist", table_name)))); 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Table %s doesn't exist", table_name); 
     }
     attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
     attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
@@ -3837,7 +3875,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
             attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
             if (attr_size[i] < 0 && id_attnum != i+1) {
-                ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Size of attribute %s is not statically known", attr_name[i])))); 
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]); 
             }
         }
         cs_id_prefix_len[i] = table_name_len + strlen(attr_name[i]) + 1;
@@ -3880,7 +3918,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
             heap_deform_tuple(spi_tuple, spi_tupdesc, values, nulls);
             if (id_attnum != 0) { 
                 if (nulls[id_attnum-1]) {
-                    ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("Timseries identifier can not be NULL"))));
+                    imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "Timseries identifier can not be NULL");
                 }
                 if (attr_type[id_attnum-1] != TID_char) { 
                     id = id_cstr = SPI_getvalue(spi_tuple, spi_tupdesc, id_attnum);
@@ -3901,7 +3939,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                     if (imcs_substitute_nulls) { 
                         values[i] = 0;
                     } else { 
-                        ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("NULL values are not supported by columnar store"))));
+                        imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
                     }
                 }
                 if (i+1 != id_attnum) { 
@@ -3958,7 +3996,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                                 }
                             }
                             if (len > attr_size[i]) { 
-                                ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]))));             
+                                imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);             
                             }
                             imcs_append_char(ts, str, len);
                         }
@@ -4009,7 +4047,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
     char id_buf[32];
 
     if (!CALLED_AS_TRIGGER(fcinfo)) { 
-        ereport(ERROR, (errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION), (errmsg("columnar_store_insert_trigger can be called only by trigger")))); 
+        imcs_ereport(ERRCODE_TRIGGERED_ACTION_EXCEPTION, "columnar_store_insert_trigger can be called only by trigger"); 
     }
     trigger_data = (TriggerData*)fcinfo->context;
     trigger = trigger_data->tg_trigger;
@@ -4047,7 +4085,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
     heap_deform_tuple(trigger_data->tg_trigtuple, trigger_data->tg_relation->rd_att, values, nulls);
     if (id_attnum != 0) { 
         if (nulls[id_attnum-1]) {
-            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("Timseries identifier can not be NULL"))));
+            imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "Timseries identifier can not be NULL");
         }
         switch (attr_type[id_attnum-1]) { 
           case TID_int8:
@@ -4073,7 +4111,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
             }
             break;
           default:
-            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Unsupported timeseries ID type %d", attr_type_oid[id_attnum-1])))); 
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Unsupported timeseries ID type %d", attr_type_oid[id_attnum-1]); 
         }
     }
     for (i = 0; i < n_attrs; i++) {
@@ -4081,7 +4119,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
             if (imcs_substitute_nulls) { 
                 values[i] = 0;
             } else { 
-                ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), (errmsg("NULL values are not supported by columnar store"))));
+                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
             }
         }
         if (i+1 != id_attnum) { 
@@ -4138,7 +4176,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                         }
                     }
                     if (len > attr_size[i]) { 
-                        ereport(ERROR, (errcode(ERRCODE_STRING_DATA_LENGTH_MISMATCH), (errmsg("String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]))));
+                        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);
                     }
                     imcs_append_char(ts, str, len);
                 }
@@ -4173,7 +4211,7 @@ Datum cs_cut(PG_FUNCTION_ARGS)
         int elem_size;
         imcs_elem_typeid_t elem_type = TID_char;
         if (sscanf(fmt, "%c%d%n", &type_letter, &elem_size, &n) != 2) { 
-            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), errmsg("failed to parse format string '%s'", fmt)));
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse format string '%s'", fmt);
         }
         switch (type_letter) { 
           case 'i':
@@ -4192,33 +4230,33 @@ Datum cs_cut(PG_FUNCTION_ARGS)
                 elem_type = TID_int64;
                 break;
               default:
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }
             break;
           case 'd':
           case 'D':
             elem_type = TID_date;
             if (elem_size != 4)  { 
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }    
             break;
           case 'm':
           case 'M':
             elem_type = TID_money;
             if (elem_size != 8)  { 
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }    
             break;
           case 't':
             elem_type = TID_time;
             if (elem_size != 8)  { 
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }    
             break;
           case 'T':
             elem_type = TID_timestamp;
             if (elem_size != 8)  { 
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }    
             break;
           case 'f':
@@ -4231,32 +4269,32 @@ Datum cs_cut(PG_FUNCTION_ARGS)
                 elem_type = TID_double;
                 break;
               default:
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }
             break;
           case 'C':
           case 'c':
             if (elem_size <= 0)  { 
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type size %d", elem_size)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
             }    
             elem_type = TID_char;
             break;
           default:
-            ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("invalid type character %c", type_letter)));
+            imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type character %c", type_letter);
         }
         if (pos + elem_size > len) { 
-            ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("too much values in format string %s", format)));
+            imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too much values in format string %s", format);
         }
         fmt += n;
         pos += elem_size;
         if (i > MAX_CUT_VALUES) {
-            ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR), errmsg("Too much value in format string %s (limit is %d)", format, MAX_CUT_VALUES)));
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "Too much value in format string %s (limit is %d)", format, MAX_CUT_VALUES);
         }
         elem_types[i] = elem_type;
         elem_sizes[i] = elem_size;
     }
     if (pos != len) { 
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("too few values in format string %s", format)));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too few values in format string %s", format);
     }
     n_values = i;
     desc = CreateTemplateTupleDesc(n_values, false);
@@ -4313,7 +4351,7 @@ Datum cs_as(PG_FUNCTION_ARGS)
     bool* nulls;
 
     if (typid == InvalidOid) { 
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Type %s is not found", type)))); 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Type %s is not found", type); 
     }
     desc = lookup_rowtype_tupdesc(typid, -1);
     n = desc->natts;
@@ -4352,14 +4390,14 @@ Datum cs_as(PG_FUNCTION_ARGS)
                 values[i] = Float8GetDatum(value.val_double);
                 break;
               default:
-                ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("Unsupported type %d", attr->atttypid)));
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Unsupported type %d", attr->atttypid);
             }
             src += attr->attlen;
         }
     }
     ReleaseTupleDesc(desc);
     if (src != (char*)VARDATA(str) + len) { 
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("bytea is not matching target type")));
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "bytea is not matching target type");
     }
     PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(desc, values, nulls)));
 }
@@ -4565,7 +4603,7 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
         result = imcs_func_int64(input, &imcs_timestamp2##func);        \
         break;                                                          \
       default:                                                          \
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("timeseries of date, time or timestamp type expected"))); \
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "timeseries of date, time or timestamp type expected"); \
     }                                                                   \
     PG_RETURN_POINTER(result);                                          \
 }
@@ -4584,7 +4622,7 @@ Datum cs_##func(PG_FUNCTION_ARGS)                                       \
         result = imcs_func_int64(input, &imcs_timestamp2##func);        \
         break;                                                          \
       default:                                                          \
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), errmsg("timeseries of time or timestamp type expected"))); \
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "timeseries of time or timestamp type expected"); \
     }                                                                   \
     PG_RETURN_POINTER(result);                                          \
 }
@@ -4614,11 +4652,11 @@ Datum cs_call(PG_FUNCTION_ARGS)
     proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
     if (!HeapTupleIsValid(proctup))
     {
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("%d is not valid function OID", funcid)))); 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "%d is not valid function OID", funcid); 
     }                                                                   
     procform = (Form_pg_proc) GETSTRUCT(proctup);    
     if (procform->pronargs != 1) {
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Only function of one argument can be called"))));
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Only function of one argument can be called");
     }
     ret_typid = procform->prorettype;
     arg_typid = procform->proargtypes.values[0];
@@ -4654,7 +4692,7 @@ Datum cs_call(PG_FUNCTION_ARGS)
         IMCS_APPLY(double_call, arg_elem_type, (input, funcid));
         break;                                              
       default:                                              
-        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("function with character return type are not supported"))); 
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "function with character return type are not supported"); 
     }                    
     result->elem_type = ret_elem_type;
     if (!is_bin_function) { /* parallel execution of SQL or PLSQL functions is not possible: SPI code is not reentrant */
@@ -4677,7 +4715,7 @@ Datum cs_to_array(PG_FUNCTION_ARGS)
     Oid elmtyp = imcs_elem_type_to_oid[input->elem_type];
     Oid	rettype = get_fn_expr_rettype(fcinfo->flinfo);
     if (get_element_type(rettype) != elmtyp) { 
-        ereport(ERROR, (errcode(ERRCODE_DATATYPE_MISMATCH), (errmsg("Type of sequence element %s doesn't match with function %s return type", imcs_type_mnems[input->elem_type], get_func_name(fcinfo->flinfo->fn_oid))))); 
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Type of sequence element %s doesn't match with function %s return type", imcs_type_mnems[input->elem_type], get_func_name(fcinfo->flinfo->fn_oid)); 
     }
     IMCS_TRACE(to_array); 
     input->reset(input);
@@ -4824,7 +4862,7 @@ Datum cs_from_array(PG_FUNCTION_ARGS)
     imcs_from_array_context_t* ctx;
     int elem_size = elem_type == TID_char ? PG_GETARG_INT32(1) : imcs_type_sizeof[elem_type];
     if (elem_size <= 0) { 
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("Element size is not specified")))); 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Element size is not specified"); 
     }    
     IMCS_TRACE(from_array); 
     iterator = imcs_new_iterator(elem_size, sizeof(imcs_from_array_context_t));    
@@ -4863,10 +4901,7 @@ Datum cs_profile(PG_FUNCTION_ARGS)
 
         oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
         if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE) { 
-            ereport(ERROR,
-                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                     errmsg("function returning record called in context "
-                            "that cannot accept type record")));
+            imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "function returning record called in context that cannot accept type record");
         }
         ctx = (imcs_profile_context_t*)palloc0(sizeof(imcs_profile_context_t));
         funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
