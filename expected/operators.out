@@ -280,3 +280,9 @@ select cs_parse('{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', 'bpchar', 8) ~~ '
  char:{1,1,0,1,1,0,0}
 (1 row)
 
+select * from CrashLog_get();
+                                                  log_time                                                   |                uid                |          country          |               city               |                  device                  |               net               |                 os                  
+-------------------------------------------------------------------------------------------------------------+-----------------------------------+---------------------------+----------------------------------+------------------------------------------+---------------------------------+-------------------------------------
+ timestamp:{Sat Apr 12 00:53:53.653509 2014,Sat Apr 12 00:53:53.654733 2014,Sat Apr 12 00:53:53.656443 2014} | int8:{10000001,10000002,10000003} | varchar:{USA,Japan,China} | varchar:{New York,Tokio,Beijing} | varchar:{iPhone4,Sony Xperia Z1,iPhone5} | varchar:{wifi,Vodafone 3G,wifi} | varchar:{iOS6.x,Android 4.4,iOS7.x}
+(1 row)
+

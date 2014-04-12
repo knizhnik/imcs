@@ -290,7 +290,7 @@ begin
         create_delete_trigger_func := create_delete_trigger_func||table_name||'_delete(OLD."'||timestamp_id||'",OLD."'||timestamp_id||'"); return OLD; end; $$ language plpgsql';
     end if;
    
-    -- PL/pgSQL version of trigger functions atr too slow
+    -- PL/pgSQL version of trigger functions are too slow
     -- create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure '||table_name||'_insert_trigger()';
     create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure columnar_store_insert_trigger('''||table_name||''','||id_attnum||','||timestamp_attnum;
     create_delete_trigger := 'create trigger '||table_name||'_delete before delete on '||table_name||' for each row execute procedure '||table_name||'_delete_trigger()';
@@ -302,11 +302,12 @@ begin
         attr_len := meta.attlen;
         if (attr_len < 0) then -- char(N) type 
             attr_len := meta.atttypmod - 4; -- atttypmod = N + VARHDRSZ
-            if (attr_len < 0 and meta.attname <> timeseries_id) then 
-                raise exception 'Size is not specified for attribute %',meta.attname;              
-            end if;
+            -- Use dictioanry for varying size types instead of throwing error
+            -- if (attr_len < 0 and meta.attname <> timeseries_id) then 
+            --    raise exception 'Size is not specified for attribute %',meta.attname;              
+            -- end if;
         end if;
-        trigger_args := trigger_args||','''||meta.attname||''','||meta.atttypid||','||attr_len;
+        trigger_args := trigger_args||','''||meta.attname||''','''||meta.atttypid||''','''||attr_len||'''';
 
         if (meta.attname = timestamp_id) then
             is_timestamp := true;
@@ -1030,3 +1031,6 @@ create function cs_from_array(anyarray, elem_size integer default 0) returns tim
 
 create type cs_profile_item as (command text, counter integer);
 create function cs_profile(reset bool default false) returns setof cs_profile_item as 'MODULE_PATHNAME' language C stable strict;
+
+create function cs_translate(id integer) returns varchar as 'MODULE_PATHNAME' language C stable strict; 
+create function cs_translate(str bytea, column_no integer) returns varchar as 'MODULE_PATHNAME','cs_cut_and_translate' language C stable strict; 

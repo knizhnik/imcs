@@ -533,7 +533,7 @@ static bool imcs_adt_parse_##TYPE##_next(imcs_iterator_h iterator)      \
                 imcs_ereport(ERRCODE_SYNTAX_ERROR, "unterminated string literal %s", ptr-1); \
             }                                                           \
             *end = '\0';                                                \
-            datum = ctx->parser->parse(ctx->parser, ptr);               \
+            datum = ctx->parser->parse(ctx->parser, ptr, end - ptr);    \
             *end++ = quote;   /* needed for reset */                    \
             ptr = end;                                                  \
             ch = *ptr;                                                  \
@@ -547,7 +547,7 @@ static bool imcs_adt_parse_##TYPE##_next(imcs_iterator_h iterator)      \
             }                                                           \
             ch = *sep;                                                  \
             *sep = '\0';                                                \
-            datum = ctx->parser->parse(ctx->parser, ptr);               \
+            datum = ctx->parser->parse(ctx->parser, ptr, sep - ptr);    \
             *sep = ch; /* needed for reset */                           \
             ptr = sep;                                                  \
         }                                                               \
@@ -572,6 +572,7 @@ imcs_iterator_h imcs_adt_parse_##TYPE(char const* input, imcs_adt_parser_t* pars
     return result;                                                      \
 }
 
+IMCS_ADT_PARSE_DEF(int16, Int16);
 IMCS_ADT_PARSE_DEF(int32, Int32);
 IMCS_ADT_PARSE_DEF(int64, Int64);
 

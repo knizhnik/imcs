@@ -45,3 +45,4 @@ select cs_parse('{1,2,3,4,5}', 'int4') >> 10;
 select cs_like('bpchar8:{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', '%abc%');
 select cs_ilike('bpchar8:{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', '%abc%');
 select cs_parse('{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', 'bpchar', 8) ~~ '%abc%';
+select * from CrashLog_get();

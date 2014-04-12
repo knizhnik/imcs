@@ -24,6 +24,7 @@ typedef uint64 imcs_count_t;
 
 extern int   imcs_page_size;
 extern int   imcs_tile_size;
+extern int   imcs_dict_size;
 extern bool  imcs_sync_load;
 extern bool  imcs_use_rle;
 extern int   imcs_cache_size;
@@ -31,6 +32,8 @@ extern char* imcs_file_path;
 
 #define IMCS_INFINITY (-1)
 #define IMCS_MAX_ERROR_MSG_LEN 256
+#define IMCS_SMALL_DICTIONARY 0x10000 /* 64kb - identifier can be stored in two bytes */
+
 
 typedef union 
 { 
@@ -101,7 +104,8 @@ typedef enum
     FLAG_RANDOM_ACCESS = 1, /* it is timeseries stored as B-Tree, supporting random acess by position */
     FLAG_CONTEXT_FREE  = 2, /* each element can be calculated independetly: such timeseries allows concurrent execution */ 
     FLAG_PREPARED      = 4, /* result was already prepared by prepare() function during parallel query execution */
-    FLAG_CONSTANT      = 8  /* timeries of repeated costant element */
+    FLAG_CONSTANT      = 8, /* timeries of repeated costant element */
+    FLAG_TRANSLATED    = 16 /* character element value was replaced with integer identifier using dictionary */
 } imcs_flags_t;
 
 typedef struct
@@ -111,7 +115,7 @@ typedef struct
     char err_msg[IMCS_MAX_ERROR_MSG_LEN];
 } imcs_error_handler_t;
 
-extern void imcs_ereport(int err_code, char const* err_msg,...);
+extern void imcs_ereport(int err_code, char const* err_msg,...)  __attribute__((noreturn));
 
 enum imcs_commands 
 {
@@ -330,7 +334,7 @@ imcs_count_t       imcs_count(imcs_iterator_h input);
 imcs_iterator_h    imcs_parallel_iterator(imcs_iterator_h iterator);
 
 struct imcs_adt_parser_t;
-typedef Datum (*imcs_adt_parse_t)(struct imcs_adt_parser_t* parser, char* value);
+typedef Datum (*imcs_adt_parse_t)(struct imcs_adt_parser_t* parser, char* value, size_t size);
 
 typedef struct imcs_adt_parser_t { 
     imcs_adt_parse_t parse;

@@ -213,13 +213,28 @@ void imcs_subseq_random_access_iterator(imcs_iterator_h iterator, imcs_pos_t fro
 }
  
 imcs_iterator_h imcs_subseq(imcs_timeseries_t* ts, imcs_pos_t from, imcs_pos_t till) 
-{                                                                       
-    imcs_iterator_t* iterator = (imcs_iterator_t*)imcs_new_iterator(ts->elem_size, sizeof(imcs_iterator_context_t));
+{                                        
+    imcs_iterator_t* iterator;
+    int elem_size = ts->elem_size;
+    int elem_type = ts->elem_type;
+    int flags = FLAG_CONTEXT_FREE|FLAG_RANDOM_ACCESS;    
+    if (elem_size < 0) { /* varying string */
+        Assert(elem_type == TID_char);        
+        flags |= FLAG_TRANSLATED;
+        if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
+            elem_size = 2;
+            elem_type = TID_int16;
+        } else { 
+            elem_size = 4;
+            elem_type = TID_int32;
+        }
+    }            
+    iterator = (imcs_iterator_t*)imcs_new_iterator(elem_size, sizeof(imcs_iterator_context_t));
     iterator->cs_hdr = ts;                                              
-    iterator->elem_type = ts->elem_type;
-    iterator->flags = FLAG_CONTEXT_FREE|FLAG_RANDOM_ACCESS;             
+    iterator->elem_type = elem_type;
+    iterator->flags = flags;
     iterator->reset = imcs_reset_tree_iterator;                                 
-    iterator->next = (iterator->elem_type == TID_char && imcs_use_rle) ? imcs_next_tile_rle : imcs_next_tile;                                 
+    iterator->next = (elem_type == TID_char && imcs_use_rle) ? imcs_next_tile_rle : imcs_next_tile;                                 
     if (till >= from && ts->root_page != NULL && imcs_subseq_page(iterator, ts->root_page, from, 0)) { 
         iterator->first_pos = iterator->next_pos = from;                               
         iterator->last_pos = till >= ts->count ? ts->count-1 : till;
@@ -294,11 +309,25 @@ static bool imcs_map_next_rle(imcs_iterator_h iterator)
 imcs_iterator_h imcs_map(imcs_iterator_h input, imcs_iterator_h map_iterator) 
 {                                                                       
     imcs_timeseries_t* ts = input->cs_hdr;
-    imcs_iterator_h iterator = imcs_new_iterator(ts->elem_size, sizeof(imcs_iterator_context_t));
+    int elem_size = ts->elem_size;
+    int elem_type = ts->elem_type;
+    int flags = FLAG_CONTEXT_FREE; 
+    if (elem_size < 0) { /* varying string */
+        Assert(elem_type == TID_char);        
+        flags |= FLAG_TRANSLATED;
+        if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
+            elem_size = 2;
+            elem_type = TID_int16;
+        } else { 
+            elem_size = 4;
+            elem_type = TID_int32;
+        }
+    }            
+    imcs_iterator_h iterator = imcs_new_iterator(elem_size, sizeof(imcs_iterator_context_t));
     imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; 
-    iterator->elem_type = ts->elem_type;
-    iterator->flags = FLAG_CONTEXT_FREE;
-    iterator->next = (iterator->elem_type == TID_char && imcs_use_rle) ? imcs_map_next_rle : imcs_map_next;                                 
+    iterator->elem_type = elem_type;
+    iterator->flags = flags;
+    iterator->next = (elem_type == TID_char && imcs_use_rle) ? imcs_map_next_rle : imcs_map_next;                                 
     iterator->opd[0] = map_iterator;
     iterator->first_pos = iterator->next_pos = input->first_pos;
     ctx->stack[0].page = ts->root_page;
@@ -702,12 +731,23 @@ void imcs_append_char(imcs_timeseries_t* ts, char const* val, size_t val_len)
     }                                                                   
 }                                                                         
 
-/* returns fals euon underflow */
+/* returns false on underflow */
 static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t from, imcs_pos_t till)
 {
     int n_items;
     int elem_size = ts->elem_size;
-    int i;                                                          
+    int elem_type = ts->elem_type;
+    int i;                        
+    if (elem_size < 0) { /* varying string */
+        Assert(elem_type == TID_char);        
+        if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
+            elem_size = 2;
+            elem_type = TID_int16;
+        } else { 
+            elem_size = 4;
+            elem_type = TID_int32;
+        }
+    }            
     IMCS_LOAD_PAGE_FOR_UPDATE(pg);
     n_items = pg->n_items;
     if (!pg->is_leaf) {                 
@@ -752,7 +792,7 @@ static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t 
             }                   
         }                                            
     } else { 
-        if (ts->elem_type == TID_char && imcs_use_rle) { 
+        if (elem_type == TID_char && imcs_use_rle) { 
             for (i = 0; i < n_items; i++) {                                 
                 size_t count = 1 + (pg->u.val_char[i*(elem_size+1)] & 0xFF);
                 if (from < count) {   

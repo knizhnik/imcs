@@ -65,7 +65,15 @@ To make access to timeseries as convenient as possible, IMCS provides generator 
 optionally timeseries identifier. The last one needs some explanations. In some cases all data from the table should be placed in a single timeseries. For example assume that we collect data about phone calls (date, duration, caller, callee,...). It will be a single timeseries. But for example in trading systems there are separate data (ticks) associated with each symbol. So we have separate timeseries for ABB, GOOG, IBM, YHOO,... In this case securities identifier (symbol) can be considered as identifier of timeseries.
 </p><p>
 IMCS supports the following element type for timeseries: <code>"char", int2, int4, date, int8, time, timestamp, money, float4, float8, bpchar</code>.
-All timeseries elements should have the same size, so only fixed size character types are supported: for example <code>char(10)</code>, but not <code>varchar</code>. Also IMCS is not able to represent NULL values. It is not enforced that fields of the source table were declared as <code>NOT NULL</code>, but attempt to insert NULL value in timeseries will cause error (or optionally NULL can be substituted with zero). Please use default values instead of NULLs.
+All timeseries elements should have the same size, so only fixed size character types are supported: for example <code>char(10)</code>, but not <code>varchar</code>. But it is possible map varying size strings into integer identifiers using IMCS dictionary.
+It will greatly reduce space used by columnar store and reduce queries execution time (manipulations with integers are more efficient than with strings).
+Certainly this approach works only if cardinality of such column is not so large: dictionary should fit in memory.
+Size of dictionary can be specified using <code>"imcs.dictionary.size"</code> parameter. Default value is 64kb.
+If size of dictionary is less or equal than 64kb, then IMCS uses two bytes integer to store string identifier. If it is larger than 64kb, then
+four bytes identifier is used. Please notice that the same dictionary is used for all table and columns. So dictionary size should be greater or equal than total size of cardinalities of all unlimited varchar columns loaded in columnar store.
+IMCS is able to automatically converts strings to identifiers and visa verse in output/input functions. But you can also explicitly translate identifier to string using <code>cs_translate</code> function.
+</p><p>
+Also IMCS is not able to represent NULL values. It is not enforced that fields of the source table were declared as <code>NOT NULL</code>, but attempt to insert NULL value in timeseries will cause error (or optionally NULL can be substituted with zero). Please use default values instead of NULLs.
 </p><p>
 Given all this information IMCS generates corresponding types and functions for loading/appending/accessing this timeseries.
 Assume that we have table <code>Quote</code>. After calling <code>cs_create('Quote', 'Day', 'Symbol')</code>
@@ -138,12 +146,20 @@ allocation requests of columnar store. This function returns total number of rem
 <td>Returns amount of memory used by columnar store.</td>
 </tr>
 <tr>
-<td><code>function cs_profile(reset bool default false)  setof cs_profile_item</code></td>
+<td><code>function cs_profile(reset bool default false) returns setof cs_profile_item</code></td>
 <td>Returns number of calls of each IMCS command. If <code>parameter</code> is true, then all counters
 are reset after execution of this call.</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_timestamp() returns varchar</code></td><td>Returns name of timeserties timestamp column for this table</td>
+</tr>
+<tr>
+<td><code>function cs_translate(id integer) returns varchar</code></td>
+<td>Translates identifier to string value using IMCS dictionary.</td>
+</tr>
+<tr>
+<td><code>function cs_translate(cs_translate(str bytea, column_no integer) returns varchar) returns varchar</code></td>
+<td>Extracts identifier from compund (concatenated) key and returns correspondent name from dictionary. Column number is 1-based.</td>
 </tr>
 </table>
 </p>
@@ -340,7 +356,7 @@ deteriorated are thrown away. This function returns number of deleted elements.<
 </ul></td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_id() returns varchar</code></td><td>Returns name of timeserties identifier for this table</td>
+<td><code>function <b>TABLE</b>_id() returns varchar</code></td><td>Returns name of timeseries identifier for this table</td>
 </tr>
 </table>
 </p>
@@ -1463,6 +1479,11 @@ Below is list of all IMCS configuration parameters:
 <tr><td><code>imcs.n_threads</code></td><td>Number of threads in thread pool for concurrent execution of a query</td><td>0 - autodetect number of CPUs</td><td>Usually number of threads should be equal to number of physical execution units in the system. Please notice that in case of using hyperthreading number of reported CPUs is twice large than real number of cores. Set this parameter to 1 to disable concurrent execution</td></tr>
 <tr><td><code>imcs.page_size</code></td><td>Size of B-Tree page size in bytes</td><td>4096</td><td>As far as B-Tree is stored in memory, it is not so critical to use large pages. But small page may increase per-element storage overhead.</td></tr>
 <tr><td><code>imcs.tile_size</code></td><td>Size of tile or vector that is used to organize vector operations</td><td>128</td><td>The larger tile is, the less influence of interpretation overhead. But best performance can be achieved only if tile fits in CPU L1 cache. Please notice that some operators have two or more parameters, so more than one tile can be calculated at each stage of operator's pipe processing. Also memory may be needed for other purposes, so to reduce probability of cache misses, keep this value reasonably small.</td></tr>
+<tr><td><code>imcs.dictionary_size</code></td><td>Size of dictionary used by IMCS to map unlimited size strings to integer identifiers</td><td>64kb</td><td>If size of dictionary is set to zero, then it is not possible to load in columnar store columns with unlimited size types (i.e. VARCHAR).
+It size of the dictionary is less or equal than 64kb, then IMCS maps strings to 16-bit integer identifiers. 
+If size of the dictionary is greater than 64kb, then IMCS maps strings to 32-bit integer identifiers. 
+The size of the dictionary should be larger than cardinality of all varying size columns of all tables which are loaded in columnar store.
+And it should fit in memory reserved for IMCS using <code>imcs.shmem_size</code> parameter.</td></tr>
 <tr><td><code>imcs.substitute_nulls</code></td><td>Substitutes NULLs with 0 while loading data in columnar store</td><td>false</td><td>By default attempt to insert NULL value will cause an error. When value of this option is set to <code>true</code>, IMCS doesn't report an error and stores zero instead of NULL.</td></tr>
 <tr><td><code>imcs.autoload</code></td><td>Automatically loads data in columnar store when it is accessed first time by any query</td><td>true</td><td>Loading data from large table can take substantial amount of time and so increase execution time of the query initiated this load. It can confuse an user which expects this query to complete very fast. In such case explicit load of data after server restart can be more desirable (it can be completed before receiving any user's query).</td></tr>
 <tr><td><code>imcs.serializable</code></td><td>Hold lock till the end of transaction</td><td>true</td><td>Such locking policy provides serializable isolation level for columnar store. If this parameter is set to false, then lock is released at the end of query execution. It corresponds to "read committed" isolation level.</td></tr>

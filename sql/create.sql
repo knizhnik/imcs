@@ -9,4 +9,21 @@ insert into Quote (Symbol,Day,Open,High,Low,Close,Volume) values ('ABB', date('0
 create extension imcs;
 select cs_create('Quote', 'Day', 'Symbol');
 select Quote_load();
+
+-- Table with varying size strings which are mapped to integers using dictionary
+create table CrashLog(
+log_time timestamp, ---when this data is produce,selective
+uid bigint, ---user id
+country varchar,----USA,Chine,Japan etc...cardinal number is ~ 100,has hot spot
+city varchar, ---cardinal number~10000,has hot spot
+device varchar, ---iphone4,nokiaX etc, cardinal number is 1000,has hot spot
+net varchar, -----wifi,Vodafone 3G... cardinal number is 10,hash hot spot
+os varchar); ----iOS6.x,Android 2.3 cardinal number is 100,hash hot spot
+
+insert into CrashLog values (timestamp('12-Apr-2014 11:54'), 10000001, 'USA', 'New York', 'iPhone4', 'wifi', 'iOS6.x');
+insert into CrashLog values (timestamp('12-Apr-2014 11:55'), 10000002, 'Japan', 'Tokio', 'Sony Xperia Z1', 'Vodafone 3G', 'Android 4.4');
+insert into CrashLog values (timestamp('12-Apr-2014 11:56'), 10000003, 'China', 'Beijing', 'iPhone5', 'wifi', 'iOS7.x');
+select cs_create('CrashLog', 'log_time');
+select CrashLog_load();
+
 select cs_used_memory();

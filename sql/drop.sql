@@ -11,3 +11,4 @@ select * from Quote_get('IBM');
 select * from Quote_get('ABB');
 
 select Quote_drop();
+select CrashLog_drop();

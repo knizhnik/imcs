@@ -50,6 +50,7 @@ typedef enum
 
 static imcs_state_t* imcs;
 static HTAB* imcs_hash;
+static HTAB* imcs_dict;
 static imcs_thread_pool_t* imcs_thread_pool;
 static imcs_lock_t imcs_lock = LOCK_NONE;
 static imcs_mutex_t* imcs_alloc_mutex;
@@ -71,6 +72,8 @@ char* imcs_file_path;
 
 int imcs_page_size = 4096;
 int imcs_tile_size = 128;
+int imcs_dict_size = IMCS_SMALL_DICTIONARY;
+
 bool imcs_use_rle = true;
 static int imcs_output_string_limit = 1024;
 static bool imcs_flush_file;
@@ -252,6 +255,19 @@ typedef struct {
     imcs_hash_key_t key;
     imcs_timeseries_t value;
 } imcs_hash_entry_t;
+
+
+typedef struct { 
+    char*  val;
+    size_t len;
+} imcs_dict_key_t;
+
+typedef struct { 
+    imcs_dict_key_t key;
+    size_t id;
+} imcs_dict_entry_t;
+
+static imcs_dict_entry_t** imcs_dict_id_map;
 
 /*---- Function declarations ----*/
 
@@ -456,6 +472,8 @@ PG_FUNCTION_INFO_V1(cs_sort_pos);
 PG_FUNCTION_INFO_V1(cs_rank);
 PG_FUNCTION_INFO_V1(cs_dense_rank);
 PG_FUNCTION_INFO_V1(cs_quantile);
+PG_FUNCTION_INFO_V1(cs_translate);
+PG_FUNCTION_INFO_V1(cs_cut_and_translate);
 
 
 Datum columnar_store_initialized(PG_FUNCTION_ARGS);
@@ -655,6 +673,8 @@ Datum cs_sort_pos(PG_FUNCTION_ARGS);
 Datum cs_rank(PG_FUNCTION_ARGS);
 Datum cs_dense_rank(PG_FUNCTION_ARGS);
 Datum cs_quantile(PG_FUNCTION_ARGS);
+Datum cs_translate(PG_FUNCTION_ARGS);
+Datum cs_cut_and_translate(PG_FUNCTION_ARGS);
 
 void imcs_ereport(int err_code, char const* err_msg,...)
 {
@@ -696,6 +716,9 @@ static void* imcs_keycopy_fn(void *dest, const void *src, Size keysize)
     imcs_hash_key_t* dk = (imcs_hash_key_t*)dest;
     imcs_hash_key_t* sk = (imcs_hash_key_t*)src;
     dk->id = (char*)ShmemAlloc(strlen(sk->id)+1);
+    if (dk->id == NULL) { 
+        imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for hash entry");
+    }
     strcpy(dk->id, sk->id);
     return dk;
 }
@@ -714,6 +737,61 @@ static void imcs_init_hash()
 							  n_timeseries, n_timeseries*10,
 							  &info,
 							  HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
+}
+
+static uint32 imcs_dict_hash_fn(const void *key, Size keysize)
+{
+    imcs_dict_key_t const* dk = (imcs_dict_key_t const*)key;
+    char* val = dk->val;
+    size_t len = dk->len;
+    size_t i;
+    uint32 h = 0;
+    for (i = 0; i < len; i++) { 
+        h = h*31 + val[i];
+    }
+    return h;
+}
+
+static int imcs_dict_match_fn(const void *key1, const void *key2, Size keysize)
+{
+    imcs_dict_key_t const* dk1 = (imcs_dict_key_t const*)key1;
+    imcs_dict_key_t const* dk2 = (imcs_dict_key_t const*)key2;
+    return dk1->len == dk2->len ? memcmp(dk1->val, dk2->val, dk1->len) : dk1->len - dk2->len;
+}
+
+static void* imcs_dict_keycopy_fn(void *dest, const void *src, Size keysize)
+{ 
+    imcs_dict_key_t* dk = (imcs_dict_key_t*)dest;
+    imcs_dict_key_t* sk = (imcs_dict_key_t*)src;
+    dk->val = (char*)ShmemAlloc(sk->len);
+    if (dk->val == NULL) { 
+        imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for dictionary entry");
+    }
+    dk->len = sk->len;
+    memcpy(dk->val, sk->val, sk->len);
+    return dk;
+}
+
+
+
+static void imcs_init_dict() 
+{
+    if (imcs_dict_size != 0) { 
+        static HASHCTL info;
+        info.keysize = sizeof(imcs_dict_key_t);
+        info.entrysize = sizeof(imcs_dict_entry_t);
+        info.hash = imcs_dict_hash_fn;
+        info.match = imcs_dict_match_fn;
+        info.keycopy = imcs_dict_keycopy_fn;
+        imcs_dict = ShmemInitHash("imcs dictionary",
+                                  imcs_dict_size, imcs_dict_size,
+                                  &info,
+                                  HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
+        imcs_dict_id_map = (imcs_dict_entry_t**)ShmemAlloc(imcs_dict_size*sizeof(imcs_dict_entry_t*));
+        if (imcs_dict_id_map == NULL) { 
+            imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for dictionary map");
+        }
+    }
 }
 
 static void imcs_executor_end(QueryDesc *queryDesc)
@@ -975,6 +1053,19 @@ void _PG_init(void)
 							NULL,
 							NULL);
 
+	DefineCustomIntVariable("imcs.dictionary_size",
+                            "Size of dictionary used for varying length fields.",
+							NULL,
+							&imcs_dict_size,
+							IMCS_SMALL_DICTIONARY,
+							0,
+							INT_MAX,
+							PGC_POSTMASTER,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomIntVariable("imcs.n_threads",
                             "Number of threads for concurrent execution of query (0 - autodetect number of CPUs).",
 							NULL,
@@ -1186,6 +1277,7 @@ static void imcs_shmem_startup(void)
 	/* reset in case this is a restart within the postmaster */
 	imcs = NULL;
 	imcs_hash = NULL;
+	imcs_dict = NULL;
 
 	/*
 	 * Create or attach to the shared memory state, including hash table
@@ -1205,6 +1297,7 @@ static void imcs_shmem_startup(void)
 	}
     imcs_disk_open();
     imcs_init_hash();
+    imcs_init_dict();
     imcs_alloc_mutex = imcs_create_mutex();
     /* operator's pipe should exist until end of query execution.
      * So we can not use default memory context and have to create own own memory context which is reset by ExecutorEnd_hook
@@ -2064,19 +2157,50 @@ Datum columnar_store_append_char(PG_FUNCTION_ARGS)
     bool is_timestamp = PG_GETARG_BOOL(3);                              
     int elem_size = PG_GETARG_INT32(4);                                 
     imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, true); 
-    if (PG_ARGISNULL(1)) {                                              
-        if (imcs_substitute_nulls) {                                    
-            imcs_append_char(ts, NULL, 0); /* substitute NULL with empty string */
-        } else {                                                        
-            imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); 
-        }                                                               
-    } else {                                                            
-        text* t = PG_GETARG_TEXT_P(1);
-        int len = VARSIZE(t) - VARHDRSZ;
-        if (len > elem_size) { 
-            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d", len, elem_size);             
+    if (elem_size < 0) { /* varying string */
+        bool found;
+        imcs_dict_key_t key;
+        imcs_dict_entry_t* entry;
+        if (PG_ARGISNULL(1)) { /* substitute NULL with empty string */
+            if (imcs_substitute_nulls) {                                    
+                key.val = NULL;
+                key.len = 0;
+            } else {                                                        
+                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); 
+            }                                                               
+        } else { 
+            text* t = PG_GETARG_TEXT_P(1);
+            key.val = (char*)VARDATA(t);
+            key.len = VARSIZE(t) - VARHDRSZ;
+        }                            
+        entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
+        if (!found) { 
+            entry->id = hash_get_num_entries(imcs_dict);
+            if (entry->id >= imcs_dict_size) {  
+                imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
+            }   
+            imcs_dict_id_map[entry->id] = entry;
         }
-        imcs_append_char(ts, (char*)VARDATA(t), len);                     
+        if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+            imcs_append_int16(ts, (int16)entry->id);
+        } else { 
+            imcs_append_int32(ts, (int32)entry->id);
+        }
+    } else { 
+        if (PG_ARGISNULL(1)) {                                              
+            if (imcs_substitute_nulls) {                                    
+                imcs_append_char(ts, NULL, 0); /* substitute NULL with empty string */
+            } else {                                                        
+                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); 
+            }                                                               
+        } else {                                                            
+            text* t = PG_GETARG_TEXT_P(1);
+            int len = VARSIZE(t) - VARHDRSZ;
+            if (len > elem_size) { 
+                imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d", len, elem_size);             
+            }
+            imcs_append_char(ts, (char*)VARDATA(t), len);                     
+        }
     }                                                                   
     PG_RETURN_VOID();                                                   
 }
@@ -2147,7 +2271,7 @@ IMCS_JOIN(int64);
 IMCS_JOIN(float);
 IMCS_JOIN(double);
 
-static Datum imcs_parse_adt(imcs_adt_parser_t* parser, char* value)
+static Datum imcs_parse_adt(imcs_adt_parser_t* parser, char* value, size_t size)
 {
     return InputFunctionCall(&parser->proc, value, parser->param_oid, -1);
 }
@@ -2158,6 +2282,30 @@ static imcs_adt_parser_t* imcs_new_adt_parser(Oid type, FunctionCallInfo fcinfo)
 	getTypeInputInfo(type, &parser->input_oid, &parser->param_oid);			
     fmgr_info_cxt(parser->input_oid, &parser->proc, fcinfo->flinfo->fn_mcxt);
     parser->parse = imcs_parse_adt;
+    return parser;
+}
+
+static Datum imcs_parse_dict(imcs_adt_parser_t* parser, char* value, size_t size)
+{
+    imcs_dict_key_t key; 
+    imcs_dict_entry_t* entry;
+    key.val = value;
+    key.len = size;
+    entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_FIND, NULL);
+    if (entry == NULL) { 
+        imcs_ereport(ERRCODE_NO_DATA_FOUND, "String '%.*s' not found in dictionary", (int)size, value);
+    }
+    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+        PG_RETURN_INT16((int16)entry->id);                   
+    } else { 
+        PG_RETURN_INT32((int32)entry->id);                   
+    }
+}
+
+static imcs_adt_parser_t* imcs_new_dict_parser()
+{
+    imcs_adt_parser_t* parser = (imcs_adt_parser_t*)imcs_alloc(sizeof(imcs_adt_parser_t));    
+    parser->parse = imcs_parse_dict;
     return parser;
 }
 
@@ -2324,6 +2472,14 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
             imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse timeseries '%s'", str);
         }
         n += 6; /* strlen("bpchar") */
+    } else if (strncmp(str, "varchar:", 8) == 0) { 
+        if (imcs_dict_size == 0) { 
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Failed to parse VARCHAR timeseries because there is no dictionary"); 
+        }
+        result = (imcs_dict_size <= IMCS_SMALL_DICTIONARY) 
+            ? imcs_adt_parse_int16(str+8, imcs_new_dict_parser())
+            : imcs_adt_parse_int32(str+8, imcs_new_dict_parser());
+        PG_RETURN_POINTER(result);
     } else { 
         char* col = strchr(str, ':');
         if (col == NULL) { 
@@ -2399,40 +2555,86 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       case TID_int16:
       {
           int16 val;
-          while (imcs_next_int16(input, &val)) { 
-              if (used + MAX_NUMELEM_LEN > allocated) { 
-                  if (allocated >= output_limit) { 
-                      truncated = true;
-                      break;
+          if (input->flags & FLAG_TRANSLATED) { 
+              used = sprintf(buf, "varchar:");
+              while (imcs_next_int16(input, &val)) { 
+                  imcs_dict_entry_t* entry;
+                  Assert((uint16)val < imcs_dict_size);
+                  entry = imcs_dict_id_map[(uint16)val];
+                  if (used + entry->key.len + OUTPUT_BUF_RESERVE > allocated) { 
+                      if (allocated >= output_limit) { 
+                          truncated = true;
+                          break;
+                      }
+                      new_buf = imcs_alloc(allocated*=2);
+                      memcpy(new_buf, buf, used);
+                      imcs_free(buf);
+                      buf = new_buf;
                   }
-                  new_buf = imcs_alloc(allocated*=2);
-                  memcpy(new_buf, buf, used);
-                  imcs_free(buf);
-                  buf = new_buf;
+                  buf[used++] = sep;
+                  memcpy(buf + used, entry->key.val, entry->key.len);
+                  used += entry->key.len;
+                  sep = ',';
               }
-              buf[used++] = sep;
-              used += sprintf(&buf[used], "%d", val);
-              sep = ',';
+          } else {               
+              while (imcs_next_int16(input, &val)) { 
+                  if (used + MAX_NUMELEM_LEN > allocated) { 
+                      if (allocated >= output_limit) { 
+                          truncated = true;
+                          break;
+                      }
+                      new_buf = imcs_alloc(allocated*=2);
+                      memcpy(new_buf, buf, used);
+                      imcs_free(buf);
+                      buf = new_buf;
+                  }
+                  buf[used++] = sep;
+                  used += sprintf(&buf[used], "%d", val);
+                  sep = ',';
+              }
           }
           break;
       }
       case TID_int32:
       {
           int32 val;
-          while (imcs_next_int32(input, &val)) { 
-              if (used + MAX_NUMELEM_LEN > allocated) { 
-                  if (allocated >= output_limit) { 
-                      truncated = true;
-                      break;
+          if (input->flags & FLAG_TRANSLATED) { 
+              used = sprintf(buf, "varchar:");
+              while (imcs_next_int32(input, &val)) { 
+                  imcs_dict_entry_t* entry;
+                  Assert((uint32)val < imcs_dict_size);
+                  entry = imcs_dict_id_map[(uint32)val];
+                  if (used + entry->key.len + OUTPUT_BUF_RESERVE > allocated) { 
+                      if (allocated >= output_limit) { 
+                          truncated = true;
+                          break;
+                      }
+                      new_buf = imcs_alloc(allocated*=2);
+                      memcpy(new_buf, buf, used);
+                      imcs_free(buf);
+                      buf = new_buf;
                   }
-                  new_buf = imcs_alloc(allocated*=2);
-                  memcpy(new_buf, buf, used);
-                  imcs_free(buf);
-                  buf = new_buf;
+                  buf[used++] = sep;
+                  memcpy(buf + used, entry->key.val, entry->key.len);
+                  used += entry->key.len;
+                  sep = ',';
               }
-              buf[used++] = sep;
-              used += sprintf(&buf[used], "%d", val);
-              sep = ',';
+          } else {               
+              while (imcs_next_int32(input, &val)) { 
+                  if (used + MAX_NUMELEM_LEN > allocated) { 
+                      if (allocated >= output_limit) { 
+                          truncated = true;
+                          break;
+                      }
+                      new_buf = imcs_alloc(allocated*=2);
+                      memcpy(new_buf, buf, used);
+                      imcs_free(buf);
+                      buf = new_buf;
+                  }
+                  buf[used++] = sep;
+                  used += sprintf(&buf[used], "%d", val);
+                  sep = ',';
+              }
           }
           break;
       }
@@ -3875,7 +4077,9 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
             attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
             if (attr_size[i] < 0 && id_attnum != i+1) {
-                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]); 
+                if (imcs_dict_size == 0) { 
+                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]); 
+                }
             }
         }
         cs_id_prefix_len[i] = table_name_len + strlen(attr_name[i]) + 1;
@@ -3984,21 +4188,48 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                         imcs_append_double(ts, DatumGetFloat8(values[i]));
                         break;                    
                       case TID_char:
-                        if (nulls[i]) { /* substitute NULL with empty string */
-                            imcs_append_char(ts, NULL, 0);
+                        if (attr_size[i] < 0) { /* varying string */
+                            bool found;
+                            imcs_dict_key_t key;
+                            imcs_dict_entry_t* entry;
+                            if (nulls[i]) { /* substitute NULL with empty string */
+                                key.val = NULL;
+                                key.len = 0;
+                            } else { 
+                                t = DatumGetTextP(values[i]);
+                                key.val = (char*)VARDATA(t);
+                                key.len = VARSIZE(t) - VARHDRSZ;
+                            }                            
+                            entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
+                            if (!found) { 
+                                entry->id = hash_get_num_entries(imcs_dict);
+                                if (entry->id >= imcs_dict_size) {  
+                                    imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
+                                }   
+                                imcs_dict_id_map[entry->id] = entry;
+                            }
+                            if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+                                imcs_append_int16(ts, (int16)entry->id);
+                            } else { 
+                                imcs_append_int32(ts, (int32)entry->id);
+                            }
                         } else { 
-                            t = DatumGetTextP(values[i]);
-                            str = (char*)VARDATA(t);
-                            len = VARSIZE(t) - VARHDRSZ;
-                            if (attr_type_oid[i] == BPCHAROID) { 
-                                while (len != 0 && str[len-1] == ' ') { 
-                                    len -= 1;
+                            if (nulls[i]) { /* substitute NULL with empty string */
+                                imcs_append_char(ts, NULL, 0);
+                            } else { 
+                                t = DatumGetTextP(values[i]);
+                                str = (char*)VARDATA(t);
+                                len = VARSIZE(t) - VARHDRSZ;
+                                if (attr_type_oid[i] == BPCHAROID) { 
+                                    while (len != 0 && str[len-1] == ' ') { 
+                                        len -= 1;
+                                    }
                                 }
+                                if (len > attr_size[i]) { 
+                                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);             
+                                }
+                                imcs_append_char(ts, str, len);
                             }
-                            if (len > attr_size[i]) { 
-                                imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);             
-                            }
-                            imcs_append_char(ts, str, len);
                         }
                         break;
                       default:
@@ -4937,4 +5168,30 @@ Datum cs_profile(PG_FUNCTION_ARGS)
         memset(imcs_command_profile, 0, sizeof imcs_command_profile);
     }
     SRF_RETURN_DONE(funcctx);
+}
+
+Datum cs_translate(PG_FUNCTION_ARGS)
+{
+    uint32 id = PG_GETARG_UINT32(0);
+    if (id >= (uint32)imcs_dict_size) { 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Identifier %u is out of dictionary range [0..%d)", id, imcs_dict_size); 
+    }
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(imcs_dict_id_map[id]->key.val, imcs_dict_id_map[id]->key.len));
+}
+
+Datum cs_cut_and_translate(PG_FUNCTION_ARGS)
+{
+    bytea* str = PG_GETARG_BYTEA_P(0);
+    int column_no = PG_GETARG_INT32(1);
+    char* src = (char*)VARDATA(str);
+    size_t len = VARSIZE(str) - VARHDRSZ;
+     uint32 id;
+    if (column_no <= 0 || column_no*(imcs_dict_size <= IMCS_SMALL_DICTIONARY ? 2 : 4) > len) { 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Column with number %d doesn't belong to compound key", column_no);
+    }
+    id = (imcs_dict_size <= IMCS_SMALL_DICTIONARY) ? *((uint16*)src + column_no - 1) : *((uint32*)src + column_no - 1);
+    if (id >= (uint32)imcs_dict_size) { 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Identifier %u is out of dictionary range [0..%d)", id, imcs_dict_size); 
+    }
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(imcs_dict_id_map[id]->key.val, imcs_dict_id_map[id]->key.len));
 }

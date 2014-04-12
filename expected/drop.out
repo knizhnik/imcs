@@ -58,3 +58,9 @@ select Quote_drop();
  
 (1 row)
 
+select CrashLog_drop();
+ crashlog_drop 
+---------------
+ 
+(1 row)
+
