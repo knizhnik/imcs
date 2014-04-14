@@ -1240,7 +1240,7 @@ imcs_iterator_h imcs_reverse_##TYPE(imcs_iterator_h input)              \
     result->elem_type = input->elem_type;                               \
     result->opd[0] = imcs_operand(input);                               \
     result->next = imcs_reverse_##TYPE##_next;                          \
-    result->flags |= FLAG_RANDOM_ACCESS;                                \
+    result->flags |= FLAG_RANDOM_ACCESS|(input->flags & FLAG_TRANSLATED); \
     return result;                                                      \
 }
 
@@ -2736,7 +2736,7 @@ imcs_iterator_h imcs_filter_##TYPE(imcs_iterator_h cond, imcs_iterator_h input) 
     result->opd[1] = imcs_operand(input);                               \
     result->next = imcs_filter_##TYPE##_next;                           \
     result->reset = imcs_filter_reset;                                  \
-    result->flags = FLAG_CONTEXT_FREE;                                  \
+    result->flags = FLAG_CONTEXT_FREE|(input->flags & FLAG_TRANSLATED); \
     ctx->left_offs = ctx->right_offs = 0;                               \
     return result;                                                      \
 }
@@ -3772,6 +3772,7 @@ imcs_iterator_h imcs_unique_##TYPE(imcs_iterator_h input)               \
     result->opd[0] = imcs_operand(input);                               \
     result->next = imcs_unique_##TYPE##_next;                           \
     result->reset = imcs_reset_unary_agg_iterator;                      \
+    result->flags = (input->flags & FLAG_TRANSLATED);                   \
     ctx->offset = ctx->count = 0;                                       \
     return result;                                                      \
 }
@@ -4002,7 +4003,8 @@ imcs_iterator_h imcs_limit(imcs_iterator_h input, imcs_pos_t from, imcs_pos_t ti
         result->next_pos = 0;                                            
         result->first_pos = from;                                        
         result->last_pos = till;                                         
-        result->next = imcs_limit_next;                                  
+        result->next = imcs_limit_next; 
+        result->flags = (input->flags & FLAG_TRANSLATED);
         result->reset = imcs_reset_unary_agg_iterator;                   
         ctx->offset = ctx->count = 0;                                       
         return result;                                           
