@@ -4041,7 +4041,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     bool already_sorted = PG_GETARG_BOOL(3);
     char const* filter = PG_GETARG_CSTRING(4);
     int table_name_len = strlen(table_name);
-    int i, n_attrs;
+    int i, j, n_attrs;
     int64 n_records = 0;
     Oid* attr_type_oid;
     imcs_elem_typeid_t* attr_type;
@@ -4155,7 +4155,8 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                     }
                 }
             }
-            for (i = 0; i < n_attrs; i++) {
+            i = timestamp_attnum - 1; /* start with timestamp because it the only attribute which append can fail because of out-of-order date */
+            for (j = 0; j < n_attrs; j++, i = (i + 1) % n_attrs) {
                 if (nulls[i]) {
                     if (imcs_substitute_nulls) { 
                         values[i] = 0;
