@@ -20,9 +20,9 @@ device varchar, ---iphone4,nokiaX etc, cardinal number is 1000,has hot spot
 net varchar, -----wifi,Vodafone 3G... cardinal number is 10,hash hot spot
 os varchar); ----iOS6.x,Android 2.3 cardinal number is 100,hash hot spot
 
-insert into CrashLog values (timestamp('12-Apr-2014 11:54'), 10000001, 'USA', 'New York', 'iPhone4', 'wifi', 'iOS6.x');
-insert into CrashLog values (timestamp('12-Apr-2014 11:55'), 10000002, 'Japan', 'Tokio', 'Sony Xperia Z1', 'Vodafone 3G', 'Android 4.4');
-insert into CrashLog values (timestamp('12-Apr-2014 11:56'), 10000003, 'China', 'Beijing', 'iPhone5', 'wifi', 'iOS7.x');
+insert into CrashLog values ('2014-04-14 11:54', 10000001, 'USA', 'New York', 'iPhone4', 'wifi', 'iOS6.x');
+insert into CrashLog values ('2014-04-14 11:55', 10000002, 'Japan', 'Tokio', 'Sony Xperia Z1', 'Vodafone 3G', 'Android 4.4');
+insert into CrashLog values ('2014-04-14 11:56', 10000003, 'China', 'Beijing', 'iPhone5', 'wifi', 'iOS7.x');
 select cs_create('CrashLog', 'log_time');
 select CrashLog_load();
 

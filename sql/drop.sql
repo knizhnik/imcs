@@ -10,5 +10,7 @@ select Quote_count('ABB');
 select * from Quote_get('IBM');
 select * from Quote_get('ABB');
 
+select CrashLog_delete('2014-04-14 11:54', '2014-04-14 11:56');
+
 select Quote_drop();
 select CrashLog_drop();

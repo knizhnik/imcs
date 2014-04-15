@@ -52,6 +52,12 @@ select * from Quote_get('ABB');
         |     |      |      |     |       | 
 (1 row)
 
+select CrashLog_delete('2014-04-14 11:54', '2014-04-14 11:56');
+ crashlog_delete 
+-----------------
+               3
+(1 row)
+
 select Quote_drop();
  quote_drop 
 ------------

@@ -41,3 +41,4 @@ Initial version
 4. Thread safe error reporting
 5. Add TABLE_id() and TABLE_timestamp() functions
 6. Support load of unlimited varying size strings to columnar store using dictionary
+7. Fix synchronization issue in delete

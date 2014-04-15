@@ -183,6 +183,7 @@ begin
         declare
             search_result timeseries;
         begin
+            perform columnar_store_lock();
             search_result:=columnar_store_search_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,from_ts,till_ts,'||timestamp_tid||');';
     else
         create_delete_head_func := 'create function '||table_name||'_delete(till_ts '||timestamp_type||' default null) returns bigint as $$ begin return '||table_name||'_delete(null,till_ts); end; $$ language plpgsql';
@@ -191,6 +192,7 @@ begin
         declare
             search_result timeseries;
         begin
+            perform columnar_store_lock();
             search_result:=columnar_store_search_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''',from_ts,till_ts,'||timestamp_tid||');';
     end if;
     create_delete_func := create_delete_func||
@@ -420,6 +422,7 @@ $create$ language plpgsql;
 -- Internal functions: do not use them
 create function columnar_store_initialized(table_name cstring, initialize bool) returns bool  as 'MODULE_PATHNAME' language C strict;
 create function columnar_store_get(cs_id cstring, search_result timeseries, field_type integer, field_size integer) returns timeseries  as 'MODULE_PATHNAME' language C stable strict;
+create function columnar_store_lock() returns void  as 'MODULE_PATHNAME' language C strict;
 create function columnar_store_span(cs_id cstring, from_pos bigint, till_pos bigint, field_type integer, is_timestamp bool, field_size integer) returns timeseries  as 'MODULE_PATHNAME' language C stable strict;
 create function columnar_store_delete(cs_id cstring, search_result timeseries, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME' language C strict;
 create function columnar_store_truncate(table_name cstring) returns void as 'MODULE_PATHNAME' language C strict;

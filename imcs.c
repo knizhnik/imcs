@@ -276,6 +276,7 @@ void		_PG_fini(void);
 
 
 PG_FUNCTION_INFO_V1(columnar_store_initialized);
+PG_FUNCTION_INFO_V1(columnar_store_lock);
 PG_FUNCTION_INFO_V1(columnar_store_get);
 PG_FUNCTION_INFO_V1(columnar_store_span);
 PG_FUNCTION_INFO_V1(columnar_store_load);
@@ -478,6 +479,7 @@ PG_FUNCTION_INFO_V1(cs_cut_and_translate);
 
 Datum columnar_store_initialized(PG_FUNCTION_ARGS);
 Datum columnar_store_get(PG_FUNCTION_ARGS);
+Datum columnar_store_lock(PG_FUNCTION_ARGS);
 Datum columnar_store_span(PG_FUNCTION_ARGS);
 Datum columnar_store_load(PG_FUNCTION_ARGS);
 Datum columnar_store_delete(PG_FUNCTION_ARGS);
@@ -2055,6 +2057,21 @@ Datum columnar_store_get(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(imcs_subseq(ts, search_result->first_pos, search_result->last_pos));
 }
 
+Datum columnar_store_lock(PG_FUNCTION_ARGS)                              
+{                        
+    if (imcs != NULL)
+    {
+        if (imcs_lock != LOCK_EXCLUSIVE) { 
+            if (imcs_lock != LOCK_NONE) { 
+                LWLockRelease(imcs->lock);
+            }
+            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            imcs_lock = LOCK_EXCLUSIVE;
+        }
+    }
+    PG_RETURN_VOID();
+}                  
+                             
 Datum columnar_store_span(PG_FUNCTION_ARGS)                              
 {                                                                       
     char const* cs_id = PG_GETARG_CSTRING(0);                           
