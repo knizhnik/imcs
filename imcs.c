@@ -74,7 +74,7 @@ int imcs_page_size = 4096;
 int imcs_tile_size = 128;
 int imcs_dict_size = IMCS_SMALL_DICTIONARY;
 
-bool imcs_use_rle = true;
+bool imcs_use_rle = false;
 static int imcs_output_string_limit = 1024;
 static bool imcs_flush_file;
 static int shmem_size = 1024;

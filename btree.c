@@ -695,6 +695,7 @@ static bool imcs_append_page_char_rle(imcs_page_t** root_page, char const* val, 
 void imcs_append_char(imcs_timeseries_t* ts, char const* val, size_t val_len)                
 {                             
     Assert(!ts->is_timestamp);    
+    Assert(val_len <= ts->elem_size);    
     if (ts->root_page == 0) {                                           
         imcs_page_t* pg = imcs_new_page();                              
         char* dst;
@@ -762,10 +763,12 @@ static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t 
                             CHILD(pg, i).count -= till - from + 1;      
                             break;                                      
                         }                                               
+                        Assert(from != 0);
                         CHILD(pg, i).count = from;                      
                         j = i + 1;                                      
                         from = 0;                                       
                     } else { 
+                        Assert(from == 0);
                         if (till < count) {                            
                             i += 1;
                             break;
@@ -819,6 +822,8 @@ static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t 
                         } else if (i < n_items) { 
                             ts->count -= till+1;
                             pg->u.val_char[i*(elem_size+1)] = (char)(count - till - 2);
+                        } else { 
+                            ts->count -= count;
                         }
                         if (i-delete_from == n_items) {                        
                             imcs_free_page(pg);
@@ -854,12 +859,16 @@ static bool imcs_delete_page(imcs_timeseries_t* ts, imcs_page_t* pg, imcs_pos_t 
 
 void imcs_delete(imcs_timeseries_t* ts, imcs_pos_t from, imcs_pos_t till)
 {
-    imcs_page_t* root_page = ts->root_page;                         
-    if (root_page != NULL) {                                           
+    imcs_page_t* root_page = ts->root_page; 
+    if (root_page != NULL && from <= till) {             
+        FILE* f = fopen("delete.log", "a");
         if (!imcs_delete_page(ts, root_page, from, till)) { 
             Assert(ts->count == 0);
             ts->root_page = NULL;
+        } else { 
+            fprintf(f, "Delete from %p [%ld..%ld] -> %ld\n", ts, from, till, ts->count);
         }
+        fclose(f);
     }
 }
         

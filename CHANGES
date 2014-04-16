@@ -42,3 +42,4 @@ Initial version
 5. Add TABLE_id() and TABLE_timestamp() functions
 6. Support load of unlimited varying size strings to columnar store using dictionary
 7. Fix synchronization issue in delete function
+8. Fix bugs in RLE branch of imcs_delete_page and lack of range check in imcs_delete 
