@@ -12,5 +12,5 @@ select cs_hash_dup_count(cs_ceil((High-Low)*10), Day%3) from Quote_get('IBM');
 select cs_hash_all('int4:{3,1,6,7,0,3,6,5,2,3,7}','int8:{1,1,1,2,2,3,3,4,5,5,5}');
 select cs_hash_any('char:{3,1,6,7,0,3,6,5,2,3,7}','int2:{1,1,1,2,2,3,3,4,5,5,5}');
 
-select cs_translate(group_by, 1) as country, cs_translate(group_by, 2) as device, agg_val as counter from (select (cs_project_agg(cs_hash_count(country||device))).* from CrashLog_get()) s;
+select cs_code2str(group_by, 1) as country, cs_code2str(group_by, 2) as device, agg_val as counter from (select (cs_project_agg(cs_hash_count(country||device))).* from CrashLog_get()) s;
 

@@ -71,7 +71,7 @@ Certainly this approach works only if cardinality of such column is not so large
 Size of dictionary can be specified using <code>"imcs.dictionary.size"</code> parameter. Default value is 64kb.
 If size of dictionary is less or equal than 64kb, then IMCS uses two bytes integer to store string identifier. If it is larger than 64kb, then
 four bytes identifier is used. Please notice that the same dictionary is used for all table and columns. So dictionary size should be greater or equal than total size of cardinalities of all unlimited varchar columns loaded in columnar store.
-IMCS is able to automatically converts strings to identifiers and visa verse in output/input functions. But you can also explicitly translate identifier to string using <code>cs_translate</code> function.
+IMCS is able to automatically converts strings to identifiers and visa verse in output/input functions. But you can also explicitly translate identifier to string using <code>cs_code2str</code> function.
 </p><p>
 Also IMCS is not able to represent NULL values. It is not enforced that fields of the source table were declared as <code>NOT NULL</code>, but attempt to insert NULL value in timeseries will cause error (or optionally NULL can be substituted with zero). Please use default values instead of NULLs.
 </p><p>
@@ -154,12 +154,16 @@ are reset after execution of this call.</td>
 <td><code>function <b>TABLE</b>_timestamp() returns varchar</code></td><td>Returns name of timeserties timestamp column for this table</td>
 </tr>
 <tr>
-<td><code>function cs_translate(id integer) returns varchar</code></td>
-<td>Translates identifier to string value using IMCS dictionary.</td>
+<td><code>function cs_str2code(str varchar) returns integer</code></td>
+<td>Returns code of string in IMCS dictionary or -1 if there is not such string. This function may be used to find some particular values in varying string timeseries.</td>
 </tr>
 <tr>
-<td><code>function cs_translate(cs_translate(str bytea, column_no integer) returns varchar) returns varchar</code></td>
-<td>Extracts identifier from compund (concatenated) key and returns correspondent name from dictionary. Column number is 1-based.</td>
+<td><code>function cs_code2str(code integer) returns varchar</code></td>
+<td>Returns string value for specified IMCS dictionary code.</td>
+</tr>
+<tr>
+<td><code>function cs_code2str(str bytea, column_no integer) returns varchar</code></td>
+<td>Extracts identifier from compound (concatenated) key and returns correspondent name from dictionary. Column number is 1-based.</td>
 </tr>
 </table>
 </p>

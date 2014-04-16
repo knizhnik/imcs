@@ -1035,5 +1035,6 @@ create function cs_from_array(anyarray, elem_size integer default 0) returns tim
 create type cs_profile_item as (command text, counter integer);
 create function cs_profile(reset bool default false) returns setof cs_profile_item as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_translate(id integer) returns varchar as 'MODULE_PATHNAME' language C stable strict; 
-create function cs_translate(str bytea, column_no integer) returns varchar as 'MODULE_PATHNAME','cs_cut_and_translate' language C stable strict; 
+create function cs_str2code(str varchar) returns integer as 'MODULE_PATHNAME' language C stable strict; 
+create function cs_code2str(id integer) returns varchar as 'MODULE_PATHNAME' language C stable strict; 
+create function cs_code2str(str bytea, column_no integer) returns varchar as 'MODULE_PATHNAME','cs_cut_and_code2str' language C stable strict; 
