@@ -543,6 +543,7 @@ imcs_iterator_h imcs_search_##TYPE(imcs_timeseries_t* ts, TYPE low, imcs_boundar
                 if (iterator->next_pos == 0) {                          \
                     iterator->first_pos = iterator->next_pos = 1;       \
                     iterator->last_pos = 0;                             \
+                    return iterator;                                    \
                 } else {                                                \
                     iterator->last_pos = iterator->next_pos - 1;        \
                 }                                                       \
