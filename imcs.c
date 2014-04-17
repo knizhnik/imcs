@@ -5203,6 +5203,9 @@ Datum cs_str2code(PG_FUNCTION_ARGS)
     VarChar* t = PG_GETARG_VARCHAR_P(0);
     key.val = (char*)VARDATA(t);
     key.len = VARSIZE(t) - VARHDRSZ;
+    if (imcs_dict_size == 0) { 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "IMCS dictionary is disabled"); 
+    }
     if (imcs_lock == LOCK_NONE) {         
         LWLockAcquire(imcs->lock, LW_SHARED);  
         imcs_lock = LOCK_SHARED;

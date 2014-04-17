@@ -861,14 +861,10 @@ void imcs_delete(imcs_timeseries_t* ts, imcs_pos_t from, imcs_pos_t till)
 {
     imcs_page_t* root_page = ts->root_page; 
     if (root_page != NULL && from <= till) {             
-        FILE* f = fopen("delete.log", "a");
         if (!imcs_delete_page(ts, root_page, from, till)) { 
             Assert(ts->count == 0);
             ts->root_page = NULL;
-        } else { 
-            fprintf(f, "Delete from %p [%ld..%ld] -> %ld\n", ts, from, till, ts->count);
         }
-        fclose(f);
     }
 }
         
