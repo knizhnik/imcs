@@ -14,7 +14,7 @@
 MODULE_big = imcs
 
 CUSTOM_COPT = -O3 -Wall -pthread
-IMCS_VERSION=1.04
+IMCS_VERSION=1.05
 
 ifdef USE_DISK
 OBJS = imcs.o func.o smp.o btree.o threadpool.o fileio.o disk.o
