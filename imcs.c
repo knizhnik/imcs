@@ -1096,6 +1096,17 @@ void _PG_init(void)
 							NULL,
 							NULL);
 
+	DefineCustomBoolVariable("imcs.use_rle",
+                             "Use RLE compression for chararacter types.",
+                             NULL,
+                             &imcs_use_rle,
+                             false,
+                             PGC_POSTMASTER,
+                             0,
+                             NULL,
+                             NULL,
+                             NULL);
+    
 #ifdef IMCS_DISK_SUPPORT
 	DefineCustomIntVariable("imcs.cache_size",
                             "Size of IMCS disk cache.",
@@ -1116,17 +1127,6 @@ void _PG_init(void)
                              &imcs_flush_file,
                              true,
                              PGC_USERSET,
-                             0,
-                             NULL,
-                             NULL,
-                             NULL);
-    
-	DefineCustomBoolVariable("imcs.use_rle",
-                             "Use RLE compression for chararacter types.",
-                             NULL,
-                             &imcs_use_rle,
-                             false,
-                             PGC_POSTMASTER,
                              0,
                              NULL,
                              NULL,
