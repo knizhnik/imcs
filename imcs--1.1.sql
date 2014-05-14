@@ -1038,3 +1038,4 @@ create function cs_profile(reset bool default false) returns setof cs_profile_it
 create function cs_str2code(str varchar) returns integer as 'MODULE_PATHNAME' language C stable strict; 
 create function cs_code2str(id integer) returns varchar as 'MODULE_PATHNAME' language C stable strict; 
 create function cs_code2str(str bytea, column_no integer) returns varchar as 'MODULE_PATHNAME','cs_cut_and_code2str' language C stable strict; 
+create function cs_dictionary_size() returns integer as 'MODULE_PATHNAME' language C stable strict;

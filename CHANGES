@@ -45,3 +45,6 @@ Initial version
 8. Fix bugs in RLE branch of imcs_delete_page and lack of range check in imcs_delete 
 9. Fix bug in imcs_search
 
+--- Release version 1.06 (??.05.2014) -------------------------------------
+1. Fix problem with "imcs.use_rle" property.
+2. Implicitely convert code to string for LIKE operator.

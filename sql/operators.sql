@@ -47,3 +47,5 @@ select cs_ilike('bpchar8:{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', '%abc%');
 select cs_parse('{Abc,aaBcc,aabbcc,abcba,aabbabcc,aabac,bca}', 'bpchar', 8) ~~ '%abc%';
 select * from CrashLog_get();
 select cs_project(c.*, cs_filter_pos(country = cs_str2code('USA'))) from CrashLog_get() c;
+select cs_project(c.*, cs_filter_pos(cs_ilike(device, 'iphone%'))) from CrashLog_get() c;
+select cs_dictionary_size();

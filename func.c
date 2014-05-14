@@ -1042,7 +1042,7 @@ static bool imcs_cast_to_char_next(imcs_iterator_h iterator)
 {                                                                       
     size_t i, tile_size;       
     int elem_size = iterator->elem_size;
-    int elem_type = iterator->opd[0]->elem_type;
+    imcs_elem_typeid_t elem_type = iterator->opd[0]->elem_type;
     int ndig = 0;
     Oid type_out;
     bool is_varlena;
@@ -6319,16 +6319,53 @@ static bool imcs_like_next(imcs_iterator_h iterator)
     iterator->tile_size = tile_size;                                    
     iterator->next_pos += tile_size;                                    
     return true;                                                        
+}           
+                                                            
+static bool imcs_like_dict_next(imcs_iterator_h iterator)       
+{                                                                       
+    size_t i, tile_size;                                                
+    imcs_elem_typeid_t elem_type = iterator->opd[0]->elem_type;
+    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context; 
+    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
+        return false;                                                   
+    } 
+    tile_size = iterator->opd[0]->tile_size;
+    if (elem_type == TID_int16) {
+        for (i = 0; i < tile_size; i++) {   
+            int code = (uint16)iterator->opd[0]->tile.arr_int16[i];
+            imcs_dict_entry_t* entry;
+            Assert(code < imcs_dict_size);
+            entry = imcs_dict_code_map[code];             
+            iterator->tile.arr_int8[i] = imcs_match_string(entry->key.val, entry->key.len, ctx->pattern);
+        }           
+    } else { 
+        Assert(elem_type == TID_int32);
+        for (i = 0; i < tile_size; i++) {   
+            int code = iterator->opd[0]->tile.arr_int32[i];
+            imcs_dict_entry_t* entry;
+            Assert(code < imcs_dict_size);
+            entry = imcs_dict_code_map[code];             
+            iterator->tile.arr_int8[i] = imcs_match_string(entry->key.val, entry->key.len, ctx->pattern);
+        }           
+    }        
+    iterator->tile_size = tile_size;                                    
+    iterator->next_pos += tile_size;                                    
+    return true;                                                        
 }                                                                       
+ 
  
 imcs_iterator_h imcs_like(imcs_iterator_h input, char const* pattern)
 {
     imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_like_context_t)); 
     imcs_like_context_t* ctx = (imcs_like_context_t*)result->context;   
-    IMCS_CHECK_TYPE(input->elem_type, TID_char);                  
     result->elem_type = TID_int8;                                 
     result->opd[0] = imcs_operand(input);                               
-    result->next = imcs_like_next;            
+    if (input->flags & FLAG_TRANSLATED) {         
+        result->next = imcs_like_dict_next;            
+    } else { 
+        IMCS_CHECK_TYPE(input->elem_type, TID_char);                  
+        result->next = imcs_like_next;            
+    }
     result->flags = FLAG_CONTEXT_FREE;                                  
     ctx->pattern = pattern;
     return result;                                                      
@@ -6388,15 +6425,51 @@ static bool imcs_ilike_next(imcs_iterator_h iterator)
     return true;                                                        
 }                                                                       
  
+static bool imcs_ilike_dict_next(imcs_iterator_h iterator)       
+{                                                                       
+    size_t i, tile_size;                                                
+    imcs_elem_typeid_t elem_type = iterator->opd[0]->elem_type;
+    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context; 
+    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
+        return false;                                                   
+    } 
+    tile_size = iterator->opd[0]->tile_size;                            
+    if (elem_type == TID_int16) {
+        for (i = 0; i < tile_size; i++) {   
+            int code = (uint16)iterator->opd[0]->tile.arr_int16[i];
+            imcs_dict_entry_t* entry;
+            Assert(code < imcs_dict_size);
+            entry = imcs_dict_code_map[code];             
+            iterator->tile.arr_int8[i] = imcs_match_string_ignore_case(entry->key.val, entry->key.len, ctx->pattern);
+        }           
+    } else { 
+        Assert(elem_type == TID_int32);
+        for (i = 0; i < tile_size; i++) {   
+            int code = iterator->opd[0]->tile.arr_int32[i];
+            imcs_dict_entry_t* entry;
+            Assert(code < imcs_dict_size);
+            entry = imcs_dict_code_map[code];             
+            iterator->tile.arr_int8[i] = imcs_match_string_ignore_case(entry->key.val, entry->key.len, ctx->pattern);
+        }           
+    }        
+    iterator->tile_size = tile_size;                                    
+    iterator->next_pos += tile_size;                                    
+    return true;                                                        
+}                                                                       
+ 
 imcs_iterator_h imcs_ilike(imcs_iterator_h input, char const* pattern)
 {
     imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_like_context_t)); 
     imcs_like_context_t* ctx = (imcs_like_context_t*)result->context;   
     unsigned char* pat = (unsigned char*)pattern;
-    IMCS_CHECK_TYPE(input->elem_type, TID_char);                  
     result->elem_type = TID_int8;                                 
     result->opd[0] = imcs_operand(input);                               
-    result->next = imcs_ilike_next;            
+    if (input->flags & FLAG_TRANSLATED) {         
+        result->next = imcs_ilike_dict_next;            
+    } else { 
+        IMCS_CHECK_TYPE(input->elem_type, TID_char);                  
+        result->next = imcs_ilike_next;            
+    }
     result->flags = FLAG_CONTEXT_FREE;                                  
     ctx->pattern = pattern;
     while (*pat != '\0') { 

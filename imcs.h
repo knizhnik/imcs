@@ -117,6 +117,18 @@ typedef struct
 
 extern void imcs_ereport(int err_code, char const* err_msg,...)  __attribute__((noreturn));
 
+typedef struct { 
+    char*  val;
+    size_t len;
+} imcs_dict_key_t;
+
+typedef struct { 
+    imcs_dict_key_t key;
+    size_t code;
+} imcs_dict_entry_t;
+
+extern imcs_dict_entry_t** imcs_dict_code_map;
+
 enum imcs_commands 
 {
     imcs_cmd_parse,

@@ -292,3 +292,16 @@ select cs_project(c.*, cs_filter_pos(country = cs_str2code('USA'))) from CrashLo
  ("Mon Apr 14 11:54:00 2014",10000001,USA,"New York",iPhone4,wifi,iOS6.x)
 (1 row)
 
+select cs_project(c.*, cs_filter_pos(cs_ilike(device, 'iphone%'))) from CrashLog_get() c;
+                                cs_project                                
+--------------------------------------------------------------------------
+ ("Mon Apr 14 11:54:00 2014",10000001,USA,"New York",iPhone4,wifi,iOS6.x)
+ ("Mon Apr 14 11:56:00 2014",10000003,China,Beijing,iPhone5,wifi,iOS7.x)
+(2 rows)
+
+select cs_dictionary_size();
+ cs_dictionary_size 
+--------------------
+                 14
+(1 row)
+

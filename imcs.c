@@ -256,18 +256,7 @@ typedef struct {
     imcs_timeseries_t value;
 } imcs_hash_entry_t;
 
-
-typedef struct { 
-    char*  val;
-    size_t len;
-} imcs_dict_key_t;
-
-typedef struct { 
-    imcs_dict_key_t key;
-    size_t code;
-} imcs_dict_entry_t;
-
-static imcs_dict_entry_t** imcs_dict_code_map;
+imcs_dict_entry_t** imcs_dict_code_map;
 
 /*---- Function declarations ----*/
 
@@ -476,6 +465,7 @@ PG_FUNCTION_INFO_V1(cs_quantile);
 PG_FUNCTION_INFO_V1(cs_str2code);
 PG_FUNCTION_INFO_V1(cs_code2str);
 PG_FUNCTION_INFO_V1(cs_cut_and_code2str);
+PG_FUNCTION_INFO_V1(cs_dictionary_size);
 
 
 Datum columnar_store_initialized(PG_FUNCTION_ARGS);
@@ -679,6 +669,7 @@ Datum cs_quantile(PG_FUNCTION_ARGS);
 Datum cs_str2code(PG_FUNCTION_ARGS);
 Datum cs_code2str(PG_FUNCTION_ARGS);
 Datum cs_cut_and_code2str(PG_FUNCTION_ARGS);
+Datum cs_dictionary_size(PG_FUNCTION_ARGS);
 
 void imcs_ereport(int err_code, char const* err_msg,...)
 {
@@ -5242,4 +5233,10 @@ Datum cs_cut_and_code2str(PG_FUNCTION_ARGS)
         imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Code %u is out of dictionary range [0..%d)", code, imcs_dict_size); 
     }
 	PG_RETURN_TEXT_P(cstring_to_text_with_len(imcs_dict_code_map[code]->key.val, imcs_dict_code_map[code]->key.len));
+}
+
+Datum cs_dictionary_size(PG_FUNCTION_ARGS)
+{
+    int size = imcs_dict ? hash_get_num_entries(imcs_dict) : 0;
+    PG_RETURN_INT32(size);
 }
