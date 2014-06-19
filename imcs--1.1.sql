@@ -33,7 +33,7 @@ $$ language plpgsql;
 create function cs_create(table_name text, timestamp_id text, timeseries_id text default null, autoupdate bool default false) returns void as $create$
 declare
     meta record;
-    create_type text;       
+    create_type text;
     create_load_plsql_func text;
     create_load_func text;
     create_append_func text;
@@ -76,21 +76,21 @@ declare
 begin
     table_name:=lower(table_name);
     select oid,relkind='v' or relkind='m' into relid,is_view from pg_class where relname=table_name;
-    if relid is null then 
+    if relid is null then
          raise exception 'Table % is not found',table_name;
     end if;
-    
+
     if (timeseries_id is not null) then
         timeseries_id = lower(timeseries_id);
         select pg_type.typname,pg_attribute.attnum into id_type,id_attnum from pg_attribute,pg_type where pg_attribute.attrelid=relid and pg_attribute.atttypid=pg_type.oid and pg_attribute.attname=timeseries_id;
-        if id_type is null then 
+        if id_type is null then
              raise exception 'No attribute % in table %',timeseries_id,table_name;
         end if;
     end if;
 
     timestamp_id = lower(timestamp_id);
     select pg_type.typname,pg_attribute.attnum into timestamp_type,timestamp_attnum from pg_attribute,pg_type where pg_attribute.attrelid=relid and pg_attribute.atttypid=pg_type.oid and pg_attribute.attname=timestamp_id;
-    if timestamp_type is null then 
+    if timestamp_type is null then
         raise exception 'No attribute % in table %',timestamp_id,table_name;
     end if;
     timestamp_tid := cs_get_tid(timestamp_type::cs_elem_type);
@@ -102,17 +102,17 @@ begin
     if (timeseries_id is not null) then
         create_truncate_func := 'create function '||table_name||'_truncate() returns void as $$
             begin
-                perform columnar_store_truncate('''||lower(table_name)||'''); 
+                perform columnar_store_truncate('''||lower(table_name)||''');
             end; $$ language plpgsql';
         create_id_func :=  'create function '||table_name||'_id() returns varchar as $$ begin return '''||timeseries_id||'''; end;  $$ language plpgsql';
-    else 
+    else
         create_truncate_func := 'create function '||table_name||'_truncate() returns void as $$
             begin
-                perform '||table_name||'_delete(); 
+                perform '||table_name||'_delete();
             end; $$ language plpgsql';
     end if;
     create_timestamp_func :=  'create function '||table_name||'_timestamp() returns varchar as $$ begin return '''||timestamp_id||'''; end;  $$ language plpgsql';
-    
+
     create_drop_func := 'create function '||table_name||'_drop() returns void as $$
         begin
             drop function '||table_name||'_load(bool,text);
@@ -128,7 +128,7 @@ begin
             drop function '||table_name||'_insert_trigger();
             drop function '||table_name||'_delete_trigger();
             drop function '||table_name||'_truncate_trigger();';
-    end if;      
+    end if;
     create_project_func:='create function '||table_name||'_project('||table_name||'_timeseries,timeseries default null,disable_caching bool default false) returns setof '||table_name||' as ''$libdir/imcs'',''cs_project'' language C stable';
 
     if (timeseries_id is not null) then
@@ -145,7 +145,7 @@ begin
             drop function '||table_name||'_join('||id_type||',timeseries,integer);
             drop function '||table_name||'_id();
             drop function '||table_name||'_count('||id_type||');';
-    else 
+    else
         create_drop_func := create_drop_func||'
             drop function '||table_name||'_get('||timestamp_type||','||timestamp_type||',bigint);
             drop function '||table_name||'_span(bigint,bigint);
@@ -159,27 +159,27 @@ begin
     create_drop_func := create_drop_func||'
             drop type '||table_name||'_timeseries;
             drop function '||table_name||'_timestamp();
-            drop function '||table_name||'_drop(); 
+            drop function '||table_name||'_drop();
         end; $$ language plpgsql';
 
     create_load_func :=  'create function '||table_name||'_load(already_sorted bool default false, filter text default null) returns bigint as $$ begin return columnar_store_load('''||table_name||''','||id_attnum||','||timestamp_attnum||',already_sorted,filter::cstring); end; $$ language plpgsql';
 
     create_is_loaded_func := 'create function '||table_name||'_is_loaded() returns bool as $$ begin return columnar_store_initialized('''||table_name||'-'||timestamp_id||''',false); end; $$ language plpgsql';
 
-    -- PL/pgSQL version of load function is too slow... Leave it here just for reference. 
-    create_load_plsql_func := 'create function '||table_name||'_load() returns bigint as $$ 
-        declare 
+    -- PL/pgSQL version of load function is too slow... Leave it here just for reference.
+    create_load_plsql_func := 'create function '||table_name||'_load() returns bigint as $$
+        declare
             rec record;
             n bigint := 0;
         begin
-            if not columnar_store_initialized('''||table_name||'-'||timestamp_id||''','||(timeseries_id is not null)||') then 
-                for rec in select * from '||table_name||' order by '||timestamp_id||' loop 
+            if not columnar_store_initialized('''||table_name||'-'||timestamp_id||''','||(timeseries_id is not null)||') then
+                for rec in select * from '||table_name||' order by '||timestamp_id||' loop
                     n := n + 1;';
 
     if (timeseries_id is not null) then
         create_delete_head_func := 'create function '||table_name||'_delete('||timeseries_id||' '||id_type||',till_ts '||timestamp_type||' default null) returns bigint as $$ begin return '||table_name||'_delete('||timeseries_id||',null,till_ts); end; $$ language plpgsql';
 
-        create_delete_func := 'create function '||table_name||'_delete('||timeseries_id||' '||id_type||',from_ts '||timestamp_type||',till_ts '||timestamp_type||') returns bigint as $$ 
+        create_delete_func := 'create function '||table_name||'_delete('||timeseries_id||' '||id_type||',from_ts '||timestamp_type||',till_ts '||timestamp_type||') returns bigint as $$
         declare
             search_result timeseries;
         begin
@@ -188,7 +188,7 @@ begin
     else
         create_delete_head_func := 'create function '||table_name||'_delete(till_ts '||timestamp_type||' default null) returns bigint as $$ begin return '||table_name||'_delete(null,till_ts); end; $$ language plpgsql';
 
-        create_delete_func := 'create function '||table_name||'_delete(from_ts '||timestamp_type||',till_ts '||timestamp_type||') returns bigint as $$ 
+        create_delete_func := 'create function '||table_name||'_delete(from_ts '||timestamp_type||',till_ts '||timestamp_type||') returns bigint as $$
         declare
             search_result timeseries;
         begin
@@ -215,7 +215,7 @@ begin
                 id '||id_type||';
                 ts '||table_name||'_timeseries;
             begin
-                foreach id in array ids loop 
+                foreach id in array ids loop
                     ts:='||table_name||'_get(id,from_ts,till_ts,limit_ts);
                     return next ts;
                 end loop;
@@ -228,7 +228,7 @@ begin
                 id '||id_type||';
                 ts '||table_name||'_timeseries;
             begin
-                foreach id in array ids loop 
+                foreach id in array ids loop
                     ts:='||table_name||'_span(id,from_pos,till_pos);
                     return next ts;
                 end loop;
@@ -243,7 +243,7 @@ begin
                 root '||table_name||'_timeseries;
                 search_result timeseries;
             begin
-                for i in reverse array_upper(ids, 1)..array_lower(ids, 1) loop 
+                for i in reverse array_upper(ids, 1)..array_lower(ids, 1) loop
                     id := ids[i];
                     search_result:=columnar_store_search_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||id::text)::cstring,from_ts,till_ts,'||timestamp_tid||');
                     if (search_result is null) then
@@ -262,7 +262,7 @@ begin
             search_result timeseries;
         begin
             search_result:=columnar_store_search_'||timestamp_type||'(';
-    if (timeseries_id is not null) then 
+    if (timeseries_id is not null) then
         create_get_func := create_get_func||'('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring';
     else
         create_get_func := create_get_func||''''||table_name||'-'||timestamp_id||'''';
@@ -286,12 +286,12 @@ begin
     create_insert_trigger_func := 'create function '||table_name||'_insert_trigger() returns trigger as $$ begin ';
     create_delete_trigger_func := 'create function '||table_name||'_delete_trigger() returns trigger as $$ begin perform ';
     create_truncate_trigger_func := 'create function '||table_name||'_truncate_trigger() returns trigger as $$ begin perform '||table_name||'_truncate(); return NEW; end; $$ language plpgsql';
-    if (timeseries_id is not null) then 
+    if (timeseries_id is not null) then
         create_delete_trigger_func := create_delete_trigger_func||table_name||'_delete(OLD."'||timeseries_id||'",OLD."'||timestamp_id||'",OLD."'||timestamp_id||'"); return OLD; end; $$ language plpgsql';
-    else 
+    else
         create_delete_trigger_func := create_delete_trigger_func||table_name||'_delete(OLD."'||timestamp_id||'",OLD."'||timestamp_id||'"); return OLD; end; $$ language plpgsql';
     end if;
-   
+
     -- PL/pgSQL version of trigger functions are too slow
     -- create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure '||table_name||'_insert_trigger()';
     create_insert_trigger := 'create trigger '||table_name||'_insert after insert on '||table_name||' for each row execute procedure columnar_store_insert_trigger('''||table_name||''','||id_attnum||','||timestamp_attnum;
@@ -302,18 +302,18 @@ begin
         attr_tid := cs_get_tid(meta.typname::cs_elem_type);
         is_timestamp := false;
         attr_len := meta.attlen;
-        if (attr_len < 0) then -- char(N) type 
+        if (attr_len < 0) then -- char(N) type
             attr_len := meta.atttypmod - 4; -- atttypmod = N + VARHDRSZ
             -- Use dictioanry for varying size types instead of throwing error
-            -- if (attr_len < 0 and meta.attname <> timeseries_id) then 
-            --    raise exception 'Size is not specified for attribute %',meta.attname;              
+            -- if (attr_len < 0 and meta.attname <> timeseries_id) then
+            --    raise exception 'Size is not specified for attribute %',meta.attname;
             -- end if;
         end if;
         trigger_args := trigger_args||','''||meta.attname||''','''||meta.atttypid||''','''||attr_len||'''';
 
         if (meta.attname = timestamp_id) then
             is_timestamp := true;
-            if (timeseries_id is not null) then 
+            if (timeseries_id is not null) then
                 create_first_func := 'create function '||table_name||'_first('||timeseries_id||' '||id_type||') returns '||timestamp_type||
                    ' as $$ begin return columnar_store_first_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||
                    '); end; $$ language plpgsql strict stable';
@@ -321,7 +321,7 @@ begin
                         ' as $$ begin return columnar_store_last_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||
                         '); end; $$ language plpgsql strict stable';
                 create_count_func := 'create function '||table_name||'_count('||timeseries_id||' '||id_type||') returns bigint as $$ begin
-                    return columnar_store_count(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len|| 
+                    return columnar_store_count(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||
                     '); end; $$ language plpgsql strict stable';
                 create_join_func := 'create function '||table_name||'_join('||timeseries_id||' '||id_type||',ts timeseries,direction integer default 1) returns timeseries
                         as $$ begin return columnar_store_join_'||timestamp_type||'(('''||table_name||'-'||timestamp_id||'-''||'||timeseries_id||'::text)::cstring,'||attr_tid||','||attr_len||',ts,direction); end; $$ language plpgsql strict stable';
@@ -332,7 +332,7 @@ begin
                 create_last_func := 'create function '||table_name||'_last() returns '||timestamp_type||
                         ' as $$ begin return columnar_store_last_'||timestamp_type||'('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
                         '); end; $$ language plpgsql strict stable';
-                create_count_func := 'create function '||table_name||'_count() returns bigint as $$ begin 
+                create_count_func := 'create function '||table_name||'_count() returns bigint as $$ begin
                     return columnar_store_count('''||table_name||'-'||timestamp_id||''','||attr_tid||','||attr_len||
                     '); end; $$ language plpgsql strict stable';
                 create_join_func := 'create function '||table_name||'_join(ts timeseries,direction integer default 1) returns timeseries
@@ -349,16 +349,16 @@ begin
         create_type := create_type||sep||meta.attname||' timeseries';
         sep:=',';
 
-        if (timeseries_id is not null) then 
+        if (timeseries_id is not null) then
             create_load_plsql_func := create_load_plsql_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||rec."'||timeseries_id||'"::text)::cstring,rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
             create_delete_func := create_delete_func||perf||'columnar_store_delete(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,search_result,'||attr_tid||','||is_timestamp||','||attr_len||')';
             create_append_func := create_append_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||rec."'||timeseries_id||'"::text)::cstring,rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
             create_insert_trigger_func := create_insert_trigger_func||perf||'columnar_store_append_'||meta.typname||'(('''||table_name||'-'||meta.attname||'-''||NEW."'||timeseries_id||'"::text)::cstring,NEW."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
             if (not is_timestamp) then
-          	    create_get_func := create_get_func||'result."'||meta.attname||'":=columnar_store_get(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,search_result,'||attr_tid||','||attr_len||'); '; 
-                create_concat_func := create_concat_func||'root."'||meta.attname||'":=cs_concat(columnar_store_get(('''||table_name||'-'||meta.attname||'-''||id::text)::cstring,search_result,'||attr_tid||','||attr_len||'), root."'||meta.attname||'"); '; 
+          	    create_get_func := create_get_func||'result."'||meta.attname||'":=columnar_store_get(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,search_result,'||attr_tid||','||attr_len||'); ';
+                create_concat_func := create_concat_func||'root."'||meta.attname||'":=cs_concat(columnar_store_get(('''||table_name||'-'||meta.attname||'-''||id::text)::cstring,search_result,'||attr_tid||','||attr_len||'), root."'||meta.attname||'"); ';
             end if;
-       	    create_span_func := create_span_func||'result."'||meta.attname||'":=columnar_store_span(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,from_pos,till_pos,'||attr_tid||','||is_timestamp||','||attr_len||'); ';        
+       	    create_span_func := create_span_func||'result."'||meta.attname||'":=columnar_store_span(('''||table_name||'-'||meta.attname||'-''||'||timeseries_id||'::text)::cstring,from_pos,till_pos,'||attr_tid||','||is_timestamp||','||attr_len||'); ';
         else
             create_load_plsql_func := create_load_plsql_func||perf||'columnar_store_append_'||meta.typname||'('''||table_name||'-'||meta.attname||''',rec."'||meta.attname||'",'||attr_tid||','||is_timestamp||','||attr_len||')';
             create_delete_func := create_delete_func||perf||'columnar_store_delete('''||table_name||'-'||meta.attname||''',search_result,'||attr_tid||','||is_timestamp||','||attr_len||')';
@@ -372,7 +372,7 @@ begin
         perf:=',';
     end loop;
 
-    create_type := create_type||')'; 
+    create_type := create_type||')';
     create_load_plsql_func := create_load_plsql_func||'; end loop; end if; return n; end; $$ language plpgsql';
     create_append_func := create_append_func||'; end loop; return n; end; $$ language plpgsql';
     create_delete_func := create_delete_func||'; return cs_count(search_result); end; $$ language plpgsql';
@@ -380,7 +380,7 @@ begin
     create_span_func := create_span_func||'return result; end; $$ language plpgsql stable strict';
     create_concat_func := create_concat_func||'end loop; return root; end; $$ language plpgsql stable';
     create_insert_trigger_func := create_insert_trigger_func||'; return NEW; end; $$ language plpgsql';
-        
+
     create_insert_trigger := create_insert_trigger||trigger_args||')';
 
     execute create_type;
@@ -389,7 +389,7 @@ begin
     execute create_get_func;
     execute create_span_func;
     execute create_timestamp_func;
-    if (not is_view) then 
+    if (not is_view) then
         execute create_insert_trigger_func;
         execute create_insert_trigger;
         execute create_delete_trigger_func;
@@ -397,9 +397,9 @@ begin
         execute create_truncate_trigger_func;
         execute create_truncate_trigger;
     end if;
-    execute create_append_func;    
-    execute create_delete_func;    
-    execute create_delete_head_func;    
+    execute create_append_func;
+    execute create_delete_func;
+    execute create_delete_head_func;
     execute create_first_func;
     execute create_last_func;
     execute create_join_func;
@@ -413,7 +413,7 @@ begin
         execute create_concat_func;
         execute create_id_func;
     end if;
-    if (not autoupdate and not is_view) then 
+    if (not autoupdate and not is_view) then
         execute 'alter table '||table_name||' disable trigger user';
     end if;
 end;
@@ -427,9 +427,9 @@ create function columnar_store_span(cs_id cstring, from_pos bigint, till_pos big
 create function columnar_store_delete(cs_id cstring, search_result timeseries, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME' language C strict;
 create function columnar_store_truncate(table_name cstring) returns void as 'MODULE_PATHNAME' language C strict;
 
-create function columnar_store_insert_trigger() returns trigger as 'MODULE_PATHNAME' language C; 
+create function columnar_store_insert_trigger() returns trigger as 'MODULE_PATHNAME' language C;
 
-create function columnar_store_load(table_name cstring, timeseries_attnum integer, timestamp_attnum integer, already_sorted bool,filter cstring) returns bigint as 'MODULE_PATHNAME' language C; 
+create function columnar_store_load(table_name cstring, timeseries_attnum integer, timestamp_attnum integer, already_sorted bool,filter cstring) returns bigint as 'MODULE_PATHNAME' language C;
 create function columnar_store_append_char(cs_id cstring, val "char", field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int8' language C strict;
 create function columnar_store_append_int2(cs_id cstring, val int2, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int16' language C strict;
 create function columnar_store_append_int4(cs_id cstring, val int4, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int32' language C strict;
@@ -537,16 +537,16 @@ $$ begin return cs_const_str(val, length(val)); end; $$ language plpgsql stable 
 
 create function cs_add(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_add_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_add_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_add(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_add_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_add_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_add(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_add_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_add_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_add(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_add_str(ts timeseries, val text) returns timeseries 
+create function cs_add_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_add(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator + (leftarg=timeseries, rightarg=timeseries, procedure=cs_add, commutator=+);
@@ -557,13 +557,13 @@ create operator + (leftarg=timeseries, rightarg=timestamp, procedure=cs_add_dt, 
 
 create function cs_mul(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_mul_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_mul_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_mul(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_mul_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_mul_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_mul(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_mul_str(ts timeseries, val text) returns timeseries 
+create function cs_mul_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_mul(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator * (leftarg=timeseries, rightarg=timeseries, procedure=cs_mul, commutator= *);
@@ -573,16 +573,16 @@ create operator * (leftarg=timeseries, rightarg=text, procedure=cs_mul_str, comm
 
 create function cs_sub(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_sub_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_sub_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_sub(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_sub_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_sub_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_sub(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_sub_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_sub_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_sub(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_sub_str(ts timeseries, val text) returns timeseries 
+create function cs_sub_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_sub(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator - (leftarg=timeseries, rightarg=timeseries, procedure=cs_sub);
@@ -593,13 +593,13 @@ create operator - (leftarg=timeseries, rightarg=timestamp, procedure=cs_sub_dt);
 
 create function cs_div(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_div_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_div_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_div(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_div_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_div_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_div(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_div_str(ts timeseries, val text) returns timeseries 
+create function cs_div_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_div(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator / (leftarg=timeseries, rightarg=timeseries, procedure=cs_div);
@@ -609,13 +609,13 @@ create operator / (leftarg=timeseries, rightarg=text, procedure=cs_div_str);
 
 create function cs_mod(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_mod_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_mod_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_mod(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_mod_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_mod_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_mod(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_mod_str(ts timeseries, val text) returns timeseries 
+create function cs_mod_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_mod(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator % (leftarg=timeseries, rightarg=timeseries, procedure=cs_mod);
@@ -625,10 +625,10 @@ create operator % (leftarg=timeseries, rightarg=text, procedure=cs_mod_str);
 
 create function cs_pow(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_pow_num(ts timeseries, val float8) returns timeseries 
+create function cs_pow_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_pow(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_pow_str(ts timeseries, val text) returns timeseries 
+create function cs_pow_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_pow(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator ^ (leftarg=timeseries, rightarg=timeseries, procedure=cs_pow);
@@ -637,10 +637,10 @@ create operator ^ (leftarg=timeseries, rightarg=text, procedure=cs_pow_str);
 
 create function cs_and(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_and_int(ts timeseries, val bigint) returns timeseries 
+create function cs_and_int(ts timeseries, val bigint) returns timeseries
 as $$ begin return cs_and(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_and_str(ts timeseries, val text) returns timeseries 
+create function cs_and_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_and(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator & (leftarg=timeseries, rightarg=timeseries, procedure=cs_and, commutator= &);
@@ -649,10 +649,10 @@ create operator & (leftarg=timeseries, rightarg=text, procedure=cs_and_str, comm
 
 create function cs_or(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_or_int(ts timeseries, val bigint) returns timeseries 
+create function cs_or_int(ts timeseries, val bigint) returns timeseries
 as $$ begin return cs_or(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_or_str(ts timeseries, val text) returns timeseries 
+create function cs_or_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_or(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator | (leftarg=timeseries, rightarg=timeseries, procedure=cs_or, commutator= |);
@@ -661,10 +661,10 @@ create operator | (leftarg=timeseries, rightarg=text, procedure=cs_or_str, commu
 
 create function cs_xor(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_xor_int(ts timeseries, val bigint) returns timeseries 
+create function cs_xor_int(ts timeseries, val bigint) returns timeseries
 as $$ begin return cs_xor(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_xor_str(ts timeseries, val text) returns timeseries 
+create function cs_xor_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_xor(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator # (leftarg=timeseries, rightarg=timeseries, procedure=cs_xor, commutator= #);
@@ -673,16 +673,16 @@ create operator # (leftarg=timeseries, rightarg=text, procedure=cs_xor_str, comm
 
 create function cs_concat(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable;
 
-create function cs_concat_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_concat_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_concat(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_concat_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_concat_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_concat(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_concat_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_concat_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_concat(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_concat_str(ts timeseries, val text) returns timeseries 
+create function cs_concat_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_concat(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator ||| (leftarg=timeseries, rightarg=timeseries, procedure=cs_concat, commutator= |||);
@@ -693,23 +693,24 @@ create operator ||| (leftarg=timeseries, rightarg=text, procedure=cs_concat_str,
 
 create function cs_cat(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_cat_seq_num(ts timeseries, val float8) returns timeseries 
+create function cs_cat_seq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_cat(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_cat_num_seq(val float8, ts timeseries) returns timeseries 
+create function cs_cat_num_seq(val float8, ts timeseries) returns timeseries
 as $$ begin return cs_cat(cs_const_num(val, cs_type(ts)), ts); end; $$ language plpgsql stable strict;
 
-create function cs_cat_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_cat_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_cat(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_cat_str(ts timeseries, val text) returns timeseries 
+create function cs_cat_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_cat(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator || (leftarg=timeseries, rightarg=timeseries, procedure=cs_cat, commutator= ||);
-create operator || (leftarg=timeseries, rightarg=float8, procedure=cs_cat_seq_num, commutator= ||);
-create operator || (leftarg=float8, rightarg=timeseries, procedure=cs_cat_num_seq, commutator= ||);
-create operator || (leftarg=timeseries, rightarg=timestamp, procedure=cs_cat_dt, commutator= ||);
-create operator || (leftarg=timeseries, rightarg=text, procedure=cs_cat_str, commutator= ||);
+-- This overloads confuse PostgreSQL compiler which tries to apply them for example in the following case: 'Hello'||1
+-- create operator || (leftarg=timeseries, rightarg=float8, procedure=cs_cat_seq_num, commutator= ||);
+-- create operator || (leftarg=float8, rightarg=timeseries, procedure=cs_cat_num_seq, commutator= ||);
+-- create operator || (leftarg=timeseries, rightarg=timestamp, procedure=cs_cat_dt, commutator= ||);
+-- create operator || (leftarg=timeseries, rightarg=text, procedure=cs_cat_str, commutator= ||);
 
 create function cs_cut(str bytea, format cstring) returns record as 'MODULE_PATHNAME' language C stable strict;
 create function cs_as(str bytea, type_name cstring) returns record as 'MODULE_PATHNAME' language C stable strict;
@@ -720,13 +721,13 @@ create operator ~~ (leftarg=timeseries, rightarg=text, procedure=cs_ilike);
 
 create function cs_eq(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_eq_num(ts timeseries, val float8) returns timeseries 
+create function cs_eq_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_eq(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_eq_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_eq_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_eq(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_eq_str(ts timeseries, val text) returns timeseries 
+create function cs_eq_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_eq(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator = (leftarg=timeseries, rightarg=timeseries, procedure=cs_eq, commutator= =);
@@ -736,29 +737,29 @@ create operator = (leftarg=timeseries, rightarg=timestamp, procedure=cs_eq_dt, c
 
 create function cs_ne(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_ne_num(ts timeseries, val float8) returns timeseries 
+create function cs_ne_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_ne(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_ne_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_ne_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_ne(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_ne_str(ts timeseries, val text) returns timeseries 
+create function cs_ne_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_ne(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator <> (leftarg=timeseries, rightarg=timeseries, procedure=cs_ne, commutator= <>);
 create operator <> (leftarg=timeseries, rightarg=float8, procedure=cs_ne_num, commutator= <>);
 create operator <> (leftarg=timeseries, rightarg=text, procedure=cs_ne_str, commutator= <>);
 create operator <> (leftarg=timeseries, rightarg=timestamp, procedure=cs_ne_dt, commutator= <>);
- 
+
 create function cs_ge(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_ge_num(ts timeseries, val float8) returns timeseries 
+create function cs_ge_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_ge(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_ge_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_ge_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_ge(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_ge_str(ts timeseries, val text) returns timeseries 
+create function cs_ge_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_ge(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator >= (leftarg=timeseries, rightarg=timeseries, procedure=cs_ge, commutator= <=);
@@ -768,13 +769,13 @@ create operator >= (leftarg=timeseries, rightarg=timestamp, procedure=cs_ge_dt, 
 
 create function cs_le(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_le_num(ts timeseries, val float8) returns timeseries 
+create function cs_le_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_le(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_le_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_le_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_le(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_le_str(ts timeseries, val text) returns timeseries 
+create function cs_le_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_le(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator <= (leftarg=timeseries, rightarg=timeseries, procedure=cs_le, commutator= >=);
@@ -784,13 +785,13 @@ create operator <= (leftarg=timeseries, rightarg=timestamp, procedure=cs_le_dt, 
 
 create function cs_lt(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_lt_num(ts timeseries, val float8) returns timeseries 
+create function cs_lt_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_lt(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_lt_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_lt_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_lt(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_lt_str(ts timeseries, val text) returns timeseries 
+create function cs_lt_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_lt(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator < (leftarg=timeseries, rightarg=timeseries, procedure=cs_lt, commutator= >);
@@ -800,13 +801,13 @@ create operator < (leftarg=timeseries, rightarg=timestamp, procedure=cs_lt_dt, c
 
 create function cs_gt(timeseries,timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_gt_num(ts timeseries, val float8) returns timeseries 
+create function cs_gt_num(ts timeseries, val float8) returns timeseries
 as $$ begin return cs_gt(ts, cs_const_num(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_gt_dt(ts timeseries, val timestamp) returns timeseries 
+create function cs_gt_dt(ts timeseries, val timestamp) returns timeseries
 as $$ begin return cs_gt(ts, cs_const_dt(val, cs_type(ts))); end; $$ language plpgsql stable strict;
 
-create function cs_gt_str(ts timeseries, val text) returns timeseries 
+create function cs_gt_str(ts timeseries, val text) returns timeseries
 as $$ begin return cs_gt(ts, cs_parse_tid(val, cs_type(ts), cs_elem_size(ts))); end; $$ language plpgsql stable strict;
 
 create operator > (leftarg=timeseries, rightarg=timeseries, procedure=cs_gt, commutator= <);
@@ -1035,7 +1036,7 @@ create function cs_from_array(anyarray, elem_size integer default 0) returns tim
 create type cs_profile_item as (command text, counter integer);
 create function cs_profile(reset bool default false) returns setof cs_profile_item as 'MODULE_PATHNAME' language C stable strict;
 
-create function cs_str2code(str varchar) returns integer as 'MODULE_PATHNAME' language C stable strict; 
-create function cs_code2str(id integer) returns varchar as 'MODULE_PATHNAME' language C stable strict; 
-create function cs_code2str(str bytea, column_no integer) returns varchar as 'MODULE_PATHNAME','cs_cut_and_code2str' language C stable strict; 
+create function cs_str2code(str varchar) returns integer as 'MODULE_PATHNAME' language C stable strict;
+create function cs_code2str(id integer) returns varchar as 'MODULE_PATHNAME' language C stable strict;
+create function cs_code2str(str bytea, column_no integer) returns varchar as 'MODULE_PATHNAME','cs_cut_and_code2str' language C stable strict;
 create function cs_dictionary_size() returns integer as 'MODULE_PATHNAME' language C stable strict;
