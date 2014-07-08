@@ -845,7 +845,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
         return NULL;
     }
     if (imcs == NULL) { 
-        imcs_ereport(ERRCODE_LOCK_NOT_AVAILABLE, "Colunmar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list");
+        imcs_ereport(ERRCODE_LOCK_NOT_AVAILABLE, "Columnar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list");
     }
     if (create) { 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
