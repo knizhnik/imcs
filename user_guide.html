@@ -29,7 +29,7 @@
 </ul>
 <li><a href="#operators">Operators</a></li>
 <li><a href="#projection">Projection issues</a></li>
-<li><a href="#impletemtation">Implementation details</a></li>
+<li><a href="#implementation">Implementation details</a></li>
 <li><a href="#disk">Scaling beyond physical memory</a></li>
 <li><a href="#installation">Installation and tuning</a></li>
 <li><a href="#performance">Performance comparison</a></li>
@@ -151,7 +151,7 @@ allocation requests of columnar store. This function returns total number of rem
 are reset after execution of this call.</td>
 </tr>
 <tr>
-<td><code>function <b>TABLE</b>_timestamp() returns varchar</code></td><td>Returns name of timeserties timestamp column for this table</td>
+<td><code>function <b>TABLE</b>_timestamp() returns varchar</code></td><td>Returns name of timeseries timestamp column for this table</td>
 </tr>
 <tr>
 <td><code>function cs_str2code(str varchar) returns integer</code></td>
@@ -269,11 +269,11 @@ Functions generated for accessing single timeseries (timeseries having no identi
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_get(low <b>TIMESTAMP_TYPE</b> default null, high <b>TIMESTAMP_TYPE</b> default null, limit_ts bigint default null) returns <b>TABLE</b>_timeseries</code></td>
-<td>Returns vertical representation of the whole table or its time slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open. It is possible to limit number of selected elements by specifying <code>limit_ts</code> parameter (if low boundary is open then last <code>limit_ts</code> elements will be selected, otherwise first <code>limit_ts</code> elements will be selected).</td>
+<td>Returns vertical representation of the whole table or its time slice. Returned record contains the same columns as record of the original table, but they have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open. It is possible to limit number of selected elements by specifying <code>limit_ts</code> parameter (if low boundary is open then last <code>limit_ts</code> elements will be selected, otherwise first <code>limit_ts</code> elements will be selected).</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_span(from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns <b>TABLE</b>_timeseries</code></td>
-<td>Returns vertical representation of the whole table or its horisonal slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). 
+<td>Returns vertical representation of the whole table or its horizontal slice. Returned record contains the same columns as record of the original table, but they have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). 
 Parameter <code>from_pos</code> specifies start position in timeseries (inclusive) and parameter <code>till_pos</code> specifies end position (inclusive). If <code>till_pos</code> parameter is missed, then subsequence spans till end of timeseries. Values of both <code>from_pos</code> and <code>till_pos</code> parameters can be negative. In this case position is calculated from end of timeseries, i.e. <code><b>TABLE</b>_span(from_pos:=-1)</code> extracts last element of the timeseries.</td>
 </tr>
 <tr>
@@ -284,12 +284,12 @@ Parameter <code>from_pos</code> specifies start position in timeseries (inclusiv
 <td><code>function <b>TABLE</b>_delete(till <b>TIMESTAMP_TYPE</b> default null) returns bigint</code></td>
 <td>Deletes timeseries elements from the beginning till specified timestamp <code>till</code> (inclusive) or delete all elements if this parameter is null/omitted.
 This function is  equivalent to <code><b>TABLE</b>_delete(null, till)</code>. IMCS provides separate function for it because it is intended to be the 
-most frequent case of deleting elements from timeseries: it correponds to shifting data window when new elements are appended and 
+most frequent case of deleting elements from timeseries: it corresponds to shifting data window when new elements are appended and 
 deteriorated are thrown away. This function returns number of deleted elements.</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_join(other timeseries, direction integer default 1) returns timeseries</code></td>
-<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp matches correspodent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
+<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp matches correspondent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
 <ul>
 <li>If <code>direction</code> is less than zero, then this timestamp should be less or equal than other timestamp (locate timeseries element preceding timestamp).</li>
 <li>If <code>direction</code> is zero, then this timestamp should be equal to other timestamp (exact match of timestamps). </li>
@@ -320,7 +320,7 @@ Functions generated for accessing multiple timeseries (source table contains ide
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>, <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null, limit_ts bigint default null) returns <b>TABLE</b>_timeseries</code></td>
-<td>Returns timeseries with specified identifier for the corresponding table or its time slice. Returned record contains the same columns as record of original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open. It is possible to limit number of selected elements by specifying <code>limit_ts</code> parameter (if low boundary is open then last <code>limit_ts</code> elements will be selected, otherwise first <code>limit_ts</code> elements will be selected).</td>
+<td>Returns timeseries with specified identifier for the corresponding table or its time slice. Returned record contains the same columns as record of original table, but they have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open. It is possible to limit number of selected elements by specifying <code>limit_ts</code> parameter (if low boundary is open then last <code>limit_ts</code> elements will be selected, otherwise first <code>limit_ts</code> elements will be selected).</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_get(id <b>TIMESERIES_ID_TYPE</b>[], <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null, limit_ts bigint default null) returns setof <b>TABLE</b>_timeseries</code></td>
@@ -328,7 +328,7 @@ Functions generated for accessing multiple timeseries (source table contains ide
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_span(id <b>TIMESERIES_ID_TYPE</b>, from_pos bigint default 0, till_pos bigint default 9223372036854775807) returns <b>TABLE</b>_timeseries</code></td>
-<td>Returns timeseries with specified identifier for the corresponding table or its horisonal slice. Returned record contains the same columns as record of the original table, but them have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). 
+<td>Returns timeseries with specified identifier for the corresponding table or its horizontal slice. Returned record contains the same columns as record of the original table, but they have <code>timeseries</code> type instead of original scalar types. These columns can be used in timeseries functions (cs_*). 
 Parameter <code>from_pos</code> specifies start position in timeseries (inclusive) and parameter <code>till_pos</code> specifies end position (inclusive). If <code>till_pos</code> parameter is missed, then subsequence spans till end of timeseries. Values of both <code>from_pos</code> and <code>till_pos</code> parameters can be negative. In this case position is calculated from end of timeseries, i.e. <code><b>TABLE</b>_span(id,from_pos:=-1)</code> extracts last element of the timeseries.</td>
 </tr>
 <tr>
@@ -337,7 +337,7 @@ Parameter <code>from_pos</code> specifies start position in timeseries (inclusiv
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_concat(id <b>TIMESERIES_ID_TYPE</b>[], <b>TIMESTAMP_TYPE</b> low default null, <b>TIMESTAMP_TYPE</b> high default null) returns <b>TABLE</b>_timeseries</code></td>
-<td>Concatenates slices of timeseries for the specified identifiers. Returned record contains the same columns as record of original table, but them have <code>timeseries</code> type instead of original scalar types. Each such timeseries is concatenation of slices of timeseries for all specified identifiers. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
+<td>Concatenates slices of timeseries for the specified identifiers. Returned record contains the same columns as record of original table, but they have <code>timeseries</code> type instead of original scalar types. Each such timeseries is concatenation of slices of timeseries for all specified identifiers. These columns can be used in timeseries functions (cs_*). If <code>high</code> or <code>low</code> parameters are not null, then them specify correspondingly upper/lower inclusive boundary for timestamp value. If some or both parameters are omitted, then corresponding boundary is open.</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_delete(id <b>TIMESERIES_ID_TYPE</b>, low <b>TIMESTAMP_TYPE</b>, high <b>TIMESTAMP_TYPE</b>) returns bigint</code></td>
@@ -347,12 +347,12 @@ Parameter <code>from_pos</code> specifies start position in timeseries (inclusiv
 <td><code>function <b>TABLE</b>_delete(id <b>TIMESERIES_ID_TYPE</b>, till <b>TIMESTAMP_TYPE</b> default null) returns bigint</code></td>
 <td>Deletes timeseries elements from the beginning till specified timestamp <code>till</code> (inclusive) or delete all elements if this parameter is null/omitted.
 This function is  equivalent to <code><b>TABLE</b>_delete(id, null, till)</code>. IMCS provides separate function for it because it is intended to be the 
-most frequent case of deleting elements from timeseries: it correponds to shifting data window when new elements are appended and 
+most frequent case of deleting elements from timeseries: it corresponds to shifting data window when new elements are appended and 
 deteriorated are thrown away. This function returns number of deleted elements.</td>
 </tr>
 <tr>
 <td><code>function <b>TABLE</b>_join(id <b>TIMESERIES_ID_TYPE</b>, other timeseries) returns timeseries</code></td>
-<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp  matches correspodent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
+<td>Joins timestamp with <code>other</code> unsorted timeseries. It returns positions of elements in this timeseries which timestamp  matches correspondent element of joined timeseries. Semantic of matching depends on value of the <code>direction</code> parameter:
 <ul>
 <li>If <code>direction</code> is less than zero, then this timestamp should be less or equal than other timestamp (locate timeseries element preceding timestamp).</li>
 <li>If <code>direction</code> is zero, then this timestamp should be equal to other timestamp (exact match of timestamps). </li>
@@ -1011,7 +1011,7 @@ Execution of these functions can be parallelized.
 <tr>
 <td><code>function cs_hash_dup_count(input timeseries, group_by timeseries, out count timeseries, out groups timeseries, min_occurrences integer default 1) returns record</code></td>
 <td>Counts number of duplicates for each group. Groups are identified by <code>group_by</code> timeseries. 
-This function has two output parameters: <code>count</code> timeseries contains counters and <code>groups</code> timeseries contains corresponding group key values. Parameter <code>min_occurrences</code> specifies minimal number of occurrences of element in each group. It dshould be positive number. With default value 1 of <code>min_occurrences</code> this function calculates number of distinct values.</td>
+This function has two output parameters: <code>count</code> timeseries contains counters and <code>groups</code> timeseries contains corresponding group key values. Parameter <code>min_occurrences</code> specifies minimal number of occurrences of element in each group. It should be positive number. With default value 1 of <code>min_occurrences</code> this function calculates number of distinct values.</td>
 </tr>
 <tr>
 <td><code>function cs_hash_max(input timeseries, group_by timeseries, out max timeseries, out groups timeseries) returns record</code></td>
@@ -1146,7 +1146,7 @@ For example <code>cs_quantile('float4:{10,3,0,3,4,5,9,11,7,3,3}', 2)='float4:{0,
 
 <h3><a name="spec">Special functions</a></h3>
 <p>
-This group contains functions performing quite complex precessing of timeseries.
+This group contains functions performing quite complex processing of timeseries.
 </p><p>
 <table border width='100%'>
 <tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
@@ -1166,7 +1166,7 @@ For example <code>cs_extrema('float4:{1,2,3,2,1,0,0,1,1,2,4,0}', 0)='int8:{2,6,1
 </tr>
 <tr>
 <td><code>function cs_stretch(ts1 timeseries, ts2 timeseries, vals timeseries, filler float8 defaults 1.0) returns timeseries</code></td>
-<td>Stretches <code>vals</code> timeseries to the length of first timeseries. Repeats elements of <code>vals</code> timeseries while corresponding timestamp (timeseries <code>ts2</code>) is larger than timestamp from <code>ts1</code>. For exampe <code>cs_stretch('int4:{1,2,3,4,5}', 'int4:{2,4}', 'float4:{1.1,2.2}', 1.0) = 'float4:{1.1,2.2,2.2,1.0,1.0}'</code>. This function can be used to calculate split adjusted price. We need to revert timeseries of splits, calculate cumulative product, stretch and multiply it on price.</td>
+<td>Stretches <code>vals</code> timeseries to the length of first timeseries. Repeats elements of <code>vals</code> timeseries while corresponding timestamp (timeseries <code>ts2</code>) is larger than timestamp from <code>ts1</code>. For example <code>cs_stretch('int4:{1,2,3,4,5}', 'int4:{2,4}', 'float4:{1.1,2.2}', 1.0) = 'float4:{1.1,2.2,2.2,1.0,1.0}'</code>. This function can be used to calculate split adjusted price. We need to revert timeseries of splits, calculate cumulative product, stretch and multiply it on price.</td>
 </tr>
 <tr>
 <td><code>function cs_stretch0(ts1 timeseries, ts2 timeseries, vals timeseries, filler float8 defaults 0.0) returns timeseries</code></td>
@@ -1368,7 +1368,7 @@ Conclusion:
 </ol>
 </p>
 
-<h2><a name="impletemtation">Implementation details</a></h2>
+<h2><a name="implementation">Implementation details</a></h2>
 <p>
 Timeseries are stored in shared memory as B-Tree pages. This B-Tree provides fast access to timeseries element by position 
 (for all types) or by value (only for timestamp). There is separate B-Tree for each timeseries. PostgreSQL hash is used to locate
@@ -1382,7 +1382,7 @@ If <code>imcs.serializable</code> is false, then lock is released at the end of 
 Right now IMCS supports RLE compression for timeseries of character type. But duplicates are eliminated only at B-Tree pages.
 When elements are extracted into tile, them are decompressed. Using RLE at tiles level can significantly increase speed of some operations.
 For example if we perform aggregation (let's say sum) of timeseries with large number of repeated duplicate values, then RLE
-can significantly reduce number of performed operation. If value is is repeated 100 times, then with RLE we can just 
+can significantly reduce number of performed operation. If value is repeated 100 times, then with RLE we can just 
 calculate <code>100*x</code> instead of performing 100 additions.
 But IMCS is first of all oriented on financial data (trading systems). And here duplicates are not so often, at least for numeric characteristics.
 (price, volume, date,...).
