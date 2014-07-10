@@ -47,6 +47,8 @@ Initial version
 
 --- Release version 1.06 (10.07.2014) -------------------------------------
 1. Fix problem with "imcs.use_rle" property.
-2. Implicitely convert code to string for LIKE operator.
+2. Implicitly convert code to string for LIKE operator.
 3. Add cs_dictionary_size() function.
 4. Remove overloaded version of || operator with scalars
+5. Fix mistypings in documentation
+
