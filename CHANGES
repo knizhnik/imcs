@@ -6,7 +6,7 @@ Initial version
 
 1. Add support of MONEY type
 2. Add support of VARCHAR type
-3. Implement join by timestamp 
+3. Implement join by timestamp
 4. Correctly handle NULL in TABLE_get(id) function
 5. Correctly handle materialized views
 6. Fix bug in autoload
@@ -42,10 +42,11 @@ Initial version
 5. Add TABLE_id() and TABLE_timestamp() functions
 6. Support load of unlimited varying size strings to columnar store using dictionary
 7. Fix synchronization issue in delete function
-8. Fix bugs in RLE branch of imcs_delete_page and lack of range check in imcs_delete 
+8. Fix bugs in RLE branch of imcs_delete_page and lack of range check in imcs_delete
 9. Fix bug in imcs_search
 
---- Release version 1.06 (??.05.2014) -------------------------------------
+--- Release version 1.06 (10.07.2014) -------------------------------------
 1. Fix problem with "imcs.use_rle" property.
 2. Implicitely convert code to string for LIKE operator.
 3. Add cs_dictionary_size() function.
+4. Remove overloaded version of || operator with scalars
