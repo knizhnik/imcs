@@ -34,6 +34,11 @@ extern char* imcs_file_path;
 #define IMCS_MAX_ERROR_MSG_LEN 256
 #define IMCS_SMALL_DICTIONARY 0x10000 /* 64kb - identifier can be stored in two bytes */
 
+#ifdef __GNUC__
+#define IMCS_ALIGN_16 __attribute__((aligned(16)))
+#else
+#define IMCS_ALIGN_16 
+#endif
 
 typedef union 
 { 
@@ -55,7 +60,7 @@ typedef union
     int64 arr_int64[1];
     float arr_float[1];
     double arr_double[1];
-} imcs_tile_t;
+} imcs_tile_t IMCS_ALIGN_16;
 
 typedef enum 
 { 

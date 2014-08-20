@@ -924,6 +924,19 @@ void* imcs_alloc(size_t size)
     return ptr;
 }
 
+/* align returned memory on 16-byte boundary to allow use of SSE vector instructions.
+ * This memory should not be deallocated using imcs_free
+ */
+void* imcs_alloc_aligned(size_t size) 
+{
+    char* ptr;
+    imcs_alloc_mutex->lock(imcs_alloc_mutex);
+    ptr = (char*)MemoryContextAlloc(imcs_mem_ctx, size + 8);
+    ptr += -(size_t)ptr & 15;
+    imcs_alloc_mutex->unlock(imcs_alloc_mutex);
+    return ptr;
+}
+
 void imcs_free(void* ptr) 
 { 
     imcs_alloc_mutex->lock(imcs_alloc_mutex);
@@ -979,7 +992,7 @@ imcs_iterator_h imcs_new_iterator(size_t elem_size, size_t context_size)
 {
     size_t tile_size = MAXALIGN(elem_size*imcs_tile_size);
     size_t iterator_size = sizeof(imcs_iterator_t) + tile_size + context_size;
-    imcs_iterator_h iterator = (imcs_iterator_h)imcs_alloc(iterator_size);
+    imcs_iterator_h iterator = (imcs_iterator_h)imcs_alloc_aligned(iterator_size);
     iterator->flags = 0;
     iterator->cs_hdr = NULL;
     iterator->opd[0] = NULL;
@@ -1000,7 +1013,7 @@ imcs_iterator_h imcs_new_iterator(size_t elem_size, size_t context_size)
 
 imcs_iterator_h imcs_clone_iterator(imcs_iterator_h iterator) 
 {
-    imcs_iterator_h clone = (imcs_iterator_h)imcs_alloc(iterator->iterator_size);
+    imcs_iterator_h clone = (imcs_iterator_h)imcs_alloc_aligned(iterator->iterator_size);
     memcpy(clone, iterator, iterator->iterator_size);
     clone->context = (char*)clone + ((char*)iterator->context - (char*)iterator);
     return clone;
