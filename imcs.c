@@ -931,7 +931,7 @@ void* imcs_alloc_aligned(size_t size)
 {
     char* ptr;
     imcs_alloc_mutex->lock(imcs_alloc_mutex);
-    ptr = (char*)MemoryContextAlloc(imcs_mem_ctx, size + 8);
+    ptr = (char*)MemoryContextAlloc(imcs_mem_ctx, size + 16);
     ptr += -(size_t)ptr & 15;
     imcs_alloc_mutex->unlock(imcs_alloc_mutex);
     return ptr;
