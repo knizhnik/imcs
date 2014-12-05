@@ -2335,31 +2335,46 @@ static imcs_adt_parser_t* imcs_new_dict_parser()
 Datum cs_parse_tid(PG_FUNCTION_ARGS)
 {
     text* t = PG_GETARG_TEXT_P(0);
+    char* txt = VARDATA(t);
     size_t text_len = VARSIZE(t) - VARHDRSZ;
-    char* str = (char*)imcs_alloc(text_len+1);
     imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1);
     int elem_size = PG_GETARG_INT32(2);
     imcs_iterator_h result;
-    IMCS_TRACE(parse);
-    memcpy(str, VARDATA(t), text_len);
-    str[text_len] = '\0';
-    switch (elem_type) { 
-      case TID_date:
-        result = imcs_adt_parse_int32(str, imcs_new_adt_parser(DATEOID, fcinfo));
-        break;
-      case TID_time:
-        result = imcs_adt_parse_int64(str, imcs_new_adt_parser(TIMEOID, fcinfo));
-        break;
-      case TID_timestamp:
-        result = imcs_adt_parse_int64(str, imcs_new_adt_parser(TIMESTAMPOID, fcinfo));
-        break;
-      case TID_money:
-        result = imcs_adt_parse_int64(str, imcs_new_adt_parser(CASHOID, fcinfo));
-        break;
-      default:        
-        IMCS_APPLY_CHAR(parse, elem_type, (str, elem_size));
+    if (elem_type == TID_char && *txt != '{') { 
+        /* make it possible to compare column with string */
+        char* elem = (char*)palloc(elem_size);
+        if (elem_size < text_len) { 
+            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
+        } else { 
+            memcpy(elem, txt, text_len);
+            memset(elem + text_len, '\0', elem_size - text_len);
+        }
+        result = imcs_const_char(elem, elem_size);
+        pfree(elem);
+        IMCS_TRACE(const);
+    } else {
+        IMCS_TRACE(parse);
+        char* str = (char*)imcs_alloc(text_len+1);
+        memcpy(str, txt, text_len);
+        str[text_len] = '\0';
+        switch (elem_type) { 
+        case TID_date:
+            result = imcs_adt_parse_int32(str, imcs_new_adt_parser(DATEOID, fcinfo));
+            break;
+        case TID_time:
+            result = imcs_adt_parse_int64(str, imcs_new_adt_parser(TIMEOID, fcinfo));
+            break;
+        case TID_timestamp:
+            result = imcs_adt_parse_int64(str, imcs_new_adt_parser(TIMESTAMPOID, fcinfo));
+            break;
+        case TID_money:
+            result = imcs_adt_parse_int64(str, imcs_new_adt_parser(CASHOID, fcinfo));
+            break;
+        default:        
+            IMCS_APPLY_CHAR(parse, elem_type, (str, elem_size));
+        }
+        result->elem_type = elem_type;
     }
-    result->elem_type = elem_type;
     PG_RETURN_POINTER(result);
 }
 Datum cs_const_str(PG_FUNCTION_ARGS)
