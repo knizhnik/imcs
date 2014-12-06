@@ -714,6 +714,7 @@ create operator || (leftarg=timeseries, rightarg=timeseries, procedure=cs_cat, c
 
 create function cs_cut(str bytea, format cstring) returns record as 'MODULE_PATHNAME' language C stable strict;
 create function cs_as(str bytea, type_name cstring) returns record as 'MODULE_PATHNAME' language C stable strict;
+create function cs_as_array(str bytea, format cstring) returns text[] as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_like(timeseries,pattern text) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_ilike(timeseries,pattern text) returns timeseries as 'MODULE_PATHNAME' language C stable strict;

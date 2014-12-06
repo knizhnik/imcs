@@ -781,7 +781,7 @@ Concerning optional <code>disable_caching</code> parameter please read section <
 <td><code>function cs_project_agg(anyelement, positions timeseries default null, disable_caching book default false) returns setof cs_agg_result</code></td>
 <td>This is specialized version of <code>cs_project</code> for transposing result of <code>hash_agg_*</code> functions.
 They return two timeseries: the first one with values of aggregate and the second one with values of group-by key.
-<code>cs_project_agg</code> transforms this result to set of <code>cs_agg_result</code> rows, consisting of two columns: <code>(agg_val float8, group_by bytea)</code>. In case of combining several keys for group-by key, it can be splitted back into separate values using <code>cs_cut</code> or <code>cs_as</code> functions. 
+<code>cs_project_agg</code> transforms this result to set of <code>cs_agg_result</code> rows, consisting of two columns: <code>(agg_val float8, group_by bytea)</code>. In case of combining several keys for group-by key, it can be splitted back into separate values using <code>cs_cut</code>, <code>cs_as</code> or <code>cs_as_array</code> functions. 
 Concerning optional <code>disable_caching</code> parameter please read section <a href="#projection">Projection issues</a>.
 </td>
 </tr>
@@ -998,7 +998,7 @@ First <code>window_size-1</code> elements of result can be skipped to get correc
 Aggregation with group-by. These function perform grouping and aggregation similar to SQL. All elements of <code>group_by</code> sequence with the same value forms single group. It is done using hash function, so <code>cs_hash_*</code> aggregates require additional memory for building hash table. These functions contain two out parameters: return two timeseries.
 The first one contains calculated aggregates. The second one contains corresponding group keys.
 </p><p>
-If it is necessary to perform grouping by more than one key, it is possible to use <code>cs_cat</code> (or <code>||</code> SQL operator) to concatenate several columns. Later it is possible to use <code>cs_cut</code> or <code>cs_as</code> functions to split concatenated value back into components.
+If it is necessary to perform grouping by more than one key, it is possible to use <code>cs_cat</code> (or <code>||</code> SQL operator) to concatenate several columns. Later it is possible to use <code>cs_cut</code>, <code>cs_as</code> or <code>cs_as_array</code> functions to split concatenated value back into components.
 </p><p>
 Execution of these functions can be parallelized.
 </p><p>
@@ -1246,6 +1246,25 @@ But you can create function returning proper type and bind it to <code>cs_as</co
 </pre>
 But please be careful: nobody will check that this function really returns declared type.
 </td>
+</tr>
+<td><code>function cs_as_array(str bytea, format cstring) returns text[]</code></td>
+<td>Splits binary string into text array. This function is reverse to <code>cs_cat</code> which may be needed to construct
+combined group-by key for aggregate functions. <code>format</code> string describes types of component. Type is specified by one letter followed by field length. Below is list of supported types:
+<table>
+<tr><th>Format specification</th><th>PostgreSQL type</th></tr>
+<tr><td>i1</th><td>"char"</td></tr>
+<tr><td>i2</th><td>int2</td></tr>
+<tr><td>i4</th><td>int4</td></tr>
+<tr><td>i8</th><td>int8</td></tr>
+<tr><td>f4</th><td>float4</td></tr>
+<tr><td>f8</th><td>float8</td></tr>
+<tr><td>d4</th><td>date</td></tr>
+<tr><td>t8</th><td>time</td></tr>
+<tr><td>T8</th><td>timestamp</td></tr>
+<tr><td>m8</th><td>money</td></tr>
+<tr><td>cN</th><td>char(N)</td></tr>
+</table>
+For example format string <code>'i4f4c10'</code> corresponds to a row with one integer, one float and one character component with length 10.</td>
 </tr>
 </table>
 </p>

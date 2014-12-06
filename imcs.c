@@ -330,6 +330,7 @@ PG_FUNCTION_INFO_V1(cs_concat);
 PG_FUNCTION_INFO_V1(cs_cat);
 PG_FUNCTION_INFO_V1(cs_cut);
 PG_FUNCTION_INFO_V1(cs_as);
+PG_FUNCTION_INFO_V1(cs_as_array);
 PG_FUNCTION_INFO_V1(cs_eq);
 PG_FUNCTION_INFO_V1(cs_ne);
 PG_FUNCTION_INFO_V1(cs_ge);
@@ -534,6 +535,7 @@ Datum cs_concat(PG_FUNCTION_ARGS);
 Datum cs_cat(PG_FUNCTION_ARGS);
 Datum cs_cut(PG_FUNCTION_ARGS);
 Datum cs_as(PG_FUNCTION_ARGS);
+Datum cs_as_array(PG_FUNCTION_ARGS);
 Datum cs_eq(PG_FUNCTION_ARGS);
 Datum cs_ne(PG_FUNCTION_ARGS);
 Datum cs_ge(PG_FUNCTION_ARGS);
@@ -4676,6 +4678,158 @@ Datum cs_as(PG_FUNCTION_ARGS)
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "bytea is not matching target type");
     }
     PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(desc, values, nulls)));
+}
+
+Datum cs_as_array(PG_FUNCTION_ARGS)
+{
+    bytea* str = PG_GETARG_BYTEA_P(0);
+    char* src = (char*)VARDATA(str);
+    size_t len = VARSIZE(str) - VARHDRSZ;
+    char const* format = PG_GETARG_CSTRING(1);
+    char const* fmt = format;
+    Datum values[MAX_CUT_VALUES];
+    int elem_sizes[MAX_CUT_VALUES];
+    Oid type_out[MAX_CUT_VALUES];
+    imcs_elem_typeid_t elem_types[MAX_CUT_VALUES];
+    size_t pos = 0;
+    int i, n_values;
+    imcs_key_t value;
+    int16 elmlen;    
+    bool elmbyval;
+    char elmalign;
+    
+    for (i = 0; *fmt != '\0'; i++) { 
+        int n;
+        char type_letter;
+        int elem_size;
+        imcs_elem_typeid_t elem_type = TID_char;
+        if (sscanf(fmt, "%c%d%n", &type_letter, &elem_size, &n) != 2) { 
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse format string '%s'", fmt);
+        }
+        switch (type_letter) { 
+          case 'i':
+          case 'I':
+            switch (elem_size) { 
+              case 1:
+                elem_type = TID_int8;
+                break;
+              case 2:
+                elem_type = TID_int16;
+                break;
+              case 4:
+                elem_type = TID_int32;
+                break;
+              case 8:
+                elem_type = TID_int64;
+                break;
+              default:
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }
+            break;
+          case 'd':
+          case 'D':
+            elem_type = TID_date;
+            if (elem_size != 4)  { 
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }    
+            break;
+          case 'm':
+          case 'M':
+            elem_type = TID_money;
+            if (elem_size != 8)  { 
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }    
+            break;
+          case 't':
+            elem_type = TID_time;
+            if (elem_size != 8)  { 
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }    
+            break;
+          case 'T':
+            elem_type = TID_timestamp;
+            if (elem_size != 8)  { 
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }    
+            break;
+          case 'f':
+          case 'F':
+            switch (elem_size) { 
+              case 4:
+                elem_type = TID_float;
+                break;
+              case 8:
+                elem_type = TID_double;
+                break;
+              default:
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }
+            break;
+          case 'C':
+          case 'c':
+            if (elem_size <= 0)  { 
+                imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
+            }    
+            elem_type = TID_char;
+            break;
+          default:
+            imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type character %c", type_letter);
+        }
+        if (pos + elem_size > len) { 
+            imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too much values in format string %s", format);
+        }
+        fmt += n;
+        pos += elem_size;
+        if (i > MAX_CUT_VALUES) {
+            imcs_ereport(ERRCODE_SYNTAX_ERROR, "Too much value in format string %s (limit is %d)", format, MAX_CUT_VALUES);
+        }
+        elem_types[i] = elem_type;
+        elem_sizes[i] = elem_size;
+        if (elem_type != TID_char) {
+            bool is_varlena; 
+            getTypeOutputInfo(imcs_elem_type_to_oid[elem_type], &type_out[i], &is_varlena);
+        }
+    }
+    if (pos != len) { 
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too few values in format string %s", format);
+    }
+    n_values = i;
+    for (i = 0; i < n_values; i++) { 
+        if (elem_types[i] == TID_char) {
+            values[i] = CStringGetTextDatum(src);
+        } else {             
+            memcpy(&value, src, elem_sizes[i]);
+            switch (elem_types[i]) { 
+              case TID_int8:
+                values[i] = Int8GetDatum(value.val_int8);
+                break;
+              case TID_int16:
+                values[i] = Int16GetDatum(value.val_int16);
+                break;
+              case TID_int32:
+              case TID_date:
+                values[i] = Int32GetDatum(value.val_int32);
+                break;
+              case TID_int64:
+              case TID_time:
+              case TID_timestamp:
+                values[i] = Int64GetDatum(value.val_int64);
+                break;
+              case TID_float:
+                values[i] = Float4GetDatum(value.val_float);
+                break;
+              case TID_double:
+                values[i] = Float8GetDatum(value.val_double);
+                break;
+              default:
+                Assert(false);
+            }
+            values[i] = CStringGetTextDatum(OidOutputFunctionCall(type_out[i], values[i]));
+        }
+        src += elem_sizes[i];
+    }
+    get_typlenbyvalalign(TEXTOID, &elmlen, &elmbyval, &elmalign);
+    PG_RETURN_ARRAYTYPE_P(construct_array(values, n_values, TEXTOID, elmlen, elmbyval, elmalign));
 }
 
 Datum cs_delete_all(PG_FUNCTION_ARGS)
