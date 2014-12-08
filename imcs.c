@@ -269,6 +269,7 @@ PG_FUNCTION_INFO_V1(columnar_store_lock);
 PG_FUNCTION_INFO_V1(columnar_store_get);
 PG_FUNCTION_INFO_V1(columnar_store_span);
 PG_FUNCTION_INFO_V1(columnar_store_load);
+PG_FUNCTION_INFO_V1(columnar_store_load_column);
 PG_FUNCTION_INFO_V1(columnar_store_delete);
 PG_FUNCTION_INFO_V1(columnar_store_truncate);
 PG_FUNCTION_INFO_V1(columnar_store_insert_trigger);
@@ -474,6 +475,7 @@ Datum columnar_store_get(PG_FUNCTION_ARGS);
 Datum columnar_store_lock(PG_FUNCTION_ARGS);
 Datum columnar_store_span(PG_FUNCTION_ARGS);
 Datum columnar_store_load(PG_FUNCTION_ARGS);
+Datum columnar_store_load_column(PG_FUNCTION_ARGS);
 Datum columnar_store_delete(PG_FUNCTION_ARGS);
 Datum columnar_store_truncate(PG_FUNCTION_ARGS);
 Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS);
@@ -841,7 +843,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     imcs_hash_entry_t* entry;
     imcs_hash_key_t key;
 	bool found;
-    bool autoload = imcs_autoload;
+    int autoload_attempts = imcs_autoload ? 2 : 0;
 
     if (id == NULL) { 
         return NULL;
@@ -866,7 +868,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     entry = (imcs_hash_entry_t*)hash_search(imcs_hash, &key, HASH_FIND, NULL);
     if (entry == NULL) { 
         if (!create) { 
-            if (autoload && elem_size != 0) { /* elem_size == 0 when imcs_get_timeseries is called from columnar_store_initialized */
+            if (autoload_attempts && elem_size != 0) { /* elem_size == 0 when imcs_get_timeseries is called from columnar_store_initialized */
                 char const* sep = strchr(id, '-');
                 if (sep != NULL) { 
                     size_t table_name_len = sep - id;
@@ -874,8 +876,9 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
                     int rc;
                     memcpy(table_name, id, table_name_len);
                     table_name[table_name_len] = '\0';
-                    key.id = table_name;
-                    if (!hash_search(imcs_hash, &key, HASH_FIND, NULL)) { 
+                    key.id = table_name;                    
+                    if (autoload_attempts == 2 && !hash_search(imcs_hash, &key, HASH_FIND, NULL)) { 
+                        /* load all table */
                         char stmt[MAX_SQL_STMT_LEN];
                         SPI_connect();    
                         sprintf(stmt, "select %s_load()", table_name);
@@ -883,9 +886,30 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
                         SPI_finish();
                         if (rc != SPI_OK_SELECT) { 
                             elog(ERROR, "Select failed with status %d", rc);
-                        }
-                        autoload = false; /* do not make more than one attempt of autoloading data */
+                        } 
+                        autoload_attempts = 1;
                         goto Retry;
+                    } else if (autoload_attempts == 1) { 
+                        /* load particular column */
+                        char stmt[MAX_SQL_STMT_LEN];
+                        char* column_name = (char*)sep + 1;
+                        sep = strchr(column_name, '-');
+                        if (sep != NULL) { 
+                            int column_name_len = sep - column_name;
+                            char* buf = (char*)palloc(column_name_len + 1);
+                            memcpy(buf, column_name, column_name_len);
+                            column_name = buf;
+                            column_name[column_name_len] = '\0';
+                        }
+                        SPI_connect();    
+                        sprintf(stmt, "select %s_load_column('%s')", table_name, column_name);
+                        rc = SPI_execute(stmt, true, 0);
+                        SPI_finish();
+                        if (rc != SPI_OK_SELECT) { 
+                            elog(ERROR, "Select failed with status %d", rc);
+                        }
+                        autoload_attempts = 0; /* do not make more than one attempt of autoloading data */
+                        goto Retry;                        
                     }
                 }
             }
@@ -4200,9 +4224,10 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                         int prefix_len = cs_id_prefix_len[i];
                         while (cs_id_max_len < prefix_len + id_len + 2) { 
                             cs_id_max_len *= 2;
-                            pfree(cs_id);
-                            cs_id = (char*)palloc(cs_id_max_len);
                         }
+                        pfree(cs_id);
+                        cs_id = (char*)palloc(cs_id_max_len);
+                        
                         memcpy(cs_id, cs_id_prefix[i], prefix_len);
                         cs_id[prefix_len] = '-';
                         memcpy(cs_id + prefix_len + 1, id, id_len);
@@ -4293,6 +4318,208 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
             break;
         }
     }
+    SPI_cursor_close(portal);
+    SPI_finish();
+    PG_RETURN_INT64(n_records);
+}    
+
+Datum columnar_store_load_column(PG_FUNCTION_ARGS)
+{
+    char const* table_name = PG_GETARG_CSTRING(0);
+    char const* column_name = PG_GETARG_CSTRING(3);
+    int id_attnum = PG_GETARG_INT32(1);
+    int timestamp_attnum = PG_GETARG_INT32(2);
+    int table_name_len = strlen(table_name);
+    int i, n_attrs;
+    int64 n_records = 0;
+    Oid* attr_type_oid;
+    imcs_elem_typeid_t* attr_type;
+    int* attr_size;
+    char** attr_name;
+    char* cs_id_prefix;
+    int cs_id_prefix_len;
+    SPIPlanPtr plan;
+    Portal portal;
+    bool isnull;
+    int cs_id_max_len = 256;
+    char* cs_id = (char*)palloc(cs_id_max_len);
+    int rc;
+    int len;
+    text* t;
+    Datum value;
+    int column_id = -1;
+    imcs_timeseries_t* ts;
+    char stmt[MAX_SQL_STMT_LEN];
+
+    SPI_connect();
+    
+    sprintf(stmt, "select attname,atttypid,attlen,atttypmod from pg_class,pg_attribute,pg_type where pg_class.relname='%s' and pg_class.oid=pg_attribute.attrelid and pg_attribute.atttypid=pg_type.oid and attnum>0 order by attnum", table_name);
+
+    rc = SPI_execute(stmt, true, 0);
+    if (rc != SPI_OK_SELECT) { 
+        elog(ERROR, "Select failed with status %d", rc);
+    }
+    n_attrs = SPI_processed;
+    if (n_attrs == 0) { 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Table %s doesn't exist", table_name); 
+    }
+    attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
+    attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
+    attr_size = (int*)palloc(n_attrs*sizeof(int));
+    attr_name = (char**)palloc(n_attrs*sizeof(char*));
+
+    for (i = 0; i < n_attrs; i++) {
+        HeapTuple spi_tuple = SPI_tuptable->vals[i];
+        TupleDesc spi_tupdesc = SPI_tuptable->tupdesc;
+        attr_name[i] = SPI_getvalue(spi_tuple, spi_tupdesc, 1);
+        attr_type_oid[i] = DatumGetObjectId(SPI_getbinval(spi_tuple, spi_tupdesc, 2, &isnull));
+        attr_type[i] = imcs_oid_to_typeid(attr_type_oid[i]);
+        attr_size[i] = DatumGetInt16(SPI_getbinval(spi_tuple, spi_tupdesc, 3, &isnull));
+        if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
+            attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
+            if (attr_size[i] < 0 && id_attnum != i+1) {
+                if (imcs_dict_size == 0) { 
+                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]); 
+                }
+            }
+        }
+        if (strcmp(attr_name[i], column_name) == 0) { 
+            column_id = i;            
+            cs_id_prefix_len = table_name_len + strlen(attr_name[i]) + 1;
+            cs_id_prefix = (char*)palloc(cs_id_prefix_len+1);
+            sprintf(cs_id_prefix, "%s-%s", table_name, attr_name[i]);
+        }
+        SPI_freetuple(spi_tuple);
+    }
+    SPI_freetuptable(SPI_tuptable);
+    if (column_id < 0 || column_id == id_attnum-1 || column_id+1 == timestamp_attnum-1) { 
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Column %s of table %s can not be individually imported", column_name, table_name); 
+    }
+    if (id_attnum != 0) { 
+        len = sprintf(stmt, "select %s,%s from %s order by %s", column_name, attr_name[id_attnum-1], table_name, attr_name[timestamp_attnum-1]);
+    } else { 
+        len = sprintf(stmt, "select %s from %s order by %s", column_name, table_name, attr_name[timestamp_attnum-1]);
+    }
+    plan = SPI_prepare(stmt, 0, NULL);	
+    portal = SPI_cursor_open(NULL, plan, NULL, NULL, true);
+
+    while (true) {
+        SPI_cursor_fetch(portal, true, 1);
+        if (SPI_processed) { 
+            HeapTuple spi_tuple = SPI_tuptable->vals[0];
+            TupleDesc spi_tupdesc = SPI_tuptable->tupdesc;
+            char* id = NULL;
+            int id_len = 0;
+            n_records += 1;
+
+            value = SPI_getbinval(spi_tuple, spi_tupdesc, 1, &isnull);
+            if (isnull) {
+                if (imcs_substitute_nulls) { 
+                    value = 0;
+                } else { 
+                    imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
+                }
+            }
+            if (id_attnum != 0) { 
+                id = SPI_getvalue(spi_tuple, spi_tupdesc, 2);
+                id_len = strlen(id);
+                if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
+                    while (id_len != 0 && id[id_len-1] == ' ') { 
+                        id_len -= 1;
+                    }
+                }
+                while (cs_id_max_len < cs_id_prefix_len + id_len + 2) { 
+                    cs_id_max_len *= 2;
+                }
+                pfree(cs_id);
+                cs_id = (char*)palloc(cs_id_max_len);
+                
+                memcpy(cs_id, cs_id_prefix, cs_id_prefix_len);
+                cs_id[cs_id_prefix_len] = '-';
+                memcpy(cs_id + cs_id_prefix_len + 1, id, id_len);
+                cs_id[cs_id_prefix_len + id_len + 1] = '\0';
+                pfree(id);
+            } else { 
+                cs_id = cs_id_prefix;
+            }
+            ts = imcs_get_timeseries(cs_id, attr_type[column_id], false, attr_size[column_id], true);
+            switch (attr_type[column_id]) { 
+            case TID_int8:
+                imcs_append_int8(ts, DatumGetChar(value));
+                break;
+            case TID_int16:
+                imcs_append_int16(ts, DatumGetInt16(value));
+                break;
+            case TID_int32:
+            case TID_date:
+                imcs_append_int32(ts, DatumGetInt32(value));
+                break;
+            case TID_int64:
+            case TID_time:
+            case TID_timestamp:
+            case TID_money:                           
+                imcs_append_int64(ts, DatumGetInt64(value));
+                break;
+            case TID_float:
+                imcs_append_float(ts, DatumGetFloat4(value));
+                break;
+            case TID_double:
+                imcs_append_double(ts, DatumGetFloat8(value));
+                break;                    
+            case TID_char:
+                if (attr_size[column_id] < 0) { /* varying string */
+                    bool found;
+                    imcs_dict_key_t key;
+                    imcs_dict_entry_t* entry;
+                    if (isnull) { /* substitute NULL with empty string */
+                        key.val = NULL;
+                        key.len = 0;
+                    } else { 
+                        t = DatumGetTextP(value);
+                        key.val = (char*)VARDATA(t);
+                        key.len = VARSIZE(t) - VARHDRSZ;
+                    }                            
+                    entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
+                    if (!found) { 
+                        entry->code = hash_get_num_entries(imcs_dict);
+                        if (entry->code >= imcs_dict_size) {  
+                            imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
+                        }   
+                        imcs_dict_code_map[entry->code] = entry;
+                    }
+                    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+                        imcs_append_int16(ts, (int16)entry->code);
+                    } else { 
+                        imcs_append_int32(ts, (int32)entry->code);
+                    }
+                } else { 
+                    if (isnull) { /* substitute NULL with empty string */
+                        imcs_append_char(ts, NULL, 0);
+                    } else { 
+                        char* str;
+                        t = DatumGetTextP(value);
+                        str = (char*)VARDATA(t);
+                        len = VARSIZE(t) - VARHDRSZ;
+                        if (attr_type_oid[column_id] == BPCHAROID) { 
+                            while (len != 0 && str[len-1] == ' ') { 
+                                len -= 1;
+                            }
+                        }
+                        if (len > attr_size[column_id]) { 
+                            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);             
+                        }
+                        imcs_append_char(ts, str, len);
+                    }
+                }
+                break;
+            default:
+                Assert(false);
+            }
+        } else { 
+            break;
+        }
+    }
+    SPI_freetuptable(SPI_tuptable);
     SPI_cursor_close(portal);
     SPI_finish();
     PG_RETURN_INT64(n_records);

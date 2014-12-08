@@ -56,3 +56,4 @@ Initial version
 --- Release version 1.07 (??.07.2014) -------------------------------------
 1. Change semantic of comparison operations for character types: treat string literal as constant rather than text representation of sequence
 2. Add cs_as_array function
+3. Make it possible to add columns to columnar store without reloading all data

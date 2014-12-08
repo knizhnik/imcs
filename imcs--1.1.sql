@@ -36,6 +36,7 @@ declare
     create_type text;
     create_load_plsql_func text;
     create_load_func text;
+    create_load_column_func text;
     create_append_func text;
     create_delete_head_func text;
     create_delete_func text;
@@ -116,6 +117,7 @@ begin
     create_drop_func := 'create function '||table_name||'_drop() returns void as $$
         begin
             drop function '||table_name||'_load(bool,text);
+            drop function '||table_name||'_load_column(text);
             drop function '||table_name||'_is_loaded();
             drop function '||table_name||'_append('||timestamp_type||');
             drop function '||table_name||'_truncate();
@@ -163,6 +165,8 @@ begin
         end; $$ language plpgsql';
 
     create_load_func :=  'create function '||table_name||'_load(already_sorted bool default false, filter text default null) returns bigint as $$ begin return columnar_store_load('''||table_name||''','||id_attnum||','||timestamp_attnum||',already_sorted,filter::cstring); end; $$ language plpgsql';
+
+    create_load_column_func :=  'create function '||table_name||'_load_column(column_name text) returns bigint as $$ begin return columnar_store_load_column('''||table_name||''','||id_attnum||','||timestamp_attnum||',column_name::cstring); end; $$ language plpgsql';
 
     create_is_loaded_func := 'create function '||table_name||'_is_loaded() returns bool as $$ begin return columnar_store_initialized('''||table_name||'-'||timestamp_id||''',false); end; $$ language plpgsql';
 
@@ -385,6 +389,7 @@ begin
 
     execute create_type;
     execute create_load_func;
+    execute create_load_column_func;
     execute create_is_loaded_func;
     execute create_get_func;
     execute create_span_func;
@@ -430,6 +435,7 @@ create function columnar_store_truncate(table_name cstring) returns void as 'MOD
 create function columnar_store_insert_trigger() returns trigger as 'MODULE_PATHNAME' language C;
 
 create function columnar_store_load(table_name cstring, timeseries_attnum integer, timestamp_attnum integer, already_sorted bool,filter cstring) returns bigint as 'MODULE_PATHNAME' language C;
+create function columnar_store_load_column(table_name cstring, timeseries_attnum integer, timestamp_attnum integer, column_name cstring) returns bigint as 'MODULE_PATHNAME' language C;
 create function columnar_store_append_char(cs_id cstring, val "char", field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int8' language C strict;
 create function columnar_store_append_int2(cs_id cstring, val int2, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int16' language C strict;
 create function columnar_store_append_int4(cs_id cstring, val int4, field_type integer, is_timestamp bool, field_size integer) returns void  as 'MODULE_PATHNAME','columnar_store_append_int32' language C strict;
