@@ -4336,8 +4336,8 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
     imcs_elem_typeid_t* attr_type;
     int* attr_size;
     char** attr_name;
-    char* cs_id_prefix;
-    int cs_id_prefix_len;
+    char* cs_id_prefix = 0;
+    int cs_id_prefix_len = 0;
     SPIPlanPtr plan;
     Portal portal;
     bool isnull;
@@ -4515,11 +4515,12 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
             default:
                 Assert(false);
             }
-        } else { 
+            SPI_freetuple(spi_tuple);
+            SPI_freetuptable(SPI_tuptable);
+         } else { 
             break;
         }
     }
-    SPI_freetuptable(SPI_tuptable);
     SPI_cursor_close(portal);
     SPI_finish();
     PG_RETURN_INT64(n_records);
