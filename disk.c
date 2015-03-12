@@ -93,6 +93,7 @@ imcs_page_t* imcs_load_page(imcs_page_t* pg, imcs_page_access_mode_t mode)
     item = &cache->items[pid];
     if (mode != PM_NEW) { 
         /* prepare to load page from the disk: mark it as busy to avoid redundant reads */
+        pg = IMCS_PAGE_DATA(cache, pid);
         item->is_busy = true;    
         SpinLockRelease(&cache->mutex); /* release mutex during IO */
         imcs_file_read(imcs_file, pg, imcs_page_size, offs); /* read page */
