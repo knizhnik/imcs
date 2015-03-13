@@ -177,7 +177,9 @@ static int compare_page_offset(void const* p, void const* q)
 void imcs_disk_flush(void)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
-    int i, n = cache->n_dirty_pages;
+    int i, n;
+    SpinLockAcquire(&cache->mutex);
+    n = cache->n_dirty_pages;
     if (n != 0) { 
         /* sort dirty pages by offset so that them will be written in more or less sequential order */
         qsort(cache->dirty_pages, n, sizeof(int), compare_page_offset);
@@ -190,6 +192,7 @@ void imcs_disk_flush(void)
         }
         cache->n_dirty_pages = 0;
     }
+    SpinLockRelease(&cache->mutex);
 }
 
 /* This function is called in context protected by imcs->lock */
@@ -217,7 +220,7 @@ imcs_page_t* imcs_new_page(void)
 
 /* This function is called in context protected by imcs->lock.
  * "page" is address of page in RAM.
- * This function dealloate page, include it in free pages list and exclusde correspondent item from cache 
+ * This function deallocates page, include it in free pages list and exclusde correspondent item from cache 
  */
 void imcs_free_page(imcs_page_t* pg) 
 { 
