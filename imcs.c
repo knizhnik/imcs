@@ -823,15 +823,15 @@ static void imcs_trans_callback(XactEvent event, void *arg)
         imcs_project_call_count = 0;
         if (imcs && imcs_lock != LOCK_NONE) { 
             if (LWLockHeldByMe(imcs->lock)) { 
+                if (event == XACT_EVENT_COMMIT && imcs_flush_file) { 
+                    imcs_disk_flush();
+                }
                 LWLockRelease(imcs->lock);
             }
             imcs_lock = LOCK_NONE;
         }
         if (imcs_mem_ctx) {
             MemoryContextReset(imcs_mem_ctx);
-        }
-        if (event == XACT_EVENT_COMMIT && imcs_flush_file) { 
-            imcs_disk_flush();
         }
     }
 }
