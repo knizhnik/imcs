@@ -4506,7 +4506,7 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
                             }
                         }
                         if (len > attr_size[column_id]) { 
-                            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);             
+                            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[column_id], attr_name[column_id]);             
                         }
                         imcs_append_char(ts, str, len);
                     }
@@ -4670,21 +4670,48 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                 imcs_append_double(ts, DatumGetFloat8(values[i]));
                 break;                    
               case TID_char:
-                if (nulls[i]) { /* substitute NULL with empty string */
-                    imcs_append_char(ts, NULL, 0);
+                if (attr_size[i] < 0) { /* varying string */
+                    bool found;
+                    imcs_dict_key_t key;
+                    imcs_dict_entry_t* entry;
+                    if (nulls[i]) { /* substitute NULL with empty string */
+                        key.val = NULL;
+                        key.len = 0;
+                    } else { 
+                        t = DatumGetTextP(values[i]);
+                        key.val = (char*)VARDATA(t);
+                        key.len = VARSIZE(t) - VARHDRSZ;
+                    }                            
+                    entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
+                    if (!found) { 
+                        entry->code = hash_get_num_entries(imcs_dict);
+                        if (entry->code >= imcs_dict_size) {  
+                            imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
+                        }   
+                        imcs_dict_code_map[entry->code] = entry;
+                    }
+                    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+                        imcs_append_int16(ts, (int16)entry->code);
+                    } else { 
+                        imcs_append_int32(ts, (int32)entry->code);
+                    }
                 } else { 
-                    t = DatumGetTextP(values[i]);
-                    str = (char*)VARDATA(t);
-                    len = VARSIZE(t) - VARHDRSZ;
-                    if (attr_type_oid[i] == BPCHAROID) { 
-                        while (len != 0 && str[len-1] == ' ') { 
-                            len -= 1;
+                    if (nulls[i]) { /* substitute NULL with empty string */
+                        imcs_append_char(ts, NULL, 0);
+                    } else { 
+                        t = DatumGetTextP(values[i]);
+                        str = (char*)VARDATA(t);
+                        len = VARSIZE(t) - VARHDRSZ;
+                        if (attr_type_oid[i] == BPCHAROID) { 
+                            while (len != 0 && str[len-1] == ' ') { 
+                                len -= 1;
+                            }
                         }
+                        if (len > attr_size[i]) { 
+                            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);
+                        }
+                        imcs_append_char(ts, str, len);
                     }
-                    if (len > attr_size[i]) { 
-                        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);
-                    }
-                    imcs_append_char(ts, str, len);
                 }
                 break;
               default:
