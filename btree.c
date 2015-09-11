@@ -312,6 +312,9 @@ imcs_iterator_h imcs_map(imcs_iterator_h input, imcs_iterator_h map_iterator)
     int elem_size = ts->elem_size;
     int elem_type = ts->elem_type;
     int flags = FLAG_CONTEXT_FREE; 
+    imcs_iterator_h iterator;
+    imcs_iterator_context_t* ctx;
+
     if (elem_size < 0) { /* varying string */
         Assert(elem_type == TID_char);        
         flags |= FLAG_TRANSLATED;
@@ -323,8 +326,8 @@ imcs_iterator_h imcs_map(imcs_iterator_h input, imcs_iterator_h map_iterator)
             elem_type = TID_int32;
         }
     }            
-    imcs_iterator_h iterator = imcs_new_iterator(elem_size, sizeof(imcs_iterator_context_t));
-    imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; 
+    iterator = imcs_new_iterator(elem_size, sizeof(imcs_iterator_context_t));
+    ctx = (imcs_iterator_context_t*)iterator->context; 
     iterator->elem_type = elem_type;
     iterator->flags = flags;
     iterator->next = (elem_type == TID_char && imcs_use_rle) ? imcs_map_next_rle : imcs_map_next;                                 

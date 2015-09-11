@@ -270,6 +270,7 @@ PG_FUNCTION_INFO_V1(columnar_store_get);
 PG_FUNCTION_INFO_V1(columnar_store_span);
 PG_FUNCTION_INFO_V1(columnar_store_load);
 PG_FUNCTION_INFO_V1(columnar_store_load_column);
+PG_FUNCTION_INFO_V1(columnar_store_truncate_column);
 PG_FUNCTION_INFO_V1(columnar_store_delete);
 PG_FUNCTION_INFO_V1(columnar_store_truncate);
 PG_FUNCTION_INFO_V1(columnar_store_insert_trigger);
@@ -476,6 +477,7 @@ Datum columnar_store_lock(PG_FUNCTION_ARGS);
 Datum columnar_store_span(PG_FUNCTION_ARGS);
 Datum columnar_store_load(PG_FUNCTION_ARGS);
 Datum columnar_store_load_column(PG_FUNCTION_ARGS);
+Datum columnar_store_truncate_column(PG_FUNCTION_ARGS);
 Datum columnar_store_delete(PG_FUNCTION_ARGS);
 Datum columnar_store_truncate(PG_FUNCTION_ARGS);
 Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS);
@@ -2379,8 +2381,9 @@ Datum cs_parse_tid(PG_FUNCTION_ARGS)
         pfree(elem);
         IMCS_TRACE(const);
     } else {
+        char* str;
         IMCS_TRACE(parse);
-        char* str = (char*)imcs_alloc(text_len+1);
+        str = (char*)imcs_alloc(text_len+1);
         memcpy(str, txt, text_len);
         str[text_len] = '\0';
         switch (elem_type) { 
@@ -4392,7 +4395,7 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
         SPI_freetuple(spi_tuple);
     }
     SPI_freetuptable(SPI_tuptable);
-    if (column_id < 0 || column_id == id_attnum-1 || column_id+1 == timestamp_attnum-1) { 
+    if (column_id < 0 || column_id == id_attnum-1 || column_id == timestamp_attnum-1) { 
         imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Column %s of table %s can not be individually imported", column_name, table_name); 
     }
     if (id_attnum != 0) { 
@@ -5134,6 +5137,41 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
         {
             if (strncmp(entry->key.id, table_name, table_name_len) == 0 
                 && (entry->key.id[table_name_len] == '-' || entry->key.id[table_name_len] == '\0'))
+            {
+                imcs_delete_all(&entry->value);
+            }
+        }
+        
+        LWLockRelease(imcs->lock);
+        imcs_lock = LOCK_NONE;
+    }
+    PG_RETURN_VOID();
+}
+
+Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)                    
+{                                                                       
+    if (imcs_hash != NULL) { 
+        char const* table_name = PG_GETARG_CSTRING(0);                           
+        char const* column_name = PG_GETARG_CSTRING(1);
+        HASH_SEQ_STATUS status;
+        imcs_hash_entry_t* entry;
+        size_t cs_id_prefix_len = strlen(table_name) + strlen(column_name) + 1;
+        char* cs_id_prefix = (char*)palloc(cs_id_prefix_len+1);
+        sprintf(cs_id_prefix, "%s-%s", table_name, column_name);
+
+        if (imcs_lock != LOCK_EXCLUSIVE) { 
+            if (imcs_lock != LOCK_NONE) { 
+                LWLockRelease(imcs->lock);
+            }
+            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            imcs_lock = LOCK_EXCLUSIVE;
+        }
+
+        hash_seq_init(&status, imcs_hash);
+        while ((entry = hash_seq_search(&status)) != NULL) 
+        {
+            if (strncmp(entry->key.id, cs_id_prefix, cs_id_prefix_len) == 0 
+                && (entry->key.id[cs_id_prefix_len] == '-' || entry->key.id[cs_id_prefix_len] == '\0'))
             {
                 imcs_delete_all(&entry->value);
             }
