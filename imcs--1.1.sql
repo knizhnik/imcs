@@ -170,7 +170,7 @@ begin
 
     create_load_column_func :=  'create function '||table_name||'_load_column(column_name text) returns bigint as $$ begin return columnar_store_load_column('''||table_name||''','||id_attnum||','||timestamp_attnum||',column_name::cstring); end; $$ language plpgsql';
 
-    create_truncate_column_func :=  'create function '||table_name||'_truncate_column(column_name text) returns void as $$ begin return columnar_store_truncate_column('''||table_name||''',column_name::cstring); end; $$ language plpgsql';
+    create_truncate_column_func :=  'create function '||table_name||'_truncate_column(column_name text) returns void as $$ begin perform columnar_store_truncate_column('''||table_name||''',column_name::cstring); end; $$ language plpgsql';
 
     create_is_loaded_func := 'create function '||table_name||'_is_loaded() returns bool as $$ begin return columnar_store_initialized('''||table_name||'-'||timestamp_id||''',false); end; $$ language plpgsql';
 
