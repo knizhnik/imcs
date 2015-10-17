@@ -335,6 +335,7 @@ typedef struct imcs_iterator_t_
 
 void*              imcs_alloc(size_t size);
 void               imcs_free(void* ptr);
+void*              imcs_alloc_aligned(size_t size);
 uint64             imcs_used_memory(void);
 
 imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_type, bool is_timestamp, int elem_size, bool create);
