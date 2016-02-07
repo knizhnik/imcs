@@ -27,6 +27,7 @@ PG_MODULE_MAGIC;
 
 #define MAX_NUMELEM_LEN 32
 #define OUTPUT_BUF_RESERVE 8
+#define MAX_ENTRY_LOCKS 63 /* should be less than 64 */
 
 typedef struct imcs_free_page_t 
 { 
@@ -35,7 +36,9 @@ typedef struct imcs_free_page_t
 
 typedef struct imcs_state_t
 {
-	LWLockId	lock;	/* protects timeseries search/modification */
+	LWLockId hash_lock;	/* protects hash table */
+	LWLockId dict_lock;	/* protects dictionary */
+	LWLockId entry_locks[MAX_ENTRY_LOCKS]; /* locks used to protect access to the particual timeseries */
     imcs_free_page_t* free_pages; /* list of free B-Tree pages */
     size_t n_used_pages;
     imcs_disk_cache_t disk_cache;
@@ -48,11 +51,23 @@ typedef enum
     LOCK_EXCLUSIVE
 } imcs_lock_t;
 
+typedef struct { 
+    char* id;
+} imcs_hash_key_t;
+
+typedef struct { 
+    imcs_hash_key_t   key;
+    imcs_timeseries_t value;
+	volatile slock_t  lock;
+} imcs_hash_entry_t;
+
 static imcs_state_t* imcs;
 static HTAB* imcs_hash;
 static HTAB* imcs_dict;
 static imcs_thread_pool_t* imcs_thread_pool;
 static imcs_lock_t imcs_lock = LOCK_NONE;
+static imcs_lock_t imcs_dict_lock = LOCK_NONE;
+static uint64 imcs_entry_lock_mask = 0;
 static imcs_mutex_t* imcs_alloc_mutex;
 static MemoryContext imcs_mem_ctx;
 static imcs_tls_t* imcs_tls;
@@ -246,15 +261,6 @@ static const char* const imcs_command_mnem[] =
 #define MAX_CUT_VALUES 16
 #define IMCS_INIT_OUTPUT_BUF_SIZE (16*1024)
 #define IMCS_MIN_OUTPUT_BUF_SIZE  (MAX_NUMELEM_LEN)
-
-typedef struct { 
-    char* id;
-} imcs_hash_key_t;
-
-typedef struct { 
-    imcs_hash_key_t key;
-    imcs_timeseries_t value;
-} imcs_hash_entry_t;
 
 imcs_dict_entry_t** imcs_dict_code_map;
 
@@ -795,17 +801,65 @@ static void imcs_init_dict()
     }
 }
 
+
+static void imcs_unlock_entry()
+{
+	int64 mask = imcs_entry_lock_mask;
+	int i;
+	for (i = 0; mask != 0; mask >>= 1, i++) {
+		if (mask & 1) { 
+			if (LWLockHeldByMe(imcs->entry_locks[i])) { 
+				LWLockRelease(imcs->entry_locks[i]);
+			}
+		}		
+	}
+	imcs_entry_lock_mask = 0;
+}			  	
+
+static void imcs_unlock_hash()
+{
+	if (imcs && imcs_lock != LOCK_NONE) { 
+		if (LWLockHeldByMe(imcs->hash_lock)) { 
+			LWLockRelease(imcs->hash_lock);
+		}
+		imcs_lock = LOCK_NONE;
+	}
+}
+
+static void imcs_lock_dictionary(bool forUpdate)
+{
+	if (forUpdate)  {
+		if (imcs_dict_lock != LOCK_EXCLUSIVE) { 
+			LWLockRelease(imcs->dict_lock);
+		}
+		LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+		imcs_dict_lock = LOCK_EXCLUSIVE;
+	} else if (imcs_dict_lock == LOCK_NONE) { 
+		LWLockAcquire(imcs->hash_lock, LW_SHARED);
+		imcs_dict_lock = LW_SHARED;
+	}
+}
+
+static void imcs_unlock_dictionary()
+{
+	if (imcs && imcs_dict_lock != LOCK_NONE) { 
+		if (LWLockHeldByMe(imcs->dict_lock)) { 
+			LWLockRelease(imcs->dict_lock);
+		}
+		imcs_dict_lock = LOCK_NONE;
+	}
+}
+
 static void imcs_executor_end(QueryDesc *queryDesc)
 {
     if (CurrentMemoryContext == TopTransactionContext) { 
         imcs_project_redundant_calls = 0;
         imcs_project_call_count = 0;
-        if (!imcs_serializable && imcs && imcs_lock != LOCK_NONE) { 
-            if (LWLockHeldByMe(imcs->lock)) { 
-                LWLockRelease(imcs->lock);
-            }
-            imcs_lock = LOCK_NONE;
-        }
+        if (!imcs_serializable) { 
+			imcs_unlock_hash();
+		}
+		imcs_unlock_dictionary();
+		imcs_unlock_entry();
         if (imcs_mem_ctx) {
             MemoryContextReset(imcs_mem_ctx);
         }     
@@ -823,27 +877,21 @@ static void imcs_trans_callback(XactEvent event, void *arg)
     if (event == XACT_EVENT_COMMIT || event == XACT_EVENT_ABORT) { 
         imcs_project_redundant_calls = 0;
         imcs_project_call_count = 0;
-        if (imcs && imcs_lock != LOCK_NONE) { 
-            if (LWLockHeldByMe(imcs->lock)) { 
-                if (event == XACT_EVENT_COMMIT && imcs_flush_file) { 
-                    imcs_disk_flush();
-                }
-                LWLockRelease(imcs->lock);
-            }
-            imcs_lock = LOCK_NONE;
-        }
+		imcs_unlock_hash();
+		imcs_unlock_dictionary();
+		imcs_unlock_entry();
         if (imcs_mem_ctx) {
             MemoryContextReset(imcs_mem_ctx);
         }
     }
 }
 
-
 imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_type, bool is_timestamp, int elem_size, bool create)
 {
 	imcs_timeseries_t* ts;
     imcs_hash_entry_t* entry;
     imcs_hash_key_t key;
+	imcs_lock_t prev_lock;
 	bool found;
     int autoload_attempts = imcs_autoload ? 2 : 0;
 
@@ -853,16 +901,17 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     if (imcs == NULL) { 
         imcs_ereport(ERRCODE_LOCK_NOT_AVAILABLE, "Columnar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list");
     }
+	prev_lock = imcs_lock;
     if (create) { 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->lock);
+                LWLockRelease(imcs->hash_lock);
             }
-            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         } 
     } else if (imcs_lock == LOCK_NONE) {         
-        LWLockAcquire(imcs->lock, LW_SHARED);  
+        LWLockAcquire(imcs->hash_lock, LW_SHARED);  
         imcs_lock = LOCK_SHARED;
     }                              
   Retry:                                     
@@ -938,6 +987,22 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     {
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "data format was changed"); 
     }
+	if (prev_lock == LOCK_NONE && !imcs_serializable) { 
+		char ch;
+		size_t h;
+
+		LWLockRelease(imcs->hash_lock);
+		imcs_lock = LOCK_NONE;
+
+		for (h = 0; (ch = *id) != '-' && ch != '\0'; id++) { 
+			h = h*31 + ch;
+		}
+		h %= MAX_ENTRY_LOCKS;
+		if (!(imcs_entry_lock_mask & ((uint64)1 << h))) {
+			LWLockAcquire(imcs->entry_locks[h], create ? LW_EXCLUSIVE : LW_SHARED);  
+			imcs_entry_lock_mask |= (uint64)1 << h;
+		}
+	}
     return ts;
 }
 
@@ -1266,7 +1331,7 @@ void _PG_init(void)
 	 * resources in imcs_shmem_startup().
 	 */
 	RequestAddinShmemSpace((size_t)shmem_size*MB);
-	RequestAddinLWLocks(1);
+	RequestAddinLWLocks(2 + MAX_ENTRY_LOCKS);
     
 	/*
 	 * Install hooks.
@@ -1325,8 +1390,13 @@ static void imcs_shmem_startup(void)
 
 	if (!found)
 	{
+		int i;
 		/* First time through ... */
-		imcs->lock = LWLockAssign();
+		imcs->hash_lock = LWLockAssign();
+		imcs->dict_lock = LWLockAssign();
+		for (i = 0; i < MAX_ENTRY_LOCKS; i++) { 
+			imcs->entry_locks[i] = LWLockAssign();
+		}
         imcs->free_pages = NULL;
         imcs->n_used_pages = 0;
         imcs_disk_initialize(&imcs->disk_cache);
@@ -2097,9 +2167,9 @@ Datum columnar_store_lock(PG_FUNCTION_ARGS)
     {
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->lock);
+                LWLockRelease(imcs->hash_lock);
             }
-            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
     }
@@ -2224,6 +2294,7 @@ Datum columnar_store_append_char(PG_FUNCTION_ARGS)
             key.val = (char*)VARDATA(t);
             key.len = VARSIZE(t) - VARHDRSZ;
         }                            
+		imcs_lock_dictionary(true);
         entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
         if (!found) { 
             entry->code = hash_get_num_entries(imcs_dict);
@@ -2342,6 +2413,7 @@ static Datum imcs_parse_dict(imcs_adt_parser_t* parser, char* value, size_t size
     imcs_dict_entry_t* entry;
     key.val = value;
     key.len = size;
+	imcs_lock_dictionary(false);
     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_FIND, NULL);
     if (entry == NULL) { 
         imcs_ereport(ERRCODE_NO_DATA_FOUND, "String '%.*s' not found in dictionary", (int)size, value);
@@ -4275,6 +4347,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                                 key.val = (char*)VARDATA(t);
                                 key.len = VARSIZE(t) - VARHDRSZ;
                             }                            
+							imcs_lock_dictionary(true);
                             entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
                             if (!found) { 
                                 entry->code = hash_get_num_entries(imcs_dict);
@@ -4482,6 +4555,7 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
                         key.val = (char*)VARDATA(t);
                         key.len = VARSIZE(t) - VARHDRSZ;
                     }                            
+					imcs_lock_dictionary(true);
                     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
                     if (!found) { 
                         entry->code = hash_get_num_entries(imcs_dict);
@@ -4685,6 +4759,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                         key.val = (char*)VARDATA(t);
                         key.len = VARSIZE(t) - VARHDRSZ;
                     }                            
+					imcs_lock_dictionary(true);
                     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
                     if (!found) { 
                         entry->code = hash_get_num_entries(imcs_dict);
@@ -5099,9 +5174,9 @@ Datum cs_delete_all(PG_FUNCTION_ARGS)
 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->lock);
+                LWLockRelease(imcs->hash_lock);
             }
-            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
 
@@ -5110,7 +5185,7 @@ Datum cs_delete_all(PG_FUNCTION_ARGS)
             deleted += imcs_delete_all(&entry->value);
         }
         
-        LWLockRelease(imcs->lock);
+        LWLockRelease(imcs->hash_lock);
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_INT64(deleted);
@@ -5126,9 +5201,9 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->lock);
+                LWLockRelease(imcs->hash_lock);
             }
-            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
 
@@ -5142,7 +5217,7 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
             }
         }
         
-        LWLockRelease(imcs->lock);
+        LWLockRelease(imcs->hash_lock);
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_VOID();
@@ -5161,9 +5236,9 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->lock);
+                LWLockRelease(imcs->hash_lock);
             }
-            LWLockAcquire(imcs->lock, LW_EXCLUSIVE);
+            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
 
@@ -5177,7 +5252,7 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
             }
         }
         
-        LWLockRelease(imcs->lock);
+        LWLockRelease(imcs->hash_lock);
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_VOID();
@@ -5672,10 +5747,7 @@ Datum cs_str2code(PG_FUNCTION_ARGS)
     if (imcs_dict_size == 0) { 
         imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "IMCS dictionary is disabled"); 
     }
-    if (imcs_lock == LOCK_NONE) {         
-        LWLockAcquire(imcs->lock, LW_SHARED);  
-        imcs_lock = LOCK_SHARED;
-    }       
+	imcs_lock_dictionary(false);
     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_FIND, NULL);
     if (entry == NULL) { 
         PG_RETURN_INT32(-1);
@@ -5712,6 +5784,8 @@ Datum cs_cut_and_code2str(PG_FUNCTION_ARGS)
 
 Datum cs_dictionary_size(PG_FUNCTION_ARGS)
 {
-    int size = imcs_dict ? hash_get_num_entries(imcs_dict) : 0;
+	int size;
+	imcs_lock_dictionary(false);
+	size = imcs_dict ? hash_get_num_entries(imcs_dict) : 0;
     PG_RETURN_INT32(size);
 }
