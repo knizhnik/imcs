@@ -84,6 +84,7 @@ static bool   imcs_trace = false;
 
 int imcs_cache_size = 0;
 char* imcs_file_path;
+bool  imcs_flush_file;
 
 int imcs_page_size = 4096;
 int imcs_tile_size = 128;
@@ -91,7 +92,6 @@ int imcs_dict_size = IMCS_SMALL_DICTIONARY;
 
 bool imcs_use_rle = false;
 static int imcs_output_string_limit = 1024;
-static bool imcs_flush_file;
 static int shmem_size = 1024;
 static int n_timeseries = 10000;
 static int n_threads = 0;
@@ -830,10 +830,12 @@ static void imcs_lock_dictionary(bool forUpdate)
 {
 	if (forUpdate)  {
 		if (imcs_dict_lock != LOCK_EXCLUSIVE) { 
-			LWLockRelease(imcs->dict_lock);
+			if (imcs_dict_lock != LOCK_NONE) { 
+				LWLockRelease(imcs->dict_lock);
+			}
+			LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+			imcs_dict_lock = LOCK_EXCLUSIVE;
 		}
-		LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
-		imcs_dict_lock = LOCK_EXCLUSIVE;
 	} else if (imcs_dict_lock == LOCK_NONE) { 
 		LWLockAcquire(imcs->hash_lock, LW_SHARED);
 		imcs_dict_lock = LW_SHARED;

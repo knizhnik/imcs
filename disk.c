@@ -193,6 +193,10 @@ void imcs_disk_flush(void)
         cache->n_dirty_pages = 0;
     }
     SpinLockRelease(&cache->mutex);
+
+	if (imcs_flush_file) {
+		imcs_file_flush(imcs_file);
+	}
 }
 
 /* This function is called in context protected by imcs->lock */

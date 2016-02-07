@@ -62,6 +62,13 @@ void   imcs_file_close(imcs_file_h file)
     }
 }
 
+void   imcs_file_flush(imcs_file_h file)
+{
+    if (!FlushFileBuffers(file)) {
+        imcs_ereport(ERRCODE_IO_ERROR, "File flush failed: %d", GetLastError());
+    }
+}
+
 #else
 
 #include <stdlib.h>
@@ -105,6 +112,13 @@ void imcs_file_close(imcs_file_h file)
 {
     if (close(file) < 0) {
         imcs_ereport(ERRCODE_IO_ERROR, "File close failed: %d", errno);
+    }
+}
+
+void imcs_file_flush(imcs_file_h file)
+{
+    if (fsync(file) < 0) {
+        imcs_ereport(ERRCODE_IO_ERROR, "File flush failed: %d", errno);
     }
 }
 

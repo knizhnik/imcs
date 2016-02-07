@@ -19,5 +19,6 @@ imcs_file_h imcs_file_open(char const* path);
 bool imcs_file_read(imcs_file_h file, void* buf, size_t size, off_t pos);
 void imcs_file_write(imcs_file_h file, void const* buf, size_t size, off_t pos);
 void imcs_file_close(imcs_file_h file);
+void imcs_file_flush(imcs_file_h file);
 
 #endif

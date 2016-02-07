@@ -29,6 +29,7 @@ extern bool  imcs_sync_load;
 extern bool  imcs_use_rle;
 extern int   imcs_cache_size;
 extern char* imcs_file_path;
+extern bool  imcs_flush_file;
 
 #define IMCS_INFINITY (-1)
 #define IMCS_MAX_ERROR_MSG_LEN 256
