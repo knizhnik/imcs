@@ -1141,11 +1141,6 @@ imcs_iterator_h imcs_cast_to_char(imcs_iterator_h input, int elem_size)
     return result;                                                      
 }                                                                       
 
-
-typedef struct { 
-    void* arr;
-} imcs_array_context_t;
-
 static bool imcs_from_array_next(imcs_iterator_h iterator)    
 {              
     imcs_array_context_t* ctx = (imcs_array_context_t*)iterator->context;

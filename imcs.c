@@ -451,6 +451,7 @@ PG_FUNCTION_INFO_V1(cs_join_pos);
 PG_FUNCTION_INFO_V1(cs_map);
 PG_FUNCTION_INFO_V1(cs_union);
 PG_FUNCTION_INFO_V1(cs_empty);
+PG_FUNCTION_INFO_V1(cs_filter_row);
 PG_FUNCTION_INFO_V1(cs_project);
 PG_FUNCTION_INFO_V1(cs_project_agg);
 PG_FUNCTION_INFO_V1(cs_year);
@@ -658,6 +659,7 @@ Datum cs_join_pos(PG_FUNCTION_ARGS);
 Datum cs_map(PG_FUNCTION_ARGS);
 Datum cs_union(PG_FUNCTION_ARGS);
 Datum cs_empty(PG_FUNCTION_ARGS);
+Datum cs_filter_row(PG_FUNCTION_ARGS);
 Datum cs_project(PG_FUNCTION_ARGS);
 Datum cs_project_agg(PG_FUNCTION_ARGS);
 Datum cs_year(PG_FUNCTION_ARGS);
@@ -3660,6 +3662,55 @@ Datum cs_empty(PG_FUNCTION_ARGS)
     PG_RETURN_BOOL(!has_next);
 }
 
+Datum cs_filter_row(PG_FUNCTION_ARGS)
+{ 
+    TupleDesc attr_desc;
+	HeapTupleHeader t;
+	HeapTupleData tuple;
+    int n_attrs;
+	int i;
+	Datum* values;
+	bool* nulls;
+	size_t size;
+	void* positions;
+    Datum predicate = PG_GETARG_DATUM(1);
+	imcs_iterator_h filter;
+
+	if (PG_ARGISNULL(0)) { 
+        PG_RETURN_NULL();
+    }
+
+	t = PG_GETARG_HEAPTUPLEHEADER(0); 
+	attr_desc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(t), HeapTupleHeaderGetTypMod(t));
+	n_attrs = attr_desc->natts;
+    values = (Datum*)palloc(sizeof(Datum)*n_attrs);
+    nulls = (bool*)palloc(sizeof(bool)*n_attrs);
+
+
+		/* Build a temporary HeapTuple control structure */
+	tuple.t_len = HeapTupleHeaderGetDatumLength(t);
+	ItemPointerSetInvalid(&(tuple.t_self));
+	tuple.t_tableOid = InvalidOid;
+	tuple.t_data = t;
+	heap_deform_tuple(&tuple, attr_desc, values, nulls);
+		
+	filter = (imcs_iterator_h)DatumGetPointer(DirectFunctionCall1(cs_filter_pos, predicate));
+	size = imcs_count(filter);
+	positions = imcs_alloc(size*sizeof(imcs_pos_t));                        
+	imcs_to_array(filter, positions, size);        
+
+	for (i = 0; i < n_attrs; i++) {
+		if (!nulls[i]) {
+			imcs_iterator_h array_iterator = imcs_new_iterator(sizeof(imcs_pos_t), sizeof(imcs_array_context_t));
+			imcs_from_array(array_iterator, positions, size);
+			values[i] = PointerGetDatum(imcs_project((imcs_iterator_h)DatumGetPointer(values[i]), array_iterator));
+		}
+	}
+
+    PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(attr_desc, values, nulls)));
+}
+	
+	
 typedef struct { 
     int               n_iterators;
     int               n_timeseries;

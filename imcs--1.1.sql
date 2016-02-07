@@ -60,6 +60,7 @@ declare
     create_drop_func text;
     create_truncate_func text;
     create_project_func text;
+    create_filter_func text;
     create_id_func text;
     create_timestamp_func text;
     trigger_args text := '';
@@ -123,7 +124,8 @@ begin
             drop function '||table_name||'_is_loaded();
             drop function '||table_name||'_append('||timestamp_type||');
             drop function '||table_name||'_truncate();
-            drop function '||table_name||'_project('||table_name||'_timeseries,timeseries,bool);';
+            drop function '||table_name||'_project('||table_name||'_timeseries,timeseries,bool);
+            drop function '||table_name||'_filter('||table_name||'_timeseries,timeseries);';
     if (not is_view) then
         create_drop_func := create_drop_func||'
             drop trigger '||table_name||'_insert on '||table_name||';
@@ -134,6 +136,7 @@ begin
             drop function '||table_name||'_truncate_trigger();';
     end if;
     create_project_func:='create function '||table_name||'_project('||table_name||'_timeseries,timeseries default null,disable_caching bool default false) returns setof '||table_name||' as ''$libdir/imcs'',''cs_project'' language C stable';
+	create_filter_func:= 'create function '||table_name||'_filter('||table_name||'_timeseries,predicate timeseries) returns '||table_name||'_timeseries as ''$libdir/imcs'',''cs_filter_row'' language C stable';
 
     if (timeseries_id is not null) then
         create_drop_func := create_drop_func||'
@@ -415,6 +418,7 @@ begin
     execute create_join_func;
     execute create_count_func;
     execute create_project_func;
+    execute create_filter_func;
     execute create_truncate_func;
     execute create_drop_func;
     if (timeseries_id is not null) then

@@ -3,6 +3,10 @@
 
 #include "imcs.h"
 
+typedef struct { 
+    void* arr;
+} imcs_array_context_t;
+
 /* Functions defined for all scalar types */
 #define IMCS_FUNC_DECL(TYPE)                                        \
     typedef TYPE(*imcs_func_##TYPE##_ptr_t)(TYPE arg);                  \
