@@ -118,9 +118,10 @@ void imcs_unload_page(imcs_page_t* pg)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
     size_t pid = ((char*)pg - cache->data)/imcs_page_size + 1;
-    imcs_cache_item_t* item = &cache->items[pid];
+    imcs_cache_item_t* item;
     Assert(pid-1 < (size_t)imcs_cache_size);
     SpinLockAcquire(&cache->mutex); 
+	item = &cache->items[pid];
     if (--item->access_count == 0) { /* unpin page */
         imcs_link_after(pg->is_leaf ? cache->lru_internal : 0, pid);
         if (!pg->is_leaf && cache->lru_internal == 0) { 
@@ -203,7 +204,9 @@ void imcs_disk_flush(void)
 imcs_page_t* imcs_new_page(void)
 {
     imcs_disk_cache_t* cache = imcs_disk_cache;
-    uint64 addr = cache->free_pages_chain_head;
+    uint64 addr;
+    SpinLockAcquire(&cache->mutex);
+	addr = cache->free_pages_chain_head;
     if (addr != 0) { /* free page list is not empty */
         if (cache->free_pages_chain_head == cache->free_pages_chain_tail) { 
             /* free page list is now empty */
@@ -219,6 +222,7 @@ imcs_page_t* imcs_new_page(void)
         cache->file_size += imcs_page_size;
     }
     cache->n_used_pages += 1;
+    SpinLockRelease(&cache->mutex);
     return (imcs_page_t*)(size_t)addr;
 }
 
@@ -230,9 +234,14 @@ void imcs_free_page(imcs_page_t* pg)
 { 
     imcs_disk_cache_t* cache = imcs_disk_cache;
     size_t pid = ((char*)pg - cache->data)/imcs_page_size + 1;
-    imcs_cache_item_t* item = &cache->items[pid];
+    imcs_cache_item_t* item;
     int* pp;
-    size_t h = (size_t)(item->offs / imcs_page_size) % imcs_cache_size;    
+    size_t h;
+
+    SpinLockAcquire(&cache->mutex);
+
+	item = &cache->items[pid];
+	h = (size_t)(item->offs / imcs_page_size) % imcs_cache_size;    
 
     Assert(pid-1 < (size_t)imcs_cache_size);
     Assert(item->access_count == 1); /* removed page is pinned */
@@ -260,6 +269,8 @@ void imcs_free_page(imcs_page_t* pg)
     }
     cache->free_pages_chain_tail = item->offs;
     cache->n_used_pages -= 1;
+
+    SpinLockRelease(&cache->mutex);
 }
 
 uint64 imcs_used_memory(void)

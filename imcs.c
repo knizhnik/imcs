@@ -28,6 +28,8 @@ PG_MODULE_MAGIC;
 #define MAX_NUMELEM_LEN 32
 #define OUTPUT_BUF_RESERVE 8
 #define MAX_ENTRY_LOCKS 63 /* should be less than 64 */
+#define HASH_LOCK MAX_ENTRY_LOCKS
+#define DICT_LOCK (MAX_ENTRY_LOCKS+1)
 
 typedef struct imcs_free_page_t 
 { 
@@ -36,12 +38,11 @@ typedef struct imcs_free_page_t
 
 typedef struct imcs_state_t
 {
-	LWLockId hash_lock;	/* protects hash table */
-	LWLockId dict_lock;	/* protects dictionary */
-	LWLockId entry_locks[MAX_ENTRY_LOCKS]; /* locks used to protect access to the particual timeseries */
+	LWLockPadded* locks; /* locks used to protect access to the particual timeseries */
     imcs_free_page_t* free_pages; /* list of free B-Tree pages */
     size_t n_used_pages;
     imcs_disk_cache_t disk_cache;
+    slock_t mutex; /* spinlock protecting page allocation */
 } imcs_state_t;
 
 typedef enum
@@ -67,7 +68,8 @@ static HTAB* imcs_dict;
 static imcs_thread_pool_t* imcs_thread_pool;
 static imcs_lock_t imcs_lock = LOCK_NONE;
 static imcs_lock_t imcs_dict_lock = LOCK_NONE;
-static uint64 imcs_entry_lock_mask = 0;
+static uint64 imcs_entry_shared_lock_mask = 0;
+static uint64 imcs_entry_exclusive_lock_mask = 0;
 static imcs_mutex_t* imcs_alloc_mutex;
 static MemoryContext imcs_mem_ctx;
 static imcs_tls_t* imcs_tls;
@@ -697,7 +699,7 @@ void imcs_ereport(int err_code, char const* err_msg,...)
     } else {
         vsprintf(err_buf, err_msg, args);
         va_end(args);
-        ereport(ERROR, (errcode(err_code), errmsg(err_buf)));
+        ereport(ERROR, (errcode(err_code), errmsg("%s", err_buf)));
     }
 }
 
@@ -804,23 +806,24 @@ static void imcs_init_dict()
 
 static void imcs_unlock_entry()
 {
-	int64 mask = imcs_entry_lock_mask;
+	int64 mask = imcs_entry_shared_lock_mask|imcs_entry_exclusive_lock_mask;
 	int i;
 	for (i = 0; mask != 0; mask >>= 1, i++) {
 		if (mask & 1) { 
-			if (LWLockHeldByMe(imcs->entry_locks[i])) { 
-				LWLockRelease(imcs->entry_locks[i]);
+			if (LWLockHeldByMe((LWLockId)&imcs->locks[i])) { 
+				LWLockRelease((LWLockId)&imcs->locks[i]);
 			}
 		}		
 	}
-	imcs_entry_lock_mask = 0;
+	imcs_entry_shared_lock_mask = 0;
+	imcs_entry_exclusive_lock_mask = 0;
 }			  	
 
 static void imcs_unlock_hash()
 {
 	if (imcs && imcs_lock != LOCK_NONE) { 
-		if (LWLockHeldByMe(imcs->hash_lock)) { 
-			LWLockRelease(imcs->hash_lock);
+		if (LWLockHeldByMe((LWLockId)&imcs->locks[HASH_LOCK])) { 
+			LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
 		}
 		imcs_lock = LOCK_NONE;
 	}
@@ -831,13 +834,13 @@ static void imcs_lock_dictionary(bool forUpdate)
 	if (forUpdate)  {
 		if (imcs_dict_lock != LOCK_EXCLUSIVE) { 
 			if (imcs_dict_lock != LOCK_NONE) { 
-				LWLockRelease(imcs->dict_lock);
+				LWLockRelease((LWLockId)&imcs->locks[DICT_LOCK]);
 			}
-			LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+			LWLockAcquire((LWLockId)&imcs->locks[DICT_LOCK], LW_EXCLUSIVE);
 			imcs_dict_lock = LOCK_EXCLUSIVE;
 		}
 	} else if (imcs_dict_lock == LOCK_NONE) { 
-		LWLockAcquire(imcs->hash_lock, LW_SHARED);
+		LWLockAcquire((LWLockId)&imcs->locks[DICT_LOCK], LW_SHARED);
 		imcs_dict_lock = LW_SHARED;
 	}
 }
@@ -845,8 +848,8 @@ static void imcs_lock_dictionary(bool forUpdate)
 static void imcs_unlock_dictionary()
 {
 	if (imcs && imcs_dict_lock != LOCK_NONE) { 
-		if (LWLockHeldByMe(imcs->dict_lock)) { 
-			LWLockRelease(imcs->dict_lock);
+		if (LWLockHeldByMe((LWLockId)&imcs->locks[DICT_LOCK])) { 
+			LWLockRelease((LWLockId)&imcs->locks[DICT_LOCK]);
 		}
 		imcs_dict_lock = LOCK_NONE;
 	}
@@ -907,13 +910,13 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     if (create) { 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->hash_lock);
+                LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
             }
-            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+            LWLockAcquire((LWLockId)&imcs->locks[HASH_LOCK], LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         } 
     } else if (imcs_lock == LOCK_NONE) {         
-        LWLockAcquire(imcs->hash_lock, LW_SHARED);  
+        LWLockAcquire((LWLockId)&imcs->locks[HASH_LOCK], LW_SHARED);  
         imcs_lock = LOCK_SHARED;
     }                              
   Retry:                                     
@@ -993,17 +996,24 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
 		char ch;
 		size_t h;
 
-		LWLockRelease(imcs->hash_lock);
+		LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
 		imcs_lock = LOCK_NONE;
 
 		for (h = 0; (ch = *id) != '-' && ch != '\0'; id++) { 
 			h = h*31 + ch;
 		}
 		h %= MAX_ENTRY_LOCKS;
-		if (!(imcs_entry_lock_mask & ((uint64)1 << h))) {
-			LWLockAcquire(imcs->entry_locks[h], create ? LW_EXCLUSIVE : LW_SHARED);  
-			imcs_entry_lock_mask |= (uint64)1 << h;
-		}
+		if (create) { 
+			if (!(imcs_entry_exclusive_lock_mask & ((uint64)1 << h))) {
+				LWLockAcquire((LWLockId)&imcs->locks[h], LW_EXCLUSIVE);  
+				imcs_entry_exclusive_lock_mask |= (uint64)1 << h;
+			} 
+		} else {
+			if (!(imcs_entry_shared_lock_mask & ((uint64)1 << h))) {
+				LWLockAcquire((LWLockId)&imcs->locks[h], LW_SHARED);  
+				imcs_entry_shared_lock_mask |= (uint64)1 << h;
+			} 
+		}		
 	}
     return ts;
 }
@@ -1048,16 +1058,20 @@ uint64 imcs_used_memory(void)
 
 imcs_page_t* imcs_new_page(void)
 {
-    imcs_free_page_t* pg = imcs->free_pages;
+    imcs_free_page_t* pg;
+    SpinLockAcquire(&imcs->mutex);
+	pg = imcs->free_pages;
     if (pg == NULL) { 
         pg = (imcs_free_page_t*)ShmemAlloc(imcs_page_size);        
         if (pg == NULL) { 
+			SpinLockRelease(&imcs->mutex);
             imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory");
         }
     } else { 
         imcs->free_pages = pg->next;
     }
     imcs->n_used_pages += 1;
+	SpinLockRelease(&imcs->mutex);
     return (imcs_page_t*)pg;
 }
 
@@ -1065,9 +1079,11 @@ imcs_page_t* imcs_new_page(void)
 void imcs_free_page(imcs_page_t* page) 
 { 
     imcs_free_page_t* pg = (imcs_free_page_t*)page;
+	SpinLockAcquire(&imcs->mutex);
     pg->next = imcs->free_pages;
     imcs->free_pages = pg;
     imcs->n_used_pages -= 1;
+	SpinLockRelease(&imcs->mutex);
 }
 #endif
 
@@ -1333,7 +1349,7 @@ void _PG_init(void)
 	 * resources in imcs_shmem_startup().
 	 */
 	RequestAddinShmemSpace((size_t)shmem_size*MB);
-	RequestAddinLWLocks(2 + MAX_ENTRY_LOCKS);
+	RequestNamedLWLockTranche("imcs", 2 + MAX_ENTRY_LOCKS);
     
 	/*
 	 * Install hooks.
@@ -1392,13 +1408,9 @@ static void imcs_shmem_startup(void)
 
 	if (!found)
 	{
-		int i;
 		/* First time through ... */
-		imcs->hash_lock = LWLockAssign();
-		imcs->dict_lock = LWLockAssign();
-		for (i = 0; i < MAX_ENTRY_LOCKS; i++) { 
-			imcs->entry_locks[i] = LWLockAssign();
-		}
+		imcs->locks = GetNamedLWLockTranche("imcs");
+		SpinLockInit(&imcs->mutex);
         imcs->free_pages = NULL;
         imcs->n_used_pages = 0;
         imcs_disk_initialize(&imcs->disk_cache);
@@ -1968,7 +1980,7 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     if (imcs_error_handlers != NULL) { 
         for (i = 0; i < n_threads;  i++) { 
             if (imcs_error_handlers[i].err_code != ERRCODE_SUCCESSFUL_COMPLETION) { 
-                ereport(ERROR, (errcode(imcs_error_handlers[i].err_code), errmsg(imcs_error_handlers[i].err_msg)));
+                ereport(ERROR, (errcode(imcs_error_handlers[i].err_code), errmsg("%s", imcs_error_handlers[i].err_msg)));
             }            
         }
     }
@@ -2169,9 +2181,9 @@ Datum columnar_store_lock(PG_FUNCTION_ARGS)
     {
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->hash_lock);
+                LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
             }
-            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+            LWLockAcquire((LWLockId)&imcs->locks[HASH_LOCK], LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
     }
@@ -2310,6 +2322,7 @@ Datum columnar_store_append_char(PG_FUNCTION_ARGS)
         } else { 
             imcs_append_int32(ts, (int32)entry->code);
         }
+		imcs_unlock_dictionary();
     } else { 
         if (PG_ARGISNULL(1)) {                                              
             if (imcs_substitute_nulls) {                                    
@@ -2413,6 +2426,7 @@ static Datum imcs_parse_dict(imcs_adt_parser_t* parser, char* value, size_t size
 {
     imcs_dict_key_t key; 
     imcs_dict_entry_t* entry;
+	size_t code;
     key.val = value;
     key.len = size;
 	imcs_lock_dictionary(false);
@@ -2420,10 +2434,12 @@ static Datum imcs_parse_dict(imcs_adt_parser_t* parser, char* value, size_t size
     if (entry == NULL) { 
         imcs_ereport(ERRCODE_NO_DATA_FOUND, "String '%.*s' not found in dictionary", (int)size, value);
     }
+	code = entry->code;
+	imcs_unlock_dictionary();	
     if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
-        PG_RETURN_INT16((int16)entry->code);                   
+        PG_RETURN_INT16((int16)code);                   
     } else { 
-        PG_RETURN_INT32((int32)entry->code);                   
+        PG_RETURN_INT32((int32)code);                   
     }
 }
 
@@ -4363,6 +4379,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                             } else { 
                                 imcs_append_int32(ts, (int32)entry->code);
                             }
+							imcs_unlock_dictionary();	
                         } else { 
                             if (nulls[i]) { /* substitute NULL with empty string */
                                 imcs_append_char(ts, NULL, 0);
@@ -4571,6 +4588,7 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
                     } else { 
                         imcs_append_int32(ts, (int32)entry->code);
                     }
+					imcs_unlock_dictionary();	
                 } else { 
                     if (isnull) { /* substitute NULL with empty string */
                         imcs_append_char(ts, NULL, 0);
@@ -4775,6 +4793,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                     } else { 
                         imcs_append_int32(ts, (int32)entry->code);
                     }
+					imcs_unlock_dictionary();	
                 } else { 
                     if (nulls[i]) { /* substitute NULL with empty string */
                         imcs_append_char(ts, NULL, 0);
@@ -5176,9 +5195,9 @@ Datum cs_delete_all(PG_FUNCTION_ARGS)
 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->hash_lock);
+                LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
             }
-            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+            LWLockAcquire((LWLockId)&imcs->locks[HASH_LOCK], LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
 
@@ -5187,7 +5206,7 @@ Datum cs_delete_all(PG_FUNCTION_ARGS)
             deleted += imcs_delete_all(&entry->value);
         }
         
-        LWLockRelease(imcs->hash_lock);
+        LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_INT64(deleted);
@@ -5203,9 +5222,9 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->hash_lock);
+                LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
             }
-            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+            LWLockAcquire((LWLockId)&imcs->locks[HASH_LOCK], LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
 
@@ -5219,7 +5238,7 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
             }
         }
         
-        LWLockRelease(imcs->hash_lock);
+        LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_VOID();
@@ -5238,9 +5257,9 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
 
         if (imcs_lock != LOCK_EXCLUSIVE) { 
             if (imcs_lock != LOCK_NONE) { 
-                LWLockRelease(imcs->hash_lock);
+                LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
             }
-            LWLockAcquire(imcs->hash_lock, LW_EXCLUSIVE);
+            LWLockAcquire((LWLockId)&imcs->locks[HASH_LOCK], LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
         }
 
@@ -5254,7 +5273,7 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
             }
         }
         
-        LWLockRelease(imcs->hash_lock);
+        LWLockRelease((LWLockId)&imcs->locks[HASH_LOCK]);
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_VOID();
@@ -5744,6 +5763,7 @@ Datum cs_str2code(PG_FUNCTION_ARGS)
     imcs_dict_key_t key;
     imcs_dict_entry_t* entry;
     VarChar* t = PG_GETARG_VARCHAR_P(0);
+	int code;
     key.val = (char*)VARDATA(t);
     key.len = VARSIZE(t) - VARHDRSZ;
     if (imcs_dict_size == 0) { 
@@ -5752,9 +5772,15 @@ Datum cs_str2code(PG_FUNCTION_ARGS)
 	imcs_lock_dictionary(false);
     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_FIND, NULL);
     if (entry == NULL) { 
-        PG_RETURN_INT32(-1);
+		code = -1;
+	} else { 
+		code = (int)entry->code;
+	}
+	imcs_unlock_dictionary();	
+    if (entry == NULL) { 
+        PG_RETURN_INT32(code);
     } else { 
-        PG_RETURN_INT32((int)entry->code);
+        PG_RETURN_INT32(code);
     }
 }
 
@@ -5789,5 +5815,6 @@ Datum cs_dictionary_size(PG_FUNCTION_ARGS)
 	int size;
 	imcs_lock_dictionary(false);
 	size = imcs_dict ? hash_get_num_entries(imcs_dict) : 0;
+	imcs_unlock_dictionary();	
     PG_RETURN_INT32(size);
 }
