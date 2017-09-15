@@ -1266,7 +1266,7 @@ void _PG_init(void)
 	 * resources in imcs_shmem_startup().
 	 */
 	RequestAddinShmemSpace((size_t)shmem_size*MB);
-#if PG_VERSION_NUM >= 90603
+#if PG_VERSION_NUM >= 90600
 	RequestNamedLWLockTranche("IMCS", 1);
 #else
 	RequestAddinLWLocks(1);
@@ -1330,7 +1330,7 @@ static void imcs_shmem_startup(void)
 	if (!found)
 	{
 		/* First time through ... */
-#if PG_VERSION_NUM >= 90603
+#if PG_VERSION_NUM >= 90600
 		imcs->lock = (LWLockId)GetNamedLWLockTranche("IMCS");
 #else
 		imcs->lock = LWLockAssign();
