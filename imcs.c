@@ -1,4 +1,7 @@
 #include <unistd.h>
+#include <float.h>
+#include <math.h>
+#include <limits.h>
 #include "imcs.h"
 #include "btree.h"
 #include "disk.h"
@@ -38,8 +41,8 @@ PG_MODULE_MAGIC;
 #endif
 
 
-typedef struct imcs_free_page_t 
-{ 
+typedef struct imcs_free_page_t
+{
     struct imcs_free_page_t* next;
 } imcs_free_page_t;
 
@@ -63,11 +66,11 @@ typedef enum
     LOCK_EXCLUSIVE
 } imcs_lock_t;
 
-typedef struct { 
+typedef struct {
     char* id;
 } imcs_hash_key_t;
 
-typedef struct { 
+typedef struct {
     imcs_hash_key_t   key;
     imcs_timeseries_t value;
 	volatile slock_t  lock;
@@ -120,145 +123,145 @@ static const int imcs_type_mnem_lens[] = {4, 4, 4, 4, 4, 4, 8, 5, 6, 6, 6};
 
 static const int imcs_type_sizeof[] = {1,2,4,4,8,8,8,8,4,8,0};
 
-static const char* const imcs_command_mnem[] = 
+static const char* const imcs_command_mnem[] =
 {
     "parse",
     "const",
     "cast",
-    "add", 
-    "mul", 
-    "sub", 
-    "div", 
-    "mod", 
-    "pow", 
-    "and", 
-    "or", 
-    "xor", 
-    "concat", 
-    "cat", 
-    "eq", 
-    "ne", 
-    "ge", 
-    "le", 
-    "lt", 
-    "gt", 
-    "maxof", 
-    "minof", 
-    "neg", 
-    "not", 
-    "bit_not", 
-    "abs", 
-    "limit", 
-    "sin", 
-    "cos", 
-    "tan", 
-    "exp", 
-    "asin", 
-    "acos", 
-    "atan", 
-    "sqrt", 
-    "log", 
-    "ceil", 
-    "floor", 
-    "isnan", 
-    "wsum", 
-    "wavg", 
-    "corr", 
-    "cov", 
-    "norm", 
-    "thin", 
-    "iif", 
-    "if", 
-    "filter", 
-    "filter_pos", 
-    "filter_first_pos", 
-    "unique", 
-    "reverse", 
-    "diff", 
-    "trend", 
-    "repeat", 
-    "count", 
-    "approxdc", 
-    "max", 
-    "min", 
-    "avg", 
-    "sum", 
-    "prd", 
-    "var", 
-    "dev", 
-    "all", 
-    "any", 
-    "median", 
-    "group_count", 
-    "group_approxdc", 
-    "group_max", 
-    "group_min", 
-    "group_avg", 
-    "group_sum", 
-    "group_var", 
-    "group_dev", 
-    "group_all", 
-    "group_any", 
-    "group_last", 
-    "group_first", 
-    "grid_max", 
-    "grid_min", 
-    "grid_avg", 
-    "grid_sum", 
-    "grid_var", 
-    "grid_dev", 
-    "window_max", 
-    "window_min", 
-    "window_avg", 
-    "window_sum", 
-    "window_var", 
-    "window_dev", 
-    "window_ema", 
-    "window_atr", 
-    "hash_count", 
-    "hash_dup_count", 
-    "hash_max", 
-    "hash_min", 
-    "hash_avg", 
-    "hash_sum", 
-    "hash_all", 
-    "hash_any", 
-    "top_max", 
-    "top_min", 
-    "top_max_pos", 
-    "top_min_pos", 
-    "cum_max", 
-    "cum_min", 
-    "cum_avg", 
-    "cum_sum", 
-    "cum_prd", 
-    "cum_var", 
-    "cum_dev", 
-    "histogram", 
-    "cross", 
-    "extrema", 
-    "stretch", 
-    "stretch0", 
-    "asof_join", 
-    "asof_join_pos", 
-    "join", 
-    "join_pos", 
-    "map", 
-    "union", 
-    "empty", 
-    "project", 
-    "project_agg", 
-    "year", 
-    "month", 
-    "mday", 
-    "wday", 
-    "hour", 
-    "minute", 
-    "second", 
-    "week", 
-    "quarter", 
-    "call", 
-    "to_array", 
+    "add",
+    "mul",
+    "sub",
+    "div",
+    "mod",
+    "pow",
+    "and",
+    "or",
+    "xor",
+    "concat",
+    "cat",
+    "eq",
+    "ne",
+    "ge",
+    "le",
+    "lt",
+    "gt",
+    "maxof",
+    "minof",
+    "neg",
+    "not",
+    "bit_not",
+    "abs",
+    "limit",
+    "sin",
+    "cos",
+    "tan",
+    "exp",
+    "asin",
+    "acos",
+    "atan",
+    "sqrt",
+    "log",
+    "ceil",
+    "floor",
+    "isnan",
+    "wsum",
+    "wavg",
+    "corr",
+    "cov",
+    "norm",
+    "thin",
+    "iif",
+    "if",
+    "filter",
+    "filter_pos",
+    "filter_first_pos",
+    "unique",
+    "reverse",
+    "diff",
+    "trend",
+    "repeat",
+    "count",
+    "approxdc",
+    "max",
+    "min",
+    "avg",
+    "sum",
+    "prd",
+    "var",
+    "dev",
+    "all",
+    "any",
+    "median",
+    "group_count",
+    "group_approxdc",
+    "group_max",
+    "group_min",
+    "group_avg",
+    "group_sum",
+    "group_var",
+    "group_dev",
+    "group_all",
+    "group_any",
+    "group_last",
+    "group_first",
+    "grid_max",
+    "grid_min",
+    "grid_avg",
+    "grid_sum",
+    "grid_var",
+    "grid_dev",
+    "window_max",
+    "window_min",
+    "window_avg",
+    "window_sum",
+    "window_var",
+    "window_dev",
+    "window_ema",
+    "window_atr",
+    "hash_count",
+    "hash_dup_count",
+    "hash_max",
+    "hash_min",
+    "hash_avg",
+    "hash_sum",
+    "hash_all",
+    "hash_any",
+    "top_max",
+    "top_min",
+    "top_max_pos",
+    "top_min_pos",
+    "cum_max",
+    "cum_min",
+    "cum_avg",
+    "cum_sum",
+    "cum_prd",
+    "cum_var",
+    "cum_dev",
+    "histogram",
+    "cross",
+    "extrema",
+    "stretch",
+    "stretch0",
+    "asof_join",
+    "asof_join_pos",
+    "join",
+    "join_pos",
+    "map",
+    "union",
+    "empty",
+    "project",
+    "project_agg",
+    "year",
+    "month",
+    "mday",
+    "wday",
+    "hour",
+    "minute",
+    "second",
+    "week",
+    "quarter",
+    "call",
+    "to_array",
     "from_array",
     "like",
     "ilike",
@@ -702,7 +705,7 @@ void imcs_ereport(int err_code, char const* err_msg,...)
     va_list args;
     imcs_error_handler_t* hnd = imcs_tls != NULL ? (imcs_error_handler_t*)imcs_tls->get(imcs_tls) : NULL;
     va_start(args, err_msg);
-    if (hnd != NULL) { 
+    if (hnd != NULL) {
         vsprintf(hnd->err_msg, err_msg, args);
         va_end(args);
         hnd->err_code = err_code;
@@ -720,7 +723,7 @@ static uint32 imcs_hash_fn(const void *key, Size keysize)
 {
 	char const* id = ((imcs_hash_key_t*)key)->id;
     uint32 h = 0;
-    while (*id != 0) { 
+    while (*id != 0) {
         h = h*31 + *id++;
     }
     return h;
@@ -732,11 +735,11 @@ static int imcs_match_fn(const void *key1, const void *key2, Size keysize)
 }
 
 static void* imcs_keycopy_fn(void *dest, const void *src, Size keysize)
-{ 
+{
     imcs_hash_key_t* dk = (imcs_hash_key_t*)dest;
     imcs_hash_key_t* sk = (imcs_hash_key_t*)src;
     dk->id = (char*)ShmemAlloc(strlen(sk->id)+1);
-    if (dk->id == NULL) { 
+    if (dk->id == NULL) {
         imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for hash entry");
     }
     strcpy(dk->id, sk->id);
@@ -745,7 +748,7 @@ static void* imcs_keycopy_fn(void *dest, const void *src, Size keysize)
 
 
 
-static void imcs_init_hash() 
+static void imcs_init_hash()
 {
 	static HASHCTL info;
 	info.keysize = sizeof(imcs_hash_key_t);
@@ -766,7 +769,7 @@ static uint32 imcs_dict_hash_fn(const void *key, Size keysize)
     size_t len = dk->len;
     size_t i;
     uint32 h = 0;
-    for (i = 0; i < len; i++) { 
+    for (i = 0; i < len; i++) {
         h = h*31 + val[i];
     }
     return h;
@@ -780,11 +783,11 @@ static int imcs_dict_match_fn(const void *key1, const void *key2, Size keysize)
 }
 
 static void* imcs_dict_keycopy_fn(void *dest, const void *src, Size keysize)
-{ 
+{
     imcs_dict_key_t* dk = (imcs_dict_key_t*)dest;
     imcs_dict_key_t* sk = (imcs_dict_key_t*)src;
     dk->val = (char*)ShmemAlloc(sk->len);
-    if (dk->val == NULL) { 
+    if (dk->val == NULL) {
         imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for dictionary entry");
     }
     dk->len = sk->len;
@@ -794,9 +797,9 @@ static void* imcs_dict_keycopy_fn(void *dest, const void *src, Size keysize)
 
 
 
-static void imcs_init_dict() 
+static void imcs_init_dict()
 {
-    if (imcs_dict_size != 0) { 
+    if (imcs_dict_size != 0) {
         static HASHCTL info;
         info.keysize = sizeof(imcs_dict_key_t);
         info.entrysize = sizeof(imcs_dict_entry_t);
@@ -808,7 +811,7 @@ static void imcs_init_dict()
                                   &info,
                                   HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_KEYCOPY);
         imcs_dict_code_map = (imcs_dict_entry_t**)ShmemAlloc(imcs_dict_size*sizeof(imcs_dict_entry_t*));
-        if (imcs_dict_code_map == NULL) { 
+        if (imcs_dict_code_map == NULL) {
             imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for dictionary map");
         }
     }
@@ -820,20 +823,20 @@ static void imcs_unlock_entry()
 	int64 mask = imcs_entry_shared_lock_mask|imcs_entry_exclusive_lock_mask;
 	int i;
 	for (i = 0; mask != 0; mask >>= 1, i++) {
-		if (mask & 1) { 
-			if (LWLockHeldByMe(LWLOCK(i))) { 
+		if (mask & 1) {
+			if (LWLockHeldByMe(LWLOCK(i))) {
 				LWLockRelease(LWLOCK(i));
 			}
-		}		
+		}
 	}
 	imcs_entry_shared_lock_mask = 0;
 	imcs_entry_exclusive_lock_mask = 0;
-}			  	
+}
 
 static void imcs_unlock_hash()
 {
-	if (imcs && imcs_lock != LOCK_NONE) { 
-		if (LWLockHeldByMe(LWLOCK(HASH_LOCK))) { 
+	if (imcs && imcs_lock != LOCK_NONE) {
+		if (LWLockHeldByMe(LWLOCK(HASH_LOCK))) {
 			LWLockRelease(LWLOCK(HASH_LOCK));
 		}
 		imcs_lock = LOCK_NONE;
@@ -843,14 +846,14 @@ static void imcs_unlock_hash()
 static void imcs_lock_dictionary(bool forUpdate)
 {
 	if (forUpdate)  {
-		if (imcs_dict_lock != LOCK_EXCLUSIVE) { 
-			if (imcs_dict_lock != LOCK_NONE) { 
+		if (imcs_dict_lock != LOCK_EXCLUSIVE) {
+			if (imcs_dict_lock != LOCK_NONE) {
 				LWLockRelease(LWLOCK(DICT_LOCK));
 			}
 			LWLockAcquire(LWLOCK(DICT_LOCK), LW_EXCLUSIVE);
 			imcs_dict_lock = LOCK_EXCLUSIVE;
 		}
-	} else if (imcs_dict_lock == LOCK_NONE) { 
+	} else if (imcs_dict_lock == LOCK_NONE) {
 		LWLockAcquire(LWLOCK(DICT_LOCK), LW_SHARED);
 		imcs_dict_lock = LW_SHARED;
 	}
@@ -858,8 +861,8 @@ static void imcs_lock_dictionary(bool forUpdate)
 
 static void imcs_unlock_dictionary()
 {
-	if (imcs && imcs_dict_lock != LOCK_NONE) { 
-		if (LWLockHeldByMe(LWLOCK(DICT_LOCK))) { 
+	if (imcs && imcs_dict_lock != LOCK_NONE) {
+		if (LWLockHeldByMe(LWLOCK(DICT_LOCK))) {
 			LWLockRelease(LWLOCK(DICT_LOCK));
 		}
 		imcs_dict_lock = LOCK_NONE;
@@ -868,29 +871,29 @@ static void imcs_unlock_dictionary()
 
 static void imcs_executor_end(QueryDesc *queryDesc)
 {
-    if (CurrentMemoryContext == TopTransactionContext) { 
+    if (CurrentMemoryContext == TopTransactionContext) {
         imcs_project_redundant_calls = 0;
         imcs_project_call_count = 0;
-        if (!imcs_serializable) { 
+        if (!imcs_serializable) {
 			imcs_unlock_hash();
 		}
 		imcs_unlock_dictionary();
 		imcs_unlock_entry();
         if (imcs_mem_ctx) {
             MemoryContextReset(imcs_mem_ctx);
-        }     
+        }
     }
-    if (prev_ExecutorEnd) { 
+    if (prev_ExecutorEnd) {
 		prev_ExecutorEnd(queryDesc);
-    } else { 
+    } else {
 		standard_ExecutorEnd(queryDesc);
-    }    
+    }
 }
 
 
 static void imcs_trans_callback(XactEvent event, void *arg)
 {
-    if (event == XACT_EVENT_COMMIT || event == XACT_EVENT_ABORT) { 
+    if (event == XACT_EVENT_COMMIT || event == XACT_EVENT_ABORT) {
         imcs_project_redundant_calls = 0;
         imcs_project_call_count = 0;
 		imcs_unlock_hash();
@@ -911,72 +914,72 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
 	bool found;
     int autoload_attempts = imcs_autoload ? 2 : 0;
 
-    if (id == NULL) { 
+    if (id == NULL) {
         return NULL;
     }
-    if (imcs == NULL) { 
+    if (imcs == NULL) {
         imcs_ereport(ERRCODE_LOCK_NOT_AVAILABLE, "Columnar store was not properly initialized, please check that imcs plugin was added to shared_preload_libraries list");
     }
 	prev_lock = imcs_lock;
-    if (create) { 
-        if (imcs_lock != LOCK_EXCLUSIVE) { 
-            if (imcs_lock != LOCK_NONE) { 
+    if (create) {
+        if (imcs_lock != LOCK_EXCLUSIVE) {
+            if (imcs_lock != LOCK_NONE) {
                 LWLockRelease(LWLOCK(HASH_LOCK));
             }
             LWLockAcquire(LWLOCK(HASH_LOCK), LW_EXCLUSIVE);
             imcs_lock = LOCK_EXCLUSIVE;
-        } 
-    } else if (imcs_lock == LOCK_NONE) {         
-        LWLockAcquire(LWLOCK(HASH_LOCK), LW_SHARED);  
+        }
+    } else if (imcs_lock == LOCK_NONE) {
+        LWLockAcquire(LWLOCK(HASH_LOCK), LW_SHARED);
         imcs_lock = LOCK_SHARED;
-    }                              
-  Retry:                                     
+    }
+  Retry:
     key.id = (char*)id;
     entry = (imcs_hash_entry_t*)hash_search(imcs_hash, &key, HASH_FIND, NULL);
-    if (entry == NULL) { 
-        if (!create) { 
+    if (entry == NULL) {
+        if (!create) {
             if (autoload_attempts && elem_size != 0) { /* elem_size == 0 when imcs_get_timeseries is called from columnar_store_initialized */
                 char const* sep = strchr(id, '-');
-                if (sep != NULL) { 
+                if (sep != NULL) {
                     size_t table_name_len = sep - id;
                     char* table_name = (char*)palloc(table_name_len + 1);
                     int rc;
                     memcpy(table_name, id, table_name_len);
                     table_name[table_name_len] = '\0';
-                    key.id = table_name;                    
-                    if (autoload_attempts == 2 && !hash_search(imcs_hash, &key, HASH_FIND, NULL)) { 
+                    key.id = table_name;
+                    if (autoload_attempts == 2 && !hash_search(imcs_hash, &key, HASH_FIND, NULL)) {
                         /* load all table */
                         char stmt[MAX_SQL_STMT_LEN];
-                        SPI_connect();    
+                        SPI_connect();
                         sprintf(stmt, "select %s_load()", table_name);
                         rc = SPI_execute(stmt, true, 0);
                         SPI_finish();
-                        if (rc != SPI_OK_SELECT) { 
+                        if (rc != SPI_OK_SELECT) {
                             elog(ERROR, "Select failed with status %d", rc);
-                        } 
+                        }
                         autoload_attempts = 1;
                         goto Retry;
-                    } else if (autoload_attempts == 1) { 
+                    } else if (autoload_attempts == 1) {
                         /* load particular column */
                         char stmt[MAX_SQL_STMT_LEN];
                         char* column_name = (char*)sep + 1;
                         sep = strchr(column_name, '-');
-                        if (sep != NULL) { 
+                        if (sep != NULL) {
                             int column_name_len = sep - column_name;
                             char* buf = (char*)palloc(column_name_len + 1);
                             memcpy(buf, column_name, column_name_len);
                             column_name = buf;
                             column_name[column_name_len] = '\0';
                         }
-                        SPI_connect();    
+                        SPI_connect();
                         sprintf(stmt, "select %s_load_column('%s')", table_name, column_name);
                         rc = SPI_execute(stmt, true, 0);
                         SPI_finish();
-                        if (rc != SPI_OK_SELECT) { 
+                        if (rc != SPI_OK_SELECT) {
                             elog(ERROR, "Select failed with status %d", rc);
                         }
                         autoload_attempts = 0; /* do not make more than one attempt of autoloading data */
-                        goto Retry;                        
+                        goto Retry;
                     }
                 }
             }
@@ -985,7 +988,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
         /* Find or create an entry with desired hash code */
         entry = (imcs_hash_entry_t*)hash_search(imcs_hash, &key, HASH_ENTER, &found);
         ts = &entry->value;
-        if (!found) { 
+        if (!found) {
             /* New entry, initialize it */
             ts->root_page = NULL;
             ts->count = 0;
@@ -993,7 +996,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
             ts->elem_size = elem_size;
             ts->is_timestamp = is_timestamp;
         }
-    } else { 
+    } else {
         ts = &entry->value;
     }
     if (elem_size != 0 /* elem_size == 0 when imcs_get_timeseries is called from columnar_store_initialized */
@@ -1001,37 +1004,37 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
             ts->elem_size != elem_size ||
             ts->is_timestamp != is_timestamp))
     {
-        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "data format was changed"); 
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "data format was changed");
     }
-	if (prev_lock == LOCK_NONE && !imcs_serializable) { 
+	if (prev_lock == LOCK_NONE && !imcs_serializable) {
 		char ch;
 		size_t h;
 
 		LWLockRelease(LWLOCK(HASH_LOCK));
 		imcs_lock = LOCK_NONE;
 
-		for (h = 0; (ch = *id) != '-' && ch != '\0'; id++) { 
+		for (h = 0; (ch = *id) != '-' && ch != '\0'; id++) {
 			h = h*31 + ch;
 		}
 		h %= MAX_ENTRY_LOCKS;
-		if (create) { 
+		if (create) {
 			if (!(imcs_entry_exclusive_lock_mask & ((uint64)1 << h))) {
-				LWLockAcquire(LWLOCK(h), LW_EXCLUSIVE);  
+				LWLockAcquire(LWLOCK(h), LW_EXCLUSIVE);
 				imcs_entry_exclusive_lock_mask |= (uint64)1 << h;
-			} 
+			}
 		} else {
 			if (!(imcs_entry_shared_lock_mask & ((uint64)1 << h))) {
-				LWLockAcquire(LWLOCK(h), LW_SHARED);  
+				LWLockAcquire(LWLOCK(h), LW_SHARED);
 				imcs_entry_shared_lock_mask |= (uint64)1 << h;
-			} 
-		}		
+			}
+		}
 	}
     return ts;
 }
 
-/* imcs_alloc can be concurrently invoked from multiple threads, so as far as MemoryContextAlloc is non reetrant we have to use mutex here 
+/* imcs_alloc can be concurrently invoked from multiple threads, so as far as MemoryContextAlloc is non reetrant we have to use mutex here
  */
-void* imcs_alloc(size_t size) 
+void* imcs_alloc(size_t size)
 {
     void* ptr;
     imcs_alloc_mutex->lock(imcs_alloc_mutex);
@@ -1043,7 +1046,7 @@ void* imcs_alloc(size_t size)
 /* align returned memory on 16-byte boundary to allow use of SSE vector instructions.
  * This memory should not be deallocated using imcs_free
  */
-void* imcs_alloc_aligned(size_t size) 
+void* imcs_alloc_aligned(size_t size)
 {
     char* ptr;
     imcs_alloc_mutex->lock(imcs_alloc_mutex);
@@ -1053,8 +1056,8 @@ void* imcs_alloc_aligned(size_t size)
     return ptr;
 }
 
-void imcs_free(void* ptr) 
-{ 
+void imcs_free(void* ptr)
+{
     imcs_alloc_mutex->lock(imcs_alloc_mutex);
     pfree(ptr);
     imcs_alloc_mutex->unlock(imcs_alloc_mutex);
@@ -1072,13 +1075,13 @@ imcs_page_t* imcs_new_page(void)
     imcs_free_page_t* pg;
     SpinLockAcquire(&imcs->mutex);
 	pg = imcs->free_pages;
-    if (pg == NULL) { 
-        pg = (imcs_free_page_t*)ShmemAlloc(imcs_page_size);        
-        if (pg == NULL) { 
+    if (pg == NULL) {
+        pg = (imcs_free_page_t*)ShmemAlloc(imcs_page_size);
+        if (pg == NULL) {
 			SpinLockRelease(&imcs->mutex);
             imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory");
         }
-    } else { 
+    } else {
         imcs->free_pages = pg->next;
     }
     imcs->n_used_pages += 1;
@@ -1087,8 +1090,8 @@ imcs_page_t* imcs_new_page(void)
 }
 
 /* This function is called in context protected by imcs->lock */
-void imcs_free_page(imcs_page_t* page) 
-{ 
+void imcs_free_page(imcs_page_t* page)
+{
     imcs_free_page_t* pg = (imcs_free_page_t*)page;
 	SpinLockAcquire(&imcs->mutex);
     pg->next = imcs->free_pages;
@@ -1101,10 +1104,10 @@ void imcs_free_page(imcs_page_t* page)
 void imcs_reset_iterator(imcs_iterator_h iterator)
 {
     int i;
-    iterator->tile_size = iterator->tile_offs = 0;  
-    iterator->next_pos = iterator->first_pos;   
-    for (i = 0; i < 3; i++) { 
-        if (iterator->opd[i]) { 
+    iterator->tile_size = iterator->tile_offs = 0;
+    iterator->next_pos = iterator->first_pos;
+    for (i = 0; i < 3; i++) {
+        if (iterator->opd[i]) {
             iterator->opd[i]->reset(iterator->opd[i]);
         }
     }
@@ -1119,11 +1122,11 @@ imcs_iterator_h imcs_new_iterator(size_t elem_size, size_t context_size)
     iterator->cs_hdr = NULL;
     iterator->opd[0] = NULL;
     iterator->opd[1] = NULL;
-    iterator->opd[2] = NULL; 
-    iterator->next_pos = 0;                                            
-    iterator->first_pos = 0;                                           
-    iterator->last_pos = IMCS_INFINITY;                             
-    iterator->tile_size = iterator->tile_offs = 0; 
+    iterator->opd[2] = NULL;
+    iterator->next_pos = 0;
+    iterator->first_pos = 0;
+    iterator->last_pos = IMCS_INFINITY;
+    iterator->tile_size = iterator->tile_offs = 0;
     iterator->elem_size = elem_size;
     iterator->prepare = NULL;
     iterator->merge = NULL;
@@ -1133,14 +1136,14 @@ imcs_iterator_h imcs_new_iterator(size_t elem_size, size_t context_size)
     return iterator;
 }
 
-imcs_iterator_h imcs_clone_iterator(imcs_iterator_h iterator) 
+imcs_iterator_h imcs_clone_iterator(imcs_iterator_h iterator)
 {
     imcs_iterator_h clone = (imcs_iterator_h)imcs_alloc_aligned(iterator->iterator_size);
     memcpy(clone, iterator, iterator->iterator_size);
     clone->context = (char*)clone + ((char*)iterator->context - (char*)iterator);
     return clone;
 }
-    
+
 /*
  * Module load callback
  */
@@ -1232,7 +1235,7 @@ void _PG_init(void)
                              NULL,
                              NULL,
                              NULL);
-    
+
 #ifdef IMCS_DISK_SUPPORT
 	DefineCustomIntVariable("imcs.cache_size",
                             "Size of IMCS disk cache.",
@@ -1257,7 +1260,7 @@ void _PG_init(void)
                              NULL,
                              NULL,
                              NULL);
-    
+
 	DefineCustomStringVariable("imcs.file_path",
                             "Path to IMCS disk file or partition.",
 							NULL,
@@ -1360,11 +1363,11 @@ void _PG_init(void)
 	 * resources in imcs_shmem_startup().
 	 */
 	RequestAddinShmemSpace((size_t)shmem_size*MB);
-#if PG_VERSION_NUM >= 90600	
+#if PG_VERSION_NUM >= 90600
 	RequestNamedLWLockTranche("imcs", 2 + MAX_ENTRY_LOCKS);
 #else
 	RequestAddinLWLocks(2 + MAX_ENTRY_LOCKS);
-#endif    
+#endif
 
 	/*
 	 * Install hooks.
@@ -1384,7 +1387,7 @@ void _PG_fini(void)
 	shmem_startup_hook = prev_shmem_startup_hook;
     ExecutorEnd_hook = prev_ExecutorEnd;
 
-    if (imcs_thread_pool) { 
+    if (imcs_thread_pool) {
         imcs_thread_pool->destroy(imcs_thread_pool);
         imcs_thread_pool = NULL;
     }
@@ -1392,11 +1395,11 @@ void _PG_fini(void)
         imcs_tls->destroy(imcs_tls);
     }
     free(imcs_error_handlers);
-    if (imcs_alloc_mutex) { 
+    if (imcs_alloc_mutex) {
         imcs_alloc_mutex->destroy(imcs_alloc_mutex);
         imcs_alloc_mutex = NULL;
     }
-    UnregisterXactCallback(imcs_trans_callback, NULL);          
+    UnregisterXactCallback(imcs_trans_callback, NULL);
     imcs_disk_close();
 }
 
@@ -1404,7 +1407,7 @@ static void imcs_shmem_startup(void)
 {
 	bool found;
 
-	if (prev_shmem_startup_hook) { 
+	if (prev_shmem_startup_hook) {
 		prev_shmem_startup_hook();
     }
 
@@ -1428,7 +1431,7 @@ static void imcs_shmem_startup(void)
 		imcs->locks = GetNamedLWLockTranche("imcs");
 #else
 		int i;
-		for (i = 0; i < MAX_ENTRY_LOCKS+2; i++) { 
+		for (i = 0; i < MAX_ENTRY_LOCKS+2; i++) {
 		     imcs->locks[i] = LWLockAssign();
 	    }
 #endif
@@ -1444,13 +1447,19 @@ static void imcs_shmem_startup(void)
     /* operator's pipe should exist until end of query execution.
      * So we can not use default memory context and have to create own own memory context which is reset by ExecutorEnd_hook
      */
+#if PG_VERSION_NUM>=110000
     imcs_mem_ctx = AllocSetContextCreate(TopMemoryContext,
+                                         "IMCS tempory memory",
+                                         ALLOCSET_DEFAULT_SIZES);
+#else
+	imcs_mem_ctx = AllocSetContextCreate(TopMemoryContext,
                                          "IMCS tempory memory",
                                          ALLOCSET_DEFAULT_MINSIZE,
                                          ALLOCSET_DEFAULT_INITSIZE,
-                                         ALLOCSET_DEFAULT_MAXSIZE);
+										 ALLOCSET_DEFAULT_MAXSIZE);
+#endif
 	LWLockRelease(AddinShmemInitLock);
-    RegisterXactCallback(imcs_trans_callback, NULL);          
+    RegisterXactCallback(imcs_trans_callback, NULL);
 }
 
 
@@ -1483,7 +1492,7 @@ static void imcs_shmem_startup(void)
       default:                                                          \
         imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "operation is not supported for timeseries of CHAR(N) type"); \
         result = NULL;                                                  \
-    }                                                       
+    }
 
 /* Functions for timeseries of integer type */
 #define IMCS_APPLY_INT(func, elem_type, params)                         \
@@ -1504,7 +1513,7 @@ static void imcs_shmem_startup(void)
       default:                                                          \
         imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "operation is supported for timeseries of integer type"); \
         result = NULL;                                                  \
-    }                                                       
+    }
 
 /* Function returning void */
 #define IMCS_APPLY_VOID(func, elem_type, params)                        \
@@ -1534,7 +1543,7 @@ static void imcs_shmem_startup(void)
         break;                                                          \
       default:                                                          \
         imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "operation is not supported for timeseries of CHAR(N) type"); \
-    }                                                       
+    }
 
 /* Function for timeseries of scalar or character type */
 #define IMCS_APPLY_CHAR(func, elem_type, params)    \
@@ -1568,7 +1577,7 @@ static void imcs_shmem_startup(void)
       default:                                      \
         result = NULL;                              \
         Assert(false);                              \
-    }                                                       
+    }
 
 /* Polymorphic binary function */
 #define IMCS_BINARY_ANY_OP(func)                                        \
@@ -1914,47 +1923,47 @@ Datum cs_hash_##func(PG_FUNCTION_ARGS)                                  \
 }
 
 
-typedef struct {     
+typedef struct {
     imcs_pos_t interval;
 } imcs_visitor_context_t;
 
 /* Checks that all operators in subtree are reentrant and have the same boundaries */
-static bool imcs_parallel_execution_possible_for_operator(imcs_iterator_h iterator, imcs_visitor_context_t* ctx) 
-{ 
-    if (iterator == NULL) { 
+static bool imcs_parallel_execution_possible_for_operator(imcs_iterator_h iterator, imcs_visitor_context_t* ctx)
+{
+    if (iterator == NULL) {
         return true;
     }
-    if (iterator->flags & FLAG_CONTEXT_FREE) { 
+    if (iterator->flags & FLAG_CONTEXT_FREE) {
         if (iterator->flags & FLAG_RANDOM_ACCESS) {
             Assert(iterator->last_pos != IMCS_INFINITY);
-            if (ctx->interval > iterator->last_pos - iterator->first_pos + 1) { 
+            if (ctx->interval > iterator->last_pos - iterator->first_pos + 1) {
                 ctx->interval = iterator->last_pos - iterator->first_pos + 1;
             }
-        } else { 
+        } else {
             int i;
-            for (i = 0; i < 3; i++) { 
-                if (!imcs_parallel_execution_possible_for_operator(iterator->opd[i], ctx)) { 
+            for (i = 0; i < 3; i++) {
+                if (!imcs_parallel_execution_possible_for_operator(iterator->opd[i], ctx)) {
                     return false;
                 }
-            }            
+            }
         }
         return true;
-    } 
+    }
     return false;
 }
 
 /* Creates thread specific branch of execution tree. Each of N threads will be given 1/N of underlying timeseries. */
-static imcs_iterator_h imcs_clone_tree(imcs_iterator_h iterator, int worker_id, uint64 interval) 
-{ 
-    if (iterator == NULL) { 
+static imcs_iterator_h imcs_clone_tree(imcs_iterator_h iterator, int worker_id, uint64 interval)
+{
+    if (iterator == NULL) {
         return NULL;
-    } else { 
+    } else {
         imcs_iterator_h clone = imcs_clone_iterator(iterator);
-        if (iterator->flags & FLAG_RANDOM_ACCESS) { 
+        if (iterator->flags & FLAG_RANDOM_ACCESS) {
             imcs_subseq_random_access_iterator(clone, worker_id*interval, (worker_id+1)*interval-1);
-        } else { 
+        } else {
             int i;
-            for (i = 0; i < 3; i++) { 
+            for (i = 0; i < 3; i++) {
                 clone->opd[i] = imcs_clone_tree(iterator->opd[i], worker_id, interval);
             }
         }
@@ -1969,24 +1978,24 @@ static void imcs_merge_job_results(void* arg, void* result)
      Assert(par_iterator->iterator_size == iterator->iterator_size);
      if (par_iterator->opd[1] == NULL) {
          par_iterator->opd[1] = iterator;
-     } else { 
+     } else {
          par_iterator->opd[1]->merge(par_iterator->opd[1], iterator);
-     }    
+     }
 }
 
 static void imcs_parallel_job(int worker_id, int n_workers, void* arg)
 {
     imcs_error_handlers[worker_id].err_code = ERRCODE_SUCCESSFUL_COMPLETION;
     imcs_tls->set(imcs_tls, &imcs_error_handlers[worker_id]);
-    if (!setjmp(imcs_error_handlers[worker_id].unwind_buf)) { 
+    if (!setjmp(imcs_error_handlers[worker_id].unwind_buf)) {
         imcs_iterator_h par_iterator = (imcs_iterator_h)arg;
         imcs_iterator_h iterator = par_iterator->opd[0];
         uint64 interval = (par_iterator->last_pos - par_iterator->first_pos + n_workers)/n_workers; /* round up */
         imcs_iterator_h clone_iterator = imcs_clone_tree(iterator, worker_id, interval);
-        if (clone_iterator->prepare(clone_iterator)) { 
+        if (clone_iterator->prepare(clone_iterator)) {
             imcs_thread_pool->merge(imcs_thread_pool, imcs_merge_job_results, clone_iterator);
         }
-    } 
+    }
 }
 
 static bool imcs_parallel_execute(imcs_iterator_h iterator)
@@ -1995,22 +2004,22 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     size_t ctx_offs;
     imcs_iterator_h opd[2];
     int i;
-    imcs_thread_pool->execute(imcs_thread_pool, imcs_parallel_job, iterator);    
-    if (iterator->opd[1] == NULL) { 
+    imcs_thread_pool->execute(imcs_thread_pool, imcs_parallel_job, iterator);
+    if (iterator->opd[1] == NULL) {
         return false;
     }
-    if (imcs_error_handlers != NULL) { 
-        for (i = 0; i < n_threads;  i++) { 
-            if (imcs_error_handlers[i].err_code != ERRCODE_SUCCESSFUL_COMPLETION) { 
+    if (imcs_error_handlers != NULL) {
+        for (i = 0; i < n_threads;  i++) {
+            if (imcs_error_handlers[i].err_code != ERRCODE_SUCCESSFUL_COMPLETION) {
                 ereport(ERROR, (errcode(imcs_error_handlers[i].err_code), errmsg("%s", imcs_error_handlers[i].err_msg)));
-            }            
+            }
         }
     }
     Assert(iterator->iterator_size == iterator->opd[1]->iterator_size);
     ctx_offs = (char*)iterator->opd[1]->context - (char*)iterator->opd[1];
     opd[0] = iterator->opd[0]->opd[0]; /* save original operands */
     opd[1] = iterator->opd[0]->opd[1];
-    memcpy(iterator, iterator->opd[1], iterator->iterator_size);  /* opd[1] contains thread-specific operands */ 
+    memcpy(iterator, iterator->opd[1], iterator->iterator_size);  /* opd[1] contains thread-specific operands */
     iterator->opd[0] = opd[0];         /* restore original operands */
     iterator->opd[1] = opd[1];
     iterator->context = (char*)iterator + ctx_offs;
@@ -2020,7 +2029,7 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     return result;
 }
 
-static bool imcs_is_unlimited(imcs_iterator_h iterator) 
+static bool imcs_is_unlimited(imcs_iterator_h iterator)
 {
     int i;
     int n_operands = 0;
@@ -2028,7 +2037,7 @@ static bool imcs_is_unlimited(imcs_iterator_h iterator)
         return true;
     }
     for (i = 0; i < 3; i++) {
-        if (iterator->opd[i] != NULL) { 
+        if (iterator->opd[i] != NULL) {
             n_operands += 1;
             if (!imcs_is_unlimited(iterator->opd[i])) {
                 return false;
@@ -2038,24 +2047,24 @@ static bool imcs_is_unlimited(imcs_iterator_h iterator)
     return n_operands != 0 && iterator->last_pos == IMCS_INFINITY;
 }
 
-imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator) 
+imcs_iterator_h imcs_parallel_iterator(imcs_iterator_h iterator)
 {
     imcs_visitor_context_t ctx;
-    if (imcs_is_unlimited(iterator)) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Value can not be caclualted for unbounded sequence");    
-    } 
-    if (n_threads == 1 || iterator->merge == NULL) {                  
+    if (imcs_is_unlimited(iterator)) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Value can not be caclualted for unbounded sequence");
+    }
+    if (n_threads == 1 || iterator->merge == NULL) {
         return iterator;
-    }    
-    if (imcs_thread_pool == NULL) { 
+    }
+    if (imcs_thread_pool == NULL) {
         imcs_thread_pool = imcs_create_thread_pool(n_threads);
         n_threads = imcs_thread_pool->get_number_of_threads(imcs_thread_pool);
         imcs_error_handlers = (imcs_error_handler_t*)malloc(sizeof(imcs_error_handler_t)*n_threads);
         imcs_tls = imcs_create_tls();
     }
-    ctx.interval = IMCS_INFINITY;                    
-    if (imcs_parallel_execution_possible_for_operator(iterator->opd[0], &ctx) 
-        && imcs_parallel_execution_possible_for_operator(iterator->opd[1], &ctx) 
+    ctx.interval = IMCS_INFINITY;
+    if (imcs_parallel_execution_possible_for_operator(iterator->opd[0], &ctx)
+        && imcs_parallel_execution_possible_for_operator(iterator->opd[1], &ctx)
         && ctx.interval != IMCS_INFINITY
         && ctx.interval > imcs_thread_pool->get_number_of_threads(imcs_thread_pool))
     {
@@ -2097,75 +2106,75 @@ static int64 imcs_timestamp2time(int64 timestamp)
 }
 
 
-static double imcs_money2double(double money) { 
+static double imcs_money2double(double money) {
     return money/100.0;
 }
 
-static double imcs_double2money(double money) { 
+static double imcs_double2money(double money) {
     return round(money*100.0);
 }
 
 
-imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type, int elem_size) 
+imcs_iterator_h imcs_cast(imcs_iterator_h input, imcs_elem_typeid_t elem_type, int elem_size)
 {
     imcs_iterator_h result;
-    if (elem_type == input->elem_type) { 
+    if (elem_type == input->elem_type) {
         return input;
     }
     if (elem_type == TID_timestamp && input->elem_type == TID_date) {
         IMCS_TRACE(cast);
         result = imcs_func_int64(imcs_int64_from_int32(input), imcs_date2timestamp);
-    } else if (elem_type == TID_time && input->elem_type == TID_timestamp) { 
+    } else if (elem_type == TID_time && input->elem_type == TID_timestamp) {
         IMCS_TRACE(cast);
         result = imcs_func_int64(input, imcs_timestamp2time);
-    } else if (elem_type == TID_date && input->elem_type == TID_timestamp) { 
+    } else if (elem_type == TID_date && input->elem_type == TID_timestamp) {
         IMCS_TRACE(cast);
         result = imcs_int32_from_int64(imcs_func_int64(input, imcs_timestamp2date));
-    } else if (elem_type == TID_money && input->elem_type == TID_double) { 
+    } else if (elem_type == TID_money && input->elem_type == TID_double) {
         IMCS_TRACE(cast);
         result = imcs_int64_from_double(imcs_func_double(input, imcs_double2money));
-    } else if (elem_type == TID_money && input->elem_type == TID_float) { 
+    } else if (elem_type == TID_money && input->elem_type == TID_float) {
         IMCS_TRACE(cast);
         result = imcs_int64_from_double(imcs_func_double(imcs_double_from_float(input), imcs_double2money));
-    } else if (elem_type == TID_double && input->elem_type == TID_money) { 
+    } else if (elem_type == TID_double && input->elem_type == TID_money) {
         IMCS_TRACE(cast);
         result = imcs_func_double(imcs_double_from_int64(input), imcs_money2double);
-    } else if (elem_type == TID_float && input->elem_type == TID_money) { 
+    } else if (elem_type == TID_float && input->elem_type == TID_money) {
         IMCS_TRACE(cast);
         result = imcs_float_from_double(imcs_func_double(imcs_double_from_int64(input), imcs_money2double));
-    } else if (imcs_underlying_type[elem_type] == imcs_underlying_type[input->elem_type]) { 
+    } else if (imcs_underlying_type[elem_type] == imcs_underlying_type[input->elem_type]) {
         result = imcs_clone_iterator(input);
-    } else { 
+    } else {
         switch (elem_type) {
-          case TID_int8:                                       
+          case TID_int8:
             IMCS_APPLY(int8_from, input->elem_type, (input));
-            break;                                              
-          case TID_int16:                                       
+            break;
+          case TID_int16:
             IMCS_APPLY(int16_from, input->elem_type, (input));
-            break;                                              
-          case TID_int32:                                       
-          case TID_date:                                
+            break;
+          case TID_int32:
+          case TID_date:
             IMCS_APPLY(int32_from, input->elem_type, (input));
-            break;                                              
-          case TID_int64:                                       
-          case TID_time:                                
-          case TID_timestamp:                           
-          case TID_money:                           
+            break;
+          case TID_int64:
+          case TID_time:
+          case TID_timestamp:
+          case TID_money:
             IMCS_APPLY(int64_from, input->elem_type, (input));
-            break;                                              
-          case TID_float:                                       
+            break;
+          case TID_float:
             IMCS_APPLY(float_from, input->elem_type, (input));
-            break;                                              
-          case TID_double:                                      
+            break;
+          case TID_double:
             IMCS_APPLY(double_from, input->elem_type, (input));
-            break;  
+            break;
           case TID_char:
-            IMCS_TRACE(cast);                                                   
+            IMCS_TRACE(cast);
             result = imcs_cast_to_char(input, elem_size);
-            break;             
-          default:                                              
-            imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "cast to timeseries of CHAR(N) is not supported"); 
-        }                    
+            break;
+          default:
+            imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "cast to timeseries of CHAR(N) is not supported");
+        }
     }
     result->elem_type = elem_type;
     return result;
@@ -2178,31 +2187,31 @@ Datum columnar_store_initialized(PG_FUNCTION_ARGS)
     bool initialize = PG_GETARG_BOOL(1);
     imcs_timeseries_t* ts = imcs_get_timeseries(table_name, TID_int8, false, 0, initialize);
     bool is_initialized = ts != NULL && ts->count != 0;
-    if (initialize) { 
+    if (initialize) {
         ts->count = 1;
     }
     PG_RETURN_BOOL(is_initialized);
 }
-    
-Datum columnar_store_get(PG_FUNCTION_ARGS)                              
-{                                                                       
-    char const* cs_id = PG_GETARG_CSTRING(0);                           
+
+Datum columnar_store_get(PG_FUNCTION_ARGS)
+{
+    char const* cs_id = PG_GETARG_CSTRING(0);
     imcs_iterator_h search_result = (imcs_iterator_h)PG_GETARG_POINTER(1);
-    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(2); 
+    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(2);
     int elem_size = PG_GETARG_INT32(3);
-    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, false, elem_size, false); 
-    if (ts == NULL) {                                                   
-        PG_RETURN_NULL();                                               
-    }                                                                   
+    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, false, elem_size, false);
+    if (ts == NULL) {
+        PG_RETURN_NULL();
+    }
     PG_RETURN_POINTER(imcs_subseq(ts, search_result->first_pos, search_result->last_pos));
 }
 
-Datum columnar_store_lock(PG_FUNCTION_ARGS)                              
-{                        
+Datum columnar_store_lock(PG_FUNCTION_ARGS)
+{
     if (imcs != NULL)
     {
-        if (imcs_lock != LOCK_EXCLUSIVE) { 
-            if (imcs_lock != LOCK_NONE) { 
+        if (imcs_lock != LOCK_EXCLUSIVE) {
+            if (imcs_lock != LOCK_NONE) {
                 LWLockRelease(LWLOCK(HASH_LOCK));
             }
             LWLockAcquire(LWLOCK(HASH_LOCK), LW_EXCLUSIVE);
@@ -2210,20 +2219,20 @@ Datum columnar_store_lock(PG_FUNCTION_ARGS)
         }
     }
     PG_RETURN_VOID();
-}                  
-                             
-Datum columnar_store_span(PG_FUNCTION_ARGS)                              
-{                                                                       
-    char const* cs_id = PG_GETARG_CSTRING(0);                           
-    int64 from = PG_GETARG_INT64(1); 
-    int64 till = PG_GETARG_INT64(2); 
-    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(3);     
+}
+
+Datum columnar_store_span(PG_FUNCTION_ARGS)
+{
+    char const* cs_id = PG_GETARG_CSTRING(0);
+    int64 from = PG_GETARG_INT64(1);
+    int64 till = PG_GETARG_INT64(2);
+    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(3);
     bool is_timestamp = PG_GETARG_BOOL(4);
     int elem_size = PG_GETARG_INT32(5);
-    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, false); 
-    if (ts == NULL) {                                                   
-        PG_RETURN_NULL();                                               
-    }                                          
+    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, false);
+    if (ts == NULL) {
+        PG_RETURN_NULL();
+    }
     if (from < 0) from = ts->count + from;
     if (till < 0) till = ts->count + till;
     PG_RETURN_POINTER(imcs_subseq(ts, from, till));
@@ -2268,14 +2277,14 @@ IMCS_SEARCH(int64,INT64);
 IMCS_SEARCH(float,FLOAT4);
 IMCS_SEARCH(double,FLOAT8);
 
-Datum columnar_store_delete(PG_FUNCTION_ARGS)                    
-{                                                                       
-    char const* cs_id = PG_GETARG_CSTRING(0);                           
+Datum columnar_store_delete(PG_FUNCTION_ARGS)
+{
+    char const* cs_id = PG_GETARG_CSTRING(0);
     imcs_iterator_h search_result = (imcs_iterator_h)PG_GETARG_POINTER(1);
-    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(2); 
-    bool is_timestamp = PG_GETARG_BOOL(3);                              
-    int elem_size = PG_GETARG_INT32(4);                                 
-    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, true); 
+    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(2);
+    bool is_timestamp = PG_GETARG_BOOL(3);
+    int elem_size = PG_GETARG_INT32(4);
+    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, true);
     imcs_delete(ts, search_result->first_pos, search_result->last_pos);
     PG_RETURN_VOID();
 }
@@ -2307,75 +2316,75 @@ IMCS_APPEND(int64,INT64);
 IMCS_APPEND(float,FLOAT4);
 IMCS_APPEND(double,FLOAT8);
 
-Datum columnar_store_append_char(PG_FUNCTION_ARGS)                    
-{                                                                       
-    char const* cs_id = PG_GETARG_CSTRING(0);                           
-    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(2); 
-    bool is_timestamp = PG_GETARG_BOOL(3);                              
-    int elem_size = PG_GETARG_INT32(4);                                 
-    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, true); 
+Datum columnar_store_append_char(PG_FUNCTION_ARGS)
+{
+    char const* cs_id = PG_GETARG_CSTRING(0);
+    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(2);
+    bool is_timestamp = PG_GETARG_BOOL(3);
+    int elem_size = PG_GETARG_INT32(4);
+    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, is_timestamp, elem_size, true);
     if (elem_size < 0) { /* varying string */
         bool found;
         imcs_dict_key_t key;
         imcs_dict_entry_t* entry;
         if (PG_ARGISNULL(1)) { /* substitute NULL with empty string */
-            if (imcs_substitute_nulls) {                                    
+            if (imcs_substitute_nulls) {
                 key.val = NULL;
                 key.len = 0;
-            } else {                                                        
-                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); 
-            }                                                               
-        } else { 
+            } else {
+                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
+            }
+        } else {
             text* t = PG_GETARG_TEXT_P(1);
             key.val = (char*)VARDATA(t);
             key.len = VARSIZE(t) - VARHDRSZ;
-        }                            
+        }
 		imcs_lock_dictionary(true);
         entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
-        if (!found) { 
+        if (!found) {
             entry->code = hash_get_num_entries(imcs_dict);
-            if (entry->code >= imcs_dict_size) {  
+            if (entry->code >= imcs_dict_size) {
                 imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
-            }   
+            }
             imcs_dict_code_map[entry->code] = entry;
         }
-        if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+        if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
             imcs_append_int16(ts, (int16)entry->code);
-        } else { 
+        } else {
             imcs_append_int32(ts, (int32)entry->code);
         }
 		imcs_unlock_dictionary();
-    } else { 
-        if (PG_ARGISNULL(1)) {                                              
-            if (imcs_substitute_nulls) {                                    
+    } else {
+        if (PG_ARGISNULL(1)) {
+            if (imcs_substitute_nulls) {
                 imcs_append_char(ts, NULL, 0); /* substitute NULL with empty string */
-            } else {                                                        
-                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store"); 
-            }                                                               
-        } else {                                                            
+            } else {
+                imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
+            }
+        } else {
             text* t = PG_GETARG_TEXT_P(1);
             int len = VARSIZE(t) - VARHDRSZ;
-            if (len > elem_size) { 
-                imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d", len, elem_size);             
+            if (len > elem_size) {
+                imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d", len, elem_size);
             }
-            imcs_append_char(ts, (char*)VARDATA(t), len);                     
+            imcs_append_char(ts, (char*)VARDATA(t), len);
         }
-    }                                                                   
-    PG_RETURN_VOID();                                                   
+    }
+    PG_RETURN_VOID();
 }
 
 
-Datum columnar_store_count(PG_FUNCTION_ARGS)                  
-{                                                                       
-    char const* cs_id = PG_GETARG_CSTRING(0);                           
-    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1); 
-    int elem_size = imcs_type_sizeof[elem_type];                        
-    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, true, elem_size, false); 
-    if (ts == NULL) {                   
-        PG_RETURN_NULL();                                               
-    } else {                                                            
-        PG_RETURN_INT64(ts->count);                                       
-    }                                                                   
+Datum columnar_store_count(PG_FUNCTION_ARGS)
+{
+    char const* cs_id = PG_GETARG_CSTRING(0);
+    imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1);
+    int elem_size = imcs_type_sizeof[elem_type];
+    imcs_timeseries_t* ts = imcs_get_timeseries(cs_id, elem_type, true, elem_size, false);
+    if (ts == NULL) {
+        PG_RETURN_NULL();
+    } else {
+        PG_RETURN_INT64(ts->count);
+    }
 }
 
 #define IMCS_BOUNDARY(TYPE,PG_TYPE,MNEM)                                \
@@ -2437,8 +2446,8 @@ static Datum imcs_parse_adt(imcs_adt_parser_t* parser, char* value, size_t size)
 
 static imcs_adt_parser_t* imcs_new_adt_parser(Oid type, FunctionCallInfo fcinfo)
 {
-    imcs_adt_parser_t* parser = (imcs_adt_parser_t*)imcs_alloc(sizeof(imcs_adt_parser_t));    
-	getTypeInputInfo(type, &parser->input_oid, &parser->param_oid);			
+    imcs_adt_parser_t* parser = (imcs_adt_parser_t*)imcs_alloc(sizeof(imcs_adt_parser_t));
+	getTypeInputInfo(type, &parser->input_oid, &parser->param_oid);
     fmgr_info_cxt(parser->input_oid, &parser->proc, fcinfo->flinfo->fn_mcxt);
     parser->parse = imcs_parse_adt;
     return parser;
@@ -2446,28 +2455,28 @@ static imcs_adt_parser_t* imcs_new_adt_parser(Oid type, FunctionCallInfo fcinfo)
 
 static Datum imcs_parse_dict(imcs_adt_parser_t* parser, char* value, size_t size)
 {
-    imcs_dict_key_t key; 
+    imcs_dict_key_t key;
     imcs_dict_entry_t* entry;
 	size_t code;
     key.val = value;
     key.len = size;
 	imcs_lock_dictionary(false);
     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_FIND, NULL);
-    if (entry == NULL) { 
+    if (entry == NULL) {
         imcs_ereport(ERRCODE_NO_DATA_FOUND, "String '%.*s' not found in dictionary", (int)size, value);
     }
 	code = entry->code;
-	imcs_unlock_dictionary();	
-    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
-        PG_RETURN_INT16((int16)code);                   
-    } else { 
-        PG_RETURN_INT32((int32)code);                   
+	imcs_unlock_dictionary();
+    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
+        PG_RETURN_INT16((int16)code);
+    } else {
+        PG_RETURN_INT32((int32)code);
     }
 }
 
 static imcs_adt_parser_t* imcs_new_dict_parser()
 {
-    imcs_adt_parser_t* parser = (imcs_adt_parser_t*)imcs_alloc(sizeof(imcs_adt_parser_t));    
+    imcs_adt_parser_t* parser = (imcs_adt_parser_t*)imcs_alloc(sizeof(imcs_adt_parser_t));
     parser->parse = imcs_parse_dict;
     return parser;
 }
@@ -2480,12 +2489,12 @@ Datum cs_parse_tid(PG_FUNCTION_ARGS)
     imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1);
     int elem_size = PG_GETARG_INT32(2);
     imcs_iterator_h result;
-    if (elem_type == TID_char && *txt != '{') { 
+    if (elem_type == TID_char && *txt != '{') {
         /* make it possible to compare column with string */
         char* elem = (char*)palloc(elem_size);
-        if (elem_size < text_len) { 
-            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
-        } else { 
+        if (elem_size < text_len) {
+            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long");
+        } else {
             memcpy(elem, txt, text_len);
             memset(elem + text_len, '\0', elem_size - text_len);
         }
@@ -2498,7 +2507,7 @@ Datum cs_parse_tid(PG_FUNCTION_ARGS)
         str = (char*)imcs_alloc(text_len+1);
         memcpy(str, txt, text_len);
         str[text_len] = '\0';
-        switch (elem_type) { 
+        switch (elem_type) {
         case TID_date:
             result = imcs_adt_parse_int32(str, imcs_new_adt_parser(DATEOID, fcinfo));
             break;
@@ -2511,7 +2520,7 @@ Datum cs_parse_tid(PG_FUNCTION_ARGS)
         case TID_money:
             result = imcs_adt_parse_int64(str, imcs_new_adt_parser(CASHOID, fcinfo));
             break;
-        default:        
+        default:
             IMCS_APPLY_CHAR(parse, elem_type, (str, elem_size));
         }
         result->elem_type = elem_type;
@@ -2526,9 +2535,9 @@ Datum cs_const_str(PG_FUNCTION_ARGS)
     int elem_size = PG_GETARG_INT32(1);
     char* elem = (char*)palloc(elem_size);
     imcs_iterator_h result;
-    if (elem_size < len) { 
-        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
-    } else { 
+    if (elem_size < len) {
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long");
+    } else {
         memcpy(elem, str, len);
         memset(elem + len, '\0', elem_size - len);
     }
@@ -2543,22 +2552,22 @@ Datum cs_const_num(PG_FUNCTION_ARGS)
     imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1);
     imcs_iterator_h result;
     IMCS_TRACE(const);
-    switch (elem_type) { 
+    switch (elem_type) {
       case TID_int8:
-        result = imcs_const_int8((int8)val);        
+        result = imcs_const_int8((int8)val);
         break;
       case TID_int16:
-        result = imcs_const_int16((int16)val);        
+        result = imcs_const_int16((int16)val);
         break;
       case TID_int32:
       case TID_date:
-        result = imcs_const_int32((int32)val);        
+        result = imcs_const_int32((int32)val);
         break;
       case TID_int64:
       case TID_time:
       case TID_timestamp:
       case TID_money:
-        result = imcs_const_int64((int64)val);        
+        result = imcs_const_int64((int64)val);
         break;
       case TID_float:
         result = imcs_const_float((float)val);
@@ -2579,18 +2588,18 @@ Datum cs_const_dt(PG_FUNCTION_ARGS)
     imcs_elem_typeid_t elem_type = (imcs_elem_typeid_t)PG_GETARG_INT32(1);
     imcs_iterator_h result;
     IMCS_TRACE(const);
-    switch (elem_type) { 
+    switch (elem_type) {
       case TID_int8:
-        result = imcs_const_int8((int8)val);        
+        result = imcs_const_int8((int8)val);
         break;
       case TID_int16:
-        result = imcs_const_int16((int16)val);        
+        result = imcs_const_int16((int16)val);
         break;
       case TID_date:
         val = imcs_timestamp2date(val);
         /* no break */
       case TID_int32:
-        result = imcs_const_int32((int32)val);        
+        result = imcs_const_int32((int32)val);
         break;
       case TID_time:
         val = imcs_timestamp2time(val);
@@ -2598,7 +2607,7 @@ Datum cs_const_dt(PG_FUNCTION_ARGS)
       case TID_int64:
       case TID_timestamp:
       case TID_money:
-        result = imcs_const_int64(val);        
+        result = imcs_const_int64(val);
         break;
       case TID_float:
         result = imcs_const_float((float)val);
@@ -2640,39 +2649,39 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
     int elem_size = 0;
     int n = 0;
     char* str;
-    if (cstr == NULL) { 
+    if (cstr == NULL) {
         PG_RETURN_NULL();
     }
     str = (char*)imcs_alloc(strlen(cstr)+1);
     strcpy(str, cstr);
-    if (strncmp(str, "bpchar", 6) == 0) { 
+    if (strncmp(str, "bpchar", 6) == 0) {
         elem_type = TID_char;
-        if (sscanf(str+6, "%d:%n", &elem_size, &n) != 1) { 
+        if (sscanf(str+6, "%d:%n", &elem_size, &n) != 1) {
             imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse timeseries '%s'", str);
         }
         n += 6; /* strlen("bpchar") */
-    } else if (strncmp(str, "varchar:", 8) == 0) { 
-        if (imcs_dict_size == 0) { 
-            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Failed to parse VARCHAR timeseries because there is no dictionary"); 
+    } else if (strncmp(str, "varchar:", 8) == 0) {
+        if (imcs_dict_size == 0) {
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Failed to parse VARCHAR timeseries because there is no dictionary");
         }
-        result = (imcs_dict_size <= IMCS_SMALL_DICTIONARY) 
+        result = (imcs_dict_size <= IMCS_SMALL_DICTIONARY)
             ? imcs_adt_parse_int16(str+8, imcs_new_dict_parser())
             : imcs_adt_parse_int32(str+8, imcs_new_dict_parser());
         PG_RETURN_POINTER(result);
-    } else { 
+    } else {
         char* col = strchr(str, ':');
-        if (col == NULL) { 
+        if (col == NULL) {
             imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse timeseries '%s'", str);
         }
         n = col - str;
-        for (elem_type = TID_int8; n != imcs_type_mnem_lens[elem_type] || strncmp(imcs_type_mnems[elem_type], str, n) != 0; elem_type++) { 
+        for (elem_type = TID_int8; n != imcs_type_mnem_lens[elem_type] || strncmp(imcs_type_mnems[elem_type], str, n) != 0; elem_type++) {
             if (elem_type == TID_char) { /* last TID */
                 imcs_ereport(ERRCODE_SYNTAX_ERROR, "invalid element type name %.*s", n, str);
             }
         }
         n += 1; /* skip column */
     }
-    switch (elem_type) { 
+    switch (elem_type) {
       case TID_date:
         result = imcs_adt_parse_int32(str+n, imcs_new_adt_parser(DATEOID, fcinfo));
         break;
@@ -2692,11 +2701,11 @@ Datum cs_input_function(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(result);
 }
 
-    
+
 Datum cs_output_function(PG_FUNCTION_ARGS)
 {
     imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
-    size_t allocated = imcs_output_string_limit == 0 ? IMCS_INIT_OUTPUT_BUF_SIZE 
+    size_t allocated = imcs_output_string_limit == 0 ? IMCS_INIT_OUTPUT_BUF_SIZE
         : imcs_output_string_limit < IMCS_MIN_OUTPUT_BUF_SIZE ? IMCS_MIN_OUTPUT_BUF_SIZE : imcs_output_string_limit;
     char* buf = imcs_alloc(allocated);
     char* new_buf;
@@ -2705,18 +2714,18 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
     bool truncated = false;
     size_t output_limit = imcs_output_string_limit - 1; /* transform 0 into infinity */
 
-    if (imcs_is_unlimited(input)) { 
+    if (imcs_is_unlimited(input)) {
         input = imcs_limit(input, 0, 0); /* print only first element of timeseries of repeated concstant value, because this timeseries has infinite length */
         truncated = true;
     }
 
-    switch (input->elem_type) { 
+    switch (input->elem_type) {
       case TID_int8:
       {
           int8 val;
-          while (imcs_next_int8(input, &val)) { 
-              if (used + MAX_NUMELEM_LEN > allocated) { 
-                  if (allocated >= output_limit) { 
+          while (imcs_next_int8(input, &val)) {
+              if (used + MAX_NUMELEM_LEN > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2734,14 +2743,14 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       case TID_int16:
       {
           int16 val;
-          if (input->flags & FLAG_TRANSLATED) { 
+          if (input->flags & FLAG_TRANSLATED) {
               used = sprintf(buf, "varchar:");
-              while (imcs_next_int16(input, &val)) { 
+              while (imcs_next_int16(input, &val)) {
                   imcs_dict_entry_t* entry;
                   Assert((uint16)val < imcs_dict_size);
                   entry = imcs_dict_code_map[(uint16)val];
-                  if (used + entry->key.len + OUTPUT_BUF_RESERVE > allocated) { 
-                      if (allocated >= output_limit) { 
+                  if (used + entry->key.len + OUTPUT_BUF_RESERVE > allocated) {
+                      if (allocated >= output_limit) {
                           truncated = true;
                           break;
                       }
@@ -2755,10 +2764,10 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   used += entry->key.len;
                   sep = ',';
               }
-          } else {               
-              while (imcs_next_int16(input, &val)) { 
-                  if (used + MAX_NUMELEM_LEN > allocated) { 
-                      if (allocated >= output_limit) { 
+          } else {
+              while (imcs_next_int16(input, &val)) {
+                  if (used + MAX_NUMELEM_LEN > allocated) {
+                      if (allocated >= output_limit) {
                           truncated = true;
                           break;
                       }
@@ -2777,14 +2786,14 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       case TID_int32:
       {
           int32 val;
-          if (input->flags & FLAG_TRANSLATED) { 
+          if (input->flags & FLAG_TRANSLATED) {
               used = sprintf(buf, "varchar:");
-              while (imcs_next_int32(input, &val)) { 
+              while (imcs_next_int32(input, &val)) {
                   imcs_dict_entry_t* entry;
                   Assert((uint32)val < imcs_dict_size);
                   entry = imcs_dict_code_map[(uint32)val];
-                  if (used + entry->key.len + OUTPUT_BUF_RESERVE > allocated) { 
-                      if (allocated >= output_limit) { 
+                  if (used + entry->key.len + OUTPUT_BUF_RESERVE > allocated) {
+                      if (allocated >= output_limit) {
                           truncated = true;
                           break;
                       }
@@ -2798,10 +2807,10 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   used += entry->key.len;
                   sep = ',';
               }
-          } else {               
-              while (imcs_next_int32(input, &val)) { 
-                  if (used + MAX_NUMELEM_LEN > allocated) { 
-                      if (allocated >= output_limit) { 
+          } else {
+              while (imcs_next_int32(input, &val)) {
+                  if (used + MAX_NUMELEM_LEN > allocated) {
+                      if (allocated >= output_limit) {
                           truncated = true;
                           break;
                       }
@@ -2820,9 +2829,9 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       case TID_int64:
       {
           int64 val;
-          while (imcs_next_int64(input, &val)) { 
-              if (used + MAX_NUMELEM_LEN > allocated) { 
-                  if (allocated >= output_limit) { 
+          while (imcs_next_int64(input, &val)) {
+              if (used + MAX_NUMELEM_LEN > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2841,12 +2850,12 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       {
           float val;
           int ndig = FLT_DIG + extra_float_digits;
-          if (ndig < 1) { 
-              ndig = 1;         
+          if (ndig < 1) {
+              ndig = 1;
           }
-          while (imcs_next_float(input, &val)) { 
-              if (used + MAX_NUMELEM_LEN > allocated) { 
-                  if (allocated >= output_limit) { 
+          while (imcs_next_float(input, &val)) {
+              if (used + MAX_NUMELEM_LEN > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2865,12 +2874,12 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       {
           double val;
           int ndig = DBL_DIG + extra_float_digits;
-          if (ndig < 1) { 
-              ndig = 1;         
+          if (ndig < 1) {
+              ndig = 1;
           }
-          while (imcs_next_double(input, &val)) { 
-              if (used + MAX_NUMELEM_LEN > allocated) { 
-                  if (allocated >= output_limit) { 
+          while (imcs_next_double(input, &val)) {
+              if (used + MAX_NUMELEM_LEN > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2889,9 +2898,9 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
       {
           int elem_size = input->elem_size;
           used = sprintf(buf, "bpchar%d:", elem_size);
-          while (true) { 
-              if (used + elem_size + OUTPUT_BUF_RESERVE > allocated) { 
-                  if (allocated >= output_limit) { 
+          while (true) {
+              if (used + elem_size + OUTPUT_BUF_RESERVE > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2901,7 +2910,7 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   buf = new_buf;
               }
               buf[used] = sep;
-              if (!imcs_next_char(input, &buf[used+1])) { 
+              if (!imcs_next_char(input, &buf[used+1])) {
                   break;
               }
               used += 1;
@@ -2917,11 +2926,11 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
           bool is_varlena;
           int32 val;
           getTypeOutputInfo(DATEOID, &type_out, &is_varlena);
-          while (imcs_next_int32(input, &val)) { 
+          while (imcs_next_int32(input, &val)) {
               char* str = OidOutputFunctionCall(type_out, Int32GetDatum(val));
               size_t len = strlen(str);
-              if (used + len + OUTPUT_BUF_RESERVE > allocated) { 
-                  if (allocated >= output_limit) { 
+              if (used + len + OUTPUT_BUF_RESERVE > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2946,15 +2955,15 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
           bool is_varlena;
           int64 val;
           getTypeOutputInfo(imcs_elem_type_to_oid[input->elem_type], &type_out, &is_varlena);
-          while (imcs_next_int64(input, &val)) { 
+          while (imcs_next_int64(input, &val)) {
               char* str = OidOutputFunctionCall(type_out, Int64GetDatum(val));
               size_t len = strlen(str);
               char* comma = strchr(str, ',');
-              if (comma != NULL) { 
+              if (comma != NULL) {
                   len += 2;
               }
-              if (used + len + OUTPUT_BUF_RESERVE > allocated) { 
-                  if (allocated >= output_limit) { 
+              if (used + len + OUTPUT_BUF_RESERVE > allocated) {
+                  if (allocated >= output_limit) {
                       truncated = true;
                       break;
                   }
@@ -2964,11 +2973,11 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
                   buf = new_buf;
               }
               buf[used++] = sep;
-              if (comma != NULL) { 
+              if (comma != NULL) {
                   buf[used] = '"';
                   memcpy(buf+used+1, str, len-2);
                   buf[used+len-1] = '"';
-              } else { 
+              } else {
                   memcpy(buf+used, str, len);
               }
               pfree(str);
@@ -2978,12 +2987,12 @@ Datum cs_output_function(PG_FUNCTION_ARGS)
           break;
       }
       default:
-          Assert(false);                  
+          Assert(false);
     }
-    if (sep == '{') {  
+    if (sep == '{') {
         buf[used++] = '{';
-    } 
-    if (truncated) { 
+    }
+    if (truncated) {
         strcpy(buf + used, ",...");
         used += 4;
     }
@@ -3001,12 +3010,12 @@ Datum cs_receive_function(PG_FUNCTION_ARGS)
     imcs_iterator_h iterator = imcs_new_iterator(pq_getmsgint(buf, 2), 0);
     iterator->elem_type = (imcs_elem_typeid_t)pq_getmsgint(buf, 1);
     count = (size_t)pq_getmsgint64(buf);
-    
-    switch (iterator->elem_type) { 
+
+    switch (iterator->elem_type) {
       case TID_int16:
-      { 
+      {
           int16* arr = (int16*)imcs_alloc(sizeof(int16)*count);
-          for (i = 0; i < count; i++) { 
+          for (i = 0; i < count; i++) {
               arr[i] = (int16)pq_getmsgint(buf, 2);
           }
           imcs_from_array(iterator, arr, count);
@@ -3016,19 +3025,19 @@ Datum cs_receive_function(PG_FUNCTION_ARGS)
       case TID_date:
       {
           int32* arr = (int32*)imcs_alloc(sizeof(int32)*count);
-          for (i = 0; i < count; i++) { 
+          for (i = 0; i < count; i++) {
               arr[i] = pq_getmsgint(buf, 4);
           }
           imcs_from_array(iterator, arr, count);
           break;
-      }          
+      }
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
       {
           int64* arr = (int64*)imcs_alloc(sizeof(int64)*count);
-          for (i = 0; i < count; i++) { 
+          for (i = 0; i < count; i++) {
               arr[i] = pq_getmsgint64(buf);
           }
           imcs_from_array(iterator, arr, count);
@@ -3037,7 +3046,7 @@ Datum cs_receive_function(PG_FUNCTION_ARGS)
       case TID_float:
       {
           float* arr = (float*)imcs_alloc(sizeof(float)*count);
-          for (i = 0; i < count; i++) { 
+          for (i = 0; i < count; i++) {
               arr[i] = pq_getmsgfloat4(buf);
           }
           imcs_from_array(iterator, arr, count);
@@ -3046,7 +3055,7 @@ Datum cs_receive_function(PG_FUNCTION_ARGS)
       case TID_double:
       {
           double* arr = (double*)imcs_alloc(sizeof(double)*count);
-          for (i = 0; i < count; i++) { 
+          for (i = 0; i < count; i++) {
               arr[i] = pq_getmsgfloat8(buf);
           }
           imcs_from_array(iterator, arr, count);
@@ -3054,7 +3063,7 @@ Datum cs_receive_function(PG_FUNCTION_ARGS)
       }
       case TID_char:
       case TID_int8:
-     {		
+     {
           int   n_bytes;
           char* str = pq_getmsgtext(buf, count*iterator->elem_size, &n_bytes);
           Assert(n_bytes == count*iterator->elem_size);
@@ -3077,9 +3086,9 @@ Datum cs_send_function(PG_FUNCTION_ARGS)
 	pq_sendint(&buf, input->elem_size, 2);
 	pq_sendint(&buf, input->elem_type, 1);
 	pq_sendint64(&buf, count);
-    switch (input->elem_type) { 
+    switch (input->elem_type) {
       case TID_int16:
-      { 
+      {
           int16 val;
           while (imcs_next_int16(input, &val)) {
               pq_sendint(&buf, val, 2);
@@ -3094,11 +3103,11 @@ Datum cs_send_function(PG_FUNCTION_ARGS)
               pq_sendint(&buf, val, 4);
           }
           break;
-      }          
+      }
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
       {
           int64 val;
           while (imcs_next_int64(input, &val)) {
@@ -3150,22 +3159,22 @@ IMCS_BINARY_INT_OP(or)
 IMCS_BINARY_INT_OP(xor)
 
 /* If one of arguments is null, just return another */
-Datum cs_concat(PG_FUNCTION_ARGS)                                       
-{                                                                       
-    if (PG_ARGISNULL(0)) { 
-        if (PG_ARGISNULL(1)) { 
+Datum cs_concat(PG_FUNCTION_ARGS)
+{
+    if (PG_ARGISNULL(0)) {
+        if (PG_ARGISNULL(1)) {
             PG_RETURN_NULL();
-        } else { 
+        } else {
             PG_RETURN_DATUM(PG_GETARG_DATUM(1));
-        } 
-    } else if (PG_ARGISNULL(1)) {  
+        }
+    } else if (PG_ARGISNULL(1)) {
         PG_RETURN_DATUM(PG_GETARG_DATUM(0));
-    } else { 
-        imcs_iterator_h left = (imcs_iterator_h)PG_GETARG_POINTER(0);   
-        imcs_iterator_h right = (imcs_iterator_h)PG_GETARG_POINTER(1);  
-        imcs_iterator_h result = imcs_concat(left, right);              
+    } else {
+        imcs_iterator_h left = (imcs_iterator_h)PG_GETARG_POINTER(0);
+        imcs_iterator_h right = (imcs_iterator_h)PG_GETARG_POINTER(1);
+        imcs_iterator_h result = imcs_concat(left, right);
         IMCS_TRACE(concat);
-        PG_RETURN_POINTER(result);                                      
+        PG_RETURN_POINTER(result);
     }
 }
 
@@ -3186,10 +3195,10 @@ IMCS_UNARY_INT_OP(bit_not)
 
 Datum cs_norm(PG_FUNCTION_ARGS)
 {
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);  
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     imcs_iterator_h result;
-    IMCS_APPLY(norm, input->elem_type, (input));                        
-    result = imcs_parallel_iterator(result);                
+    IMCS_APPLY(norm, input->elem_type, (input));
+    result = imcs_parallel_iterator(result);
     PG_RETURN_POINTER(result);
 }
 
@@ -3217,9 +3226,9 @@ IMCS_MATH_FUNC(floor)
 
 Datum cs_isnan(PG_FUNCTION_ARGS)
 {
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);  
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     imcs_iterator_h result = NULL;
-    switch (input->elem_type) { 
+    switch (input->elem_type) {
       case TID_float:
         result = imcs_isnan_float(input);
         break;
@@ -3227,8 +3236,8 @@ Datum cs_isnan(PG_FUNCTION_ARGS)
         result = imcs_isnan_double(input);
         break;
       default:
-        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "cs_isnan is defined only for timeseries of float4 or float8 types"); 
-    }                                                     
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "cs_isnan is defined only for timeseries of float4 or float8 types");
+    }
     PG_RETURN_POINTER(result);
 }
 
@@ -3254,9 +3263,9 @@ Datum cs_iif(PG_FUNCTION_ARGS)
     imcs_iterator_h then = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h otherwise = (imcs_iterator_h)PG_GETARG_POINTER(2);
     imcs_iterator_h result;
-    if (then->elem_type < otherwise->elem_type) { 
+    if (then->elem_type < otherwise->elem_type) {
         then = imcs_cast(then, otherwise->elem_type, otherwise->elem_size);
-    } else if (then->elem_type > otherwise->elem_type) { 
+    } else if (then->elem_type > otherwise->elem_type) {
         otherwise = imcs_cast(otherwise, then->elem_type, then->elem_size);
     }
     IMCS_APPLY_CHAR(iif, then->elem_type, (cond, then, otherwise));
@@ -3268,9 +3277,9 @@ Datum cs_if(PG_FUNCTION_ARGS)
     imcs_iterator_h then = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h otherwise = (imcs_iterator_h)PG_GETARG_POINTER(2);
     imcs_iterator_h result;
-    if (then->elem_type < otherwise->elem_type) { 
+    if (then->elem_type < otherwise->elem_type) {
         then = imcs_cast(then, otherwise->elem_type, otherwise->elem_size);
-    } else if (then->elem_type > otherwise->elem_type) { 
+    } else if (then->elem_type > otherwise->elem_type) {
         otherwise = imcs_cast(otherwise, then->elem_type, then->elem_size);
     }
     IMCS_APPLY_CHAR(if, then->elem_type, (cond, then, otherwise));
@@ -3282,7 +3291,7 @@ Datum cs_filter(PG_FUNCTION_ARGS)
     imcs_iterator_h cond = (imcs_iterator_h)PG_GETARG_POINTER(0);
     imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h result;
-    IMCS_APPLY_CHAR(filter, input->elem_type, (cond, input));    
+    IMCS_APPLY_CHAR(filter, input->elem_type, (cond, input));
     PG_RETURN_POINTER(result);
 }
 
@@ -3296,9 +3305,9 @@ IMCS_INTERVAL_OP(repeat)
 Datum cs_filter_first_pos(PG_FUNCTION_ARGS)
 {
     imcs_iterator_h cond = (imcs_iterator_h)PG_GETARG_POINTER(0);
-    int32 n = PG_GETARG_INT32(1); 
+    int32 n = PG_GETARG_INT32(1);
     imcs_iterator_h result = imcs_filter_first_pos(cond, n);
-    result = imcs_parallel_iterator(result);                            
+    result = imcs_parallel_iterator(result);
     PG_RETURN_POINTER(result);
 }
 
@@ -3309,37 +3318,37 @@ Datum cs_count(PG_FUNCTION_ARGS)
     PG_RETURN_INT64(count);
 }
 
-imcs_count_t imcs_count(imcs_iterator_h iterator)          
-{                                                                       
-    imcs_count_t count;                                          
-    if (iterator->flags & FLAG_RANDOM_ACCESS) { 
+imcs_count_t imcs_count(imcs_iterator_h iterator)
+{
+    imcs_count_t count;
+    if (iterator->flags & FLAG_RANDOM_ACCESS) {
         Assert(iterator->last_pos != IMCS_INFINITY);
         count = iterator->last_pos - iterator->first_pos + 1;
-    } else {         
+    } else {
         imcs_iterator_h result = imcs_count_iterator(iterator);
         IMCS_TRACE(count);
-        result = imcs_parallel_iterator(result);                        
-        if (!imcs_next_int64(result, (int64*)&count)) {  
+        result = imcs_parallel_iterator(result);
+        if (!imcs_next_int64(result, (int64*)&count)) {
             count = 0;
         }
-    }                                                                   
+    }
     return count;
-}                                                                       
-
-Datum cs_approxdc(PG_FUNCTION_ARGS)                                       
-{                                                                   
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);  
-    int64 count = 0;                                         
-    imcs_iterator_h result = imcs_approxdc(input);                                         
-    IMCS_TRACE(approxdc);
-    result = imcs_parallel_iterator(result);                
-    imcs_next_int64(result, &count);                                
-    PG_RETURN_INT64(count);  
 }
 
-Datum cs_like(PG_FUNCTION_ARGS)                                       
-{                                                             
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);  
+Datum cs_approxdc(PG_FUNCTION_ARGS)
+{
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
+    int64 count = 0;
+    imcs_iterator_h result = imcs_approxdc(input);
+    IMCS_TRACE(approxdc);
+    result = imcs_parallel_iterator(result);
+    imcs_next_int64(result, &count);
+    PG_RETURN_INT64(count);
+}
+
+Datum cs_like(PG_FUNCTION_ARGS)
+{
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     text* t = PG_GETARG_TEXT_P(1);
     int len = VARSIZE(t) - VARHDRSZ;
     char* pattern = (char*)imcs_alloc(len+1);
@@ -3349,9 +3358,9 @@ Datum cs_like(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(imcs_like(input, pattern));
 }
 
-Datum cs_ilike(PG_FUNCTION_ARGS)                                       
-{                                                             
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);  
+Datum cs_ilike(PG_FUNCTION_ARGS)
+{
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     text* t = PG_GETARG_TEXT_P(1);
     int len = VARSIZE(t) - VARHDRSZ;
     char* pattern = (char*)imcs_alloc(len+1);
@@ -3409,10 +3418,10 @@ Datum cs_hash_count(PG_FUNCTION_ARGS)
     TupleDesc resultTupleDesc;
     Datum outValues[2];
     bool nulls[2] = {false, false};
-    imcs_iterator_h result[2];                              
+    imcs_iterator_h result[2];
     get_call_result_type(fcinfo, NULL, &resultTupleDesc);
     imcs_hash_count(result, input);
-    result[0] = imcs_parallel_iterator(result[0]);              
+    result[0] = imcs_parallel_iterator(result[0]);
     outValues[0] = PointerGetDatum(result[0]);
     outValues[1] = PointerGetDatum(result[1]);
     IMCS_TRACE(hash_count);
@@ -3426,13 +3435,13 @@ Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
     TupleDesc resultTupleDesc;
     Datum outValues[2];
     bool nulls[2] = {false, false};
-    imcs_iterator_h result[2]; 
-    if (min_occ <= 0) { 
+    imcs_iterator_h result[2];
+    if (min_occ <= 0) {
         imcs_ereport(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE, "min_occurrences should be positive number");
     }
     get_call_result_type(fcinfo, NULL, &resultTupleDesc);
     imcs_hash_dup_count(result, input, group_by, min_occ);
-    result[0] = imcs_parallel_iterator(result[0]);              
+    result[0] = imcs_parallel_iterator(result[0]);
     outValues[0] = PointerGetDatum(result[0]);
     outValues[1] = PointerGetDatum(result[1]);
     IMCS_TRACE(hash_dup_count);
@@ -3467,7 +3476,7 @@ IMCS_UNARY_OP(cum_dev)
 
 Datum cs_histogram(PG_FUNCTION_ARGS)
 {
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);    
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     imcs_iterator_h result;
     double min_val = PG_GETARG_FLOAT8(1);
     double max_val = PG_GETARG_FLOAT8(2);
@@ -3487,15 +3496,15 @@ Datum cs_stretch(PG_FUNCTION_ARGS)
     imcs_iterator_h vals = (imcs_iterator_h)PG_GETARG_POINTER(2);
     double filler = PG_GETARG_FLOAT8(3);
     imcs_iterator_h result = NULL;
-    switch (ts1->elem_type) { 
+    switch (ts1->elem_type) {
       case TID_int32:
       case TID_date:
         IMCS_APPLY(stretch_int32, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         IMCS_APPLY(stretch_int64, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       default:
@@ -3510,15 +3519,15 @@ Datum cs_stretch0(PG_FUNCTION_ARGS)
     imcs_iterator_h vals = (imcs_iterator_h)PG_GETARG_POINTER(2);
     double filler = PG_GETARG_FLOAT8(3);
     imcs_iterator_h result = NULL;
-    switch (ts1->elem_type) { 
+    switch (ts1->elem_type) {
       case TID_int32:
       case TID_date:
         IMCS_APPLY(stretch0_int32, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         IMCS_APPLY(stretch0_int64, vals->elem_type, (ts1, ts2, vals, filler));
         break;
       default:
@@ -3532,15 +3541,15 @@ Datum cs_asof_join(PG_FUNCTION_ARGS)
     imcs_iterator_h ts2 = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h vals = (imcs_iterator_h)PG_GETARG_POINTER(2);
     imcs_iterator_h result = NULL;
-    switch (ts1->elem_type) { 
+    switch (ts1->elem_type) {
       case TID_int32:
       case TID_date:
         IMCS_APPLY(asof_join_int32, vals->elem_type, (ts1, ts2, vals));
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         IMCS_APPLY(asof_join_int64, vals->elem_type, (ts1, ts2, vals));
         break;
       default:
@@ -3554,15 +3563,15 @@ Datum cs_asof_join_pos(PG_FUNCTION_ARGS)
     imcs_iterator_h ts2 = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h result = NULL;
     IMCS_TRACE(asof_join_pos);
-    switch (ts1->elem_type) { 
+    switch (ts1->elem_type) {
       case TID_int32:
       case TID_date:
         result = imcs_asof_join_pos_int32(ts1, ts2);
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         result = imcs_asof_join_pos_int64(ts1, ts2);
         break;
       default:
@@ -3576,15 +3585,15 @@ Datum cs_join(PG_FUNCTION_ARGS)
     imcs_iterator_h ts2 = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h vals = (imcs_iterator_h)PG_GETARG_POINTER(2);
     imcs_iterator_h result = NULL;
-    switch (ts1->elem_type) { 
+    switch (ts1->elem_type) {
       case TID_int32:
       case TID_date:
         IMCS_APPLY(join_int32, vals->elem_type, (ts1, ts2, vals));
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         IMCS_APPLY(join_int64, vals->elem_type, (ts1, ts2, vals));
         break;
       default:
@@ -3598,15 +3607,15 @@ Datum cs_join_pos(PG_FUNCTION_ARGS)
     imcs_iterator_h ts2 = (imcs_iterator_h)PG_GETARG_POINTER(1);
     imcs_iterator_h result = NULL;
     IMCS_TRACE(join_pos);
-    switch (ts1->elem_type) { 
+    switch (ts1->elem_type) {
       case TID_int32:
       case TID_date:
         result = imcs_join_pos_int32(ts1, ts2);
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         result = imcs_join_pos_int64(ts1, ts2);
         break;
       default:
@@ -3648,47 +3657,47 @@ Datum cs_empty(PG_FUNCTION_ARGS)
     IMCS_TRACE(empty);
     switch (input->elem_type) {
       case TID_int8:
-      { 
+      {
           int8 val;
           has_next = imcs_next_int8(input, &val);
           break;
       }
       case TID_int16:
-      { 
+      {
           int16 val;
           has_next = imcs_next_int16(input, &val);
           break;
       }
       case TID_int32:
       case TID_date:
-      { 
+      {
           int32 val;
           has_next = imcs_next_int32(input, &val);
           break;
       }
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
-      { 
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
+      {
           int64 val;
           has_next = imcs_next_int64(input, &val);
           break;
       }
       case TID_float:
-      { 
+      {
           float val;
           has_next = imcs_next_float(input, &val);
           break;
       }
       case TID_double:
-      { 
+      {
           double val;
           has_next = imcs_next_double(input, &val);
           break;
       }
       case TID_char:
-      { 
+      {
           char* val = (char*)imcs_alloc(input->elem_size);
           has_next = imcs_next_char(input, val);
           imcs_free(val);
@@ -3698,7 +3707,7 @@ Datum cs_empty(PG_FUNCTION_ARGS)
     PG_RETURN_BOOL(!has_next);
 }
 
-typedef struct { 
+typedef struct {
     int               n_iterators;
     int               n_timeseries;
     imcs_iterator_h*  iterators;
@@ -3708,7 +3717,7 @@ typedef struct {
 } imcs_project_context;
 
 Datum cs_project(PG_FUNCTION_ARGS)
-{ 
+{
     HeapTupleHeader t = NULL;
     imcs_iterator_h positions = PG_ARGISNULL(1) ? (imcs_iterator_h)NULL : (imcs_iterator_h)PG_GETARG_POINTER(1);
     bool disable_caching = PG_GETARG_BOOL(2);
@@ -3725,59 +3734,59 @@ Datum cs_project(PG_FUNCTION_ARGS)
     TupleDesc attr_desc = NULL;
     Oid	timeseries_oid = 0;
 
-    if (PG_ARGISNULL(0)) { 
+    if (PG_ARGISNULL(0)) {
         PG_RETURN_NULL();
     }
-    if (is_first_call) { 
+    if (is_first_call) {
         char typtype;
         timeseries_oid = TypenameGetTypid("timeseries");
         argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
         typtype = get_typtype(argtype);
-        if (typtype == 'c' || typtype == 'p') { 
-            t = PG_GETARG_HEAPTUPLEHEADER(0); 
+        if (typtype == 'c' || typtype == 'p') {
+            t = PG_GETARG_HEAPTUPLEHEADER(0);
             attr_desc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(t), HeapTupleHeaderGetTypMod(t));
             n_attrs = attr_desc->natts;
-        } else { 
-            if (argtype != timeseries_oid) { 
+        } else {
+            if (argtype != timeseries_oid) {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "First argument of cs_project should be compound type or timeseries");
             }
             n_attrs = 1;
         }
-    } else { 
-        t = PG_GETARG_HEAPTUPLEHEADER(0); 
+    } else {
+        t = PG_GETARG_HEAPTUPLEHEADER(0);
     }
-    if (!disable_caching && imcs_project_caching) { 
-        if (is_first_call) { 
-            if (imcs_project_call_count == 1) { 
+    if (!disable_caching && imcs_project_caching) {
+        if (is_first_call) {
+            if (imcs_project_call_count == 1) {
                 /* cs_project() is redundantly called second time in (cs_project(...)).* expression - PostgreSQL behavour */
-                /* This condition may be true also when cs_project() is used twice in the same query - disable caching in this case */ 
+                /* This condition may be true also when cs_project() is used twice in the same query - disable caching in this case */
                 imcs_project_redundant_calls = n_attrs; /* number of attributes of projected tuple */
-            } else if (imcs_project_redundant_calls > 1 && imcs_project_call_count >= imcs_project_redundant_calls) { 
+            } else if (imcs_project_redundant_calls > 1 && imcs_project_call_count >= imcs_project_redundant_calls) {
                 /* iteratation is not yet completed, but first function call is encountered */
                 imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project_agg in select column list are not supported");
             }
         }
-        if (imcs_project_redundant_calls > 1) { 
+        if (imcs_project_redundant_calls > 1) {
             Assert(imcs_project_call_count > 0);
             if (imcs_project_call_count < imcs_project_redundant_calls && !is_first_call) {
                 imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project in select column list are not supported");
             }
             if (imcs_project_call_count++ % imcs_project_redundant_calls != 0) {
                 funcctx = is_first_call ? SRF_FIRSTCALL_INIT() : SRF_PERCALL_SETUP();
-                if (attr_desc != NULL) { 
+                if (attr_desc != NULL) {
                     ReleaseTupleDesc(attr_desc);
                 }
-                if (imcs_project_result_cache) { 
-                    SRF_RETURN_NEXT(funcctx, imcs_project_result_cache);    
-                } else { 
+                if (imcs_project_result_cache) {
+                    SRF_RETURN_NEXT(funcctx, imcs_project_result_cache);
+                } else {
                     if (imcs_project_call_count % imcs_project_redundant_calls == 0) { /* end of traversal */
                         imcs_project_redundant_calls = 0;
                         imcs_project_call_count = 0;
                     }
-                    SRF_RETURN_DONE(funcctx);   
+                    SRF_RETURN_DONE(funcctx);
                 }
             }
-        } else { 
+        } else {
             imcs_project_call_count += 1;
         }
     }
@@ -3789,7 +3798,7 @@ Datum cs_project(PG_FUNCTION_ARGS)
         IMCS_TRACE(project);
         imcs_project_call_count = 1; /* initialize counter */
         funcctx = SRF_FIRSTCALL_INIT();
-        oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);       
+        oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
         usrfctx = (imcs_project_context*)palloc(sizeof(imcs_project_context));
         usrfctx->iterators = (imcs_iterator_h*)palloc(sizeof(imcs_iterator_h)*n_attrs);
         usrfctx->values = (Datum*)palloc(sizeof(Datum)*n_attrs);
@@ -3803,10 +3812,10 @@ Datum cs_project(PG_FUNCTION_ARGS)
             int attnum;
             int atttypid;
             char const* attname;
-            if (attr_desc != NULL) { 
-                Form_pg_attribute attr = attr_desc->attrs[i];
+            if (attr_desc != NULL) {
+                Form_pg_attribute attr = TupleDescAttr(attr_desc, i);
                 datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
-                if (attr->atttypid != timeseries_oid) { 
+                if (attr->atttypid != timeseries_oid) {
                     usrfctx->iterators[i] = NULL;
                     usrfctx->values[i] = datum;
                     TupleDescInitEntry(usrfctx->desc, attr->attnum, attr->attname.data, attr->atttypid, attr->atttypmod, attr->attndims);
@@ -3817,114 +3826,114 @@ Datum cs_project(PG_FUNCTION_ARGS)
                 }
                 attnum = attr->attnum;
                 attname = attr->attname.data;
-            } else { 
+            } else {
                 datum = PG_GETARG_DATUM(0);
                 attnum = 1;
                 attname = "timeseries";
                 usrfctx->nulls[i] = false;
             }
-            attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);   
-            if (positions != NULL) { 
+            attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);
+            if (positions != NULL) {
                 if (i+1 < n_attrs) {
                     imcs_iterator_h tee_iterators[2];
                     imcs_tee(tee_iterators, positions);
                     usrfctx->iterators[i] = imcs_project(attr_iterator, tee_iterators[0]);
                     positions = tee_iterators[1];
-                } else { 
+                } else {
                     usrfctx->iterators[i] = imcs_project(attr_iterator, positions);
                 }
-            } else { 
+            } else {
                 usrfctx->iterators[i] = imcs_operand(attr_iterator);
-            } 
+            }
             atttypid = (usrfctx->iterators[i]->flags & FLAG_TRANSLATED) ? TEXTOID : imcs_elem_type_to_oid[usrfctx->iterators[i]->elem_type];
             TupleDescInitEntry(usrfctx->desc, attnum, attname, atttypid, -1, 0);
             n_timeseries += 1;
-        }  
+        }
         usrfctx->n_timeseries = n_timeseries;
-        if (!is_null) { 
+        if (!is_null) {
             TupleDescGetAttInMetadata(usrfctx->desc);
         }
-        MemoryContextSwitchTo(oldcontext);      
-        if (attr_desc != NULL) { 
+        MemoryContextSwitchTo(oldcontext);
+        if (attr_desc != NULL) {
             ReleaseTupleDesc(attr_desc);
         }
-    } 
+    }
     funcctx = SRF_PERCALL_SETUP();
     usrfctx = (imcs_project_context*)funcctx->user_fctx;
     imcs_project_result_cache = 0; /* 0 means end of set */
-    if (is_null || (!is_first_call && usrfctx->n_timeseries == 0)) { 
-        SRF_RETURN_DONE(funcctx);      
+    if (is_null || (!is_first_call && usrfctx->n_timeseries == 0)) {
+        SRF_RETURN_DONE(funcctx);
     }
-    for (i = 0, n_iters = usrfctx->n_iterators; i < n_iters; i++) { 
-        if (usrfctx->iterators[i] != NULL) { 
+    for (i = 0, n_iters = usrfctx->n_iterators; i < n_iters; i++) {
+        if (usrfctx->iterators[i] != NULL) {
             switch (usrfctx->iterators[i]->elem_type) {
             case TID_int8:
-                { 
+                {
                     int8 val;
-                    if (!imcs_next_int8(usrfctx->iterators[i], &val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_int8(usrfctx->iterators[i], &val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
                     usrfctx->values[i] = Int8GetDatum(val);
                     break;
                 }
             case TID_int16:
-                { 
+                {
                     int16 val;
-                    if (!imcs_next_int16(usrfctx->iterators[i], &val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_int16(usrfctx->iterators[i], &val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
-                    usrfctx->values[i] = (usrfctx->iterators[i]->flags & FLAG_TRANSLATED) 
+                    usrfctx->values[i] = (usrfctx->iterators[i]->flags & FLAG_TRANSLATED)
                         ? PointerGetDatum(cstring_to_text_with_len(imcs_dict_code_map[(uint16)val]->key.val, imcs_dict_code_map[(uint16)val]->key.len))
                         : Int16GetDatum(val);
                     break;
                 }
             case TID_int32:
             case TID_date:
-                { 
+                {
                     int32 val;
-                    if (!imcs_next_int32(usrfctx->iterators[i], &val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_int32(usrfctx->iterators[i], &val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
-                    usrfctx->values[i] = (usrfctx->iterators[i]->flags & FLAG_TRANSLATED) 
+                    usrfctx->values[i] = (usrfctx->iterators[i]->flags & FLAG_TRANSLATED)
                         ? PointerGetDatum(cstring_to_text_with_len(imcs_dict_code_map[val]->key.val, imcs_dict_code_map[val]->key.len))
                         : Int32GetDatum(val);
                     break;
                 }
             case TID_int64:
-            case TID_time:                                
-            case TID_timestamp:                           
-            case TID_money:                           
-                { 
+            case TID_time:
+            case TID_timestamp:
+            case TID_money:
+                {
                     int64 val;
-                    if (!imcs_next_int64(usrfctx->iterators[i], &val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_int64(usrfctx->iterators[i], &val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
                     usrfctx->values[i] = Int64GetDatum(val);
                     break;
                 }
             case TID_float:
-                { 
+                {
                     float val;
-                    if (!imcs_next_float(usrfctx->iterators[i], &val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_float(usrfctx->iterators[i], &val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
                     usrfctx->values[i] = Float4GetDatum(val);
                     break;
                 }
             case TID_double:
-                { 
+                {
                     double val;
-                    if (!imcs_next_double(usrfctx->iterators[i], &val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_double(usrfctx->iterators[i], &val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
                     usrfctx->values[i] = Float8GetDatum(val);
                     break;
                 }
             case TID_char:
-                { 
+                {
                     char* val = (char*)imcs_alloc(usrfctx->iterators[i]->elem_size+1);
-                    if (!imcs_next_char(usrfctx->iterators[i], val)) { 
-                        SRF_RETURN_DONE(funcctx);      
+                    if (!imcs_next_char(usrfctx->iterators[i], val)) {
+                        SRF_RETURN_DONE(funcctx);
                     }
                     val[usrfctx->iterators[i]->elem_size] = '\0';
                     usrfctx->values[i] = CStringGetTextDatum(val);
@@ -3932,16 +3941,16 @@ Datum cs_project(PG_FUNCTION_ARGS)
                 }
             default:
                 Assert(false);
-            } 
+            }
         }
     }
     tuple = heap_form_tuple(usrfctx->desc, usrfctx->values, usrfctx->nulls);
     elem = HeapTupleGetDatum(tuple);
     imcs_project_result_cache = elem;
-    SRF_RETURN_NEXT(funcctx, elem);    
+    SRF_RETURN_NEXT(funcctx, elem);
 }
 
-typedef struct { 
+typedef struct {
     imcs_iterator_h iterators[2];
     Datum           values[2];
     bool            nulls[2];
@@ -3950,7 +3959,7 @@ typedef struct {
 
 Datum cs_project_agg(PG_FUNCTION_ARGS)
 {
-    HeapTupleHeader t = PG_ARGISNULL(0) ? NULL : PG_GETARG_HEAPTUPLEHEADER(0); 
+    HeapTupleHeader t = PG_ARGISNULL(0) ? NULL : PG_GETARG_HEAPTUPLEHEADER(0);
     imcs_iterator_h positions = PG_ARGISNULL(1) ? (imcs_iterator_h)NULL : (imcs_iterator_h)PG_GETARG_POINTER(1);
     bool disable_caching = PG_GETARG_BOOL(2);
     FuncCallContext* funcctx;
@@ -3965,40 +3974,40 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
     MemoryContext oldcontext;
     TupleDesc attr_desc;
     Oid	timeseries_oid;
-    
-    if (t == NULL) { 
+
+    if (t == NULL) {
         PG_RETURN_NULL();
     }
-    if (!disable_caching && imcs_project_caching) { 
-        if (is_first_call) { 
-            if (imcs_project_call_count == 1) { 
+    if (!disable_caching && imcs_project_caching) {
+        if (is_first_call) {
+            if (imcs_project_call_count == 1) {
                 /* cs_project_agg() is redundantly called second time in (cs_project_agg(...)).* expression - PostgreSQL behavour */
-                /* This condition may be true also when cs_project() is used twice in the ssame query - disable caching in this case */ 
+                /* This condition may be true also when cs_project() is used twice in the ssame query - disable caching in this case */
                 imcs_project_redundant_calls = 2; /* number of attributes of projected tuple */
                 funcctx = SRF_FIRSTCALL_INIT(); /* context will be needed for SRF_RETURN_NEXT */
-            } else if (imcs_project_redundant_calls != 0 && imcs_project_call_count >= imcs_project_redundant_calls) { 
+            } else if (imcs_project_redundant_calls != 0 && imcs_project_call_count >= imcs_project_redundant_calls) {
                 /* iteratation is not yet completed, but first function call is encountered */
                 imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project_agg in select column list are not supported");
             }
         }
-        if (imcs_project_redundant_calls != 0) { 
+        if (imcs_project_redundant_calls != 0) {
             Assert(imcs_project_call_count > 0);
             if (imcs_project_call_count < 2 && !is_first_call) {
                 imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Multiple usage of cs_project_agg in select column list are not supported");
             }
             if (imcs_project_call_count++ % 2 != 0) { /* 2 - number of attributes */
                 funcctx = SRF_PERCALL_SETUP();
-                if (imcs_project_result_cache) { 
-                    SRF_RETURN_NEXT(funcctx, imcs_project_result_cache);    
-                } else { 
+                if (imcs_project_result_cache) {
+                    SRF_RETURN_NEXT(funcctx, imcs_project_result_cache);
+                } else {
                     if (imcs_project_call_count % 2 == 0) { /* end of traversal */
                         imcs_project_redundant_calls = 0;
                         imcs_project_call_count = 0;
                     }
-                    SRF_RETURN_DONE(funcctx);   
+                    SRF_RETURN_DONE(funcctx);
                 }
             }
-        } else { 
+        } else {
             imcs_project_call_count += 1;
         }
     }
@@ -4009,101 +4018,101 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
         imcs_project_call_count = 1; /* initialize counter */
         attr_desc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(t), HeapTupleHeaderGetTypMod(t));
         timeseries_oid = TypenameGetTypid("timeseries");
-        if (attr_desc->natts != 2) { 
+        if (attr_desc->natts != 2) {
             imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Expect record with two columns");
         }
-        oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);       
+        oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
         usrfctx = (imcs_project_agg_context*)palloc(sizeof(imcs_project_agg_context));
         get_call_result_type(fcinfo, NULL, &usrfctx->desc);
         funcctx->user_fctx = usrfctx;
-        for (i = 0; i < 2; i++) { 
-            Form_pg_attribute attr = attr_desc->attrs[i];
+        for (i = 0; i < 2; i++) {
+            Form_pg_attribute attr = TupleDescAttr(attr_desc, i);
             Datum datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
             if (attr->atttypid != timeseries_oid) {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Expect column with timeseries type");
-            } else if (usrfctx->nulls[i]) { 
+            } else if (usrfctx->nulls[i]) {
                 is_null = true;
                 break;
-            } else { 
-                imcs_iterator_h attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);   
-                if (positions != NULL) { 
+            } else {
+                imcs_iterator_h attr_iterator = (imcs_iterator_h)DatumGetPointer(datum);
+                if (positions != NULL) {
                     if (i == 0) {
                         imcs_iterator_h tee_iterators[2];
                         imcs_tee(tee_iterators, positions);
                         usrfctx->iterators[i] = imcs_project(attr_iterator, tee_iterators[0]);
                         positions = tee_iterators[1];
-                    } else { 
+                    } else {
                         usrfctx->iterators[i] = imcs_project(attr_iterator, positions);
                     }
-                } else { 
+                } else {
                     usrfctx->iterators[i] = imcs_operand(attr_iterator);
-                } 
+                }
             }
-        }  
+        }
         ReleaseTupleDesc(attr_desc);
-        MemoryContextSwitchTo(oldcontext);      
+        MemoryContextSwitchTo(oldcontext);
     }
     funcctx = SRF_PERCALL_SETUP();
     imcs_project_result_cache = 0; /* 0 means end of set */
-    if (is_null) { 
-        SRF_RETURN_DONE(funcctx);      
+    if (is_null) {
+        SRF_RETURN_DONE(funcctx);
     }
     usrfctx = (imcs_project_agg_context*)funcctx->user_fctx;
     switch (usrfctx->iterators[0]->elem_type) {
       case TID_int8:
-          { 
+          {
               int8 val;
-              if (!imcs_next_int8(usrfctx->iterators[0], &val)) { 
-                  SRF_RETURN_DONE(funcctx);      
+              if (!imcs_next_int8(usrfctx->iterators[0], &val)) {
+                  SRF_RETURN_DONE(funcctx);
               }
               usrfctx->values[0] = Float8GetDatum((double)val);
               break;
           }
       case TID_int16:
-          { 
+          {
               int16 val;
-              if (!imcs_next_int16(usrfctx->iterators[0], &val)) { 
-                  SRF_RETURN_DONE(funcctx);      
+              if (!imcs_next_int16(usrfctx->iterators[0], &val)) {
+                  SRF_RETURN_DONE(funcctx);
               }
               usrfctx->values[0] = Float8GetDatum((double)val);
               break;
           }
       case TID_int32:
       case TID_date:
-          { 
+          {
               int32 val;
-              if (!imcs_next_int32(usrfctx->iterators[0], &val)) { 
-                  SRF_RETURN_DONE(funcctx);      
+              if (!imcs_next_int32(usrfctx->iterators[0], &val)) {
+                  SRF_RETURN_DONE(funcctx);
               }
               usrfctx->values[0] = Float8GetDatum((double)val);
               break;
           }
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
-          { 
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
+          {
               int64 val;
-              if (!imcs_next_int64(usrfctx->iterators[0], &val)) { 
-                  SRF_RETURN_DONE(funcctx);      
+              if (!imcs_next_int64(usrfctx->iterators[0], &val)) {
+                  SRF_RETURN_DONE(funcctx);
               }
               usrfctx->values[0] = Float8GetDatum((double)val);
               break;
           }
       case TID_float:
-          { 
+          {
               float val;
-              if (!imcs_next_float(usrfctx->iterators[0], &val)) { 
-                  SRF_RETURN_DONE(funcctx);      
+              if (!imcs_next_float(usrfctx->iterators[0], &val)) {
+                  SRF_RETURN_DONE(funcctx);
               }
               usrfctx->values[0] = Float8GetDatum((double)val);
               break;
           }
       case TID_double:
-          { 
+          {
               double val;
-              if (!imcs_next_double(usrfctx->iterators[0], &val)) { 
-                  SRF_RETURN_DONE(funcctx);      
+              if (!imcs_next_double(usrfctx->iterators[0], &val)) {
+                  SRF_RETURN_DONE(funcctx);
               }
               usrfctx->values[0] = Float8GetDatum(val);
               break;
@@ -4113,49 +4122,49 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
     }
 
     size = VARHDRSZ + usrfctx->iterators[1]->elem_size;
-    arr = (bytea*)palloc(size); 
+    arr = (bytea*)palloc(size);
     SET_VARSIZE(arr, size);
     dst = VARDATA(arr);
     usrfctx->values[1] = PointerGetDatum(arr);
 
     switch (usrfctx->iterators[1]->elem_type) {
       case TID_int8:
-        if (!imcs_next_int8(usrfctx->iterators[1], (int8*)dst)) { 
-            SRF_RETURN_DONE(funcctx);      
+        if (!imcs_next_int8(usrfctx->iterators[1], (int8*)dst)) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       case TID_int16:
-        if (!imcs_next_int16(usrfctx->iterators[1], (int16*)dst)) { 
-            SRF_RETURN_DONE(funcctx);      
+        if (!imcs_next_int16(usrfctx->iterators[1], (int16*)dst)) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       case TID_int32:
       case TID_date:
-        if (!imcs_next_int32(usrfctx->iterators[1], (int32*)dst)) { 
-            SRF_RETURN_DONE(funcctx);      
+        if (!imcs_next_int32(usrfctx->iterators[1], (int32*)dst)) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       case TID_int64:
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
-        if (!imcs_next_int64(usrfctx->iterators[1], (int64*)dst)) { 
-            SRF_RETURN_DONE(funcctx);      
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
+        if (!imcs_next_int64(usrfctx->iterators[1], (int64*)dst)) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       case TID_float:
-        if (!imcs_next_float(usrfctx->iterators[1], (float*)dst)) { 
-            SRF_RETURN_DONE(funcctx);      
+        if (!imcs_next_float(usrfctx->iterators[1], (float*)dst)) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       case TID_double:
-        if (!imcs_next_double(usrfctx->iterators[1], (double*)dst)) { 
-            SRF_RETURN_DONE(funcctx);      
+        if (!imcs_next_double(usrfctx->iterators[1], (double*)dst)) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       case TID_char:
-        if (!imcs_next_char(usrfctx->iterators[1], VARDATA(arr))) { 
-            SRF_RETURN_DONE(funcctx);      
+        if (!imcs_next_char(usrfctx->iterators[1], VARDATA(arr))) {
+            SRF_RETURN_DONE(funcctx);
         }
         break;
       default:
@@ -4164,12 +4173,12 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
     tuple = heap_form_tuple(usrfctx->desc, usrfctx->values, usrfctx->nulls);
     elem = HeapTupleGetDatum(tuple);
     imcs_project_result_cache = elem;
-    SRF_RETURN_NEXT(funcctx, elem);    
+    SRF_RETURN_NEXT(funcctx, elem);
 }
 
 static imcs_elem_typeid_t imcs_oid_to_typeid(int oid)
 {
-    switch (oid) { 
+    switch (oid) {
       case BOOLOID:
       case CHAROID:
         return TID_int8;
@@ -4198,9 +4207,9 @@ static imcs_elem_typeid_t imcs_oid_to_typeid(int oid)
       default:
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Unsupported type oid %d", oid);
     }
-    return TID_int8; 
+    return TID_int8;
 }
-    
+
 Datum columnar_store_load(PG_FUNCTION_ARGS)
 {
     char const* table_name = PG_GETARG_CSTRING(0);
@@ -4231,16 +4240,16 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     char stmt[MAX_SQL_STMT_LEN];
 
     SPI_connect();
-    
+
     sprintf(stmt, "select attname,atttypid,attlen,atttypmod from pg_class,pg_attribute,pg_type where pg_class.relname='%s' and pg_class.oid=pg_attribute.attrelid and pg_attribute.atttypid=pg_type.oid and attnum>0 order by attnum", table_name);
 
     rc = SPI_execute(stmt, true, 0);
-    if (rc != SPI_OK_SELECT) { 
+    if (rc != SPI_OK_SELECT) {
         elog(ERROR, "Select failed with status %d", rc);
     }
     n_attrs = SPI_processed;
-    if (n_attrs == 0) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Table %s doesn't exist", table_name); 
+    if (n_attrs == 0) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Table %s doesn't exist", table_name);
     }
     attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
     attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
@@ -4262,8 +4271,8 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
         if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
             attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
             if (attr_size[i] < 0 && id_attnum != i+1) {
-                if (imcs_dict_size == 0) { 
-                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]); 
+                if (imcs_dict_size == 0) {
+                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]);
                 }
             }
         }
@@ -4275,29 +4284,29 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     SPI_freetuptable(SPI_tuptable);
 
     ts = imcs_get_timeseries(cs_id_prefix[timestamp_attnum-1], attr_type[timestamp_attnum-1], true, attr_size[timestamp_attnum-1], true);
-    
+
     if (ts->count != 0 && filter == NULL) { /* always try to load records when filter is specified */
         SPI_finish();
         PG_RETURN_INT64(0);
-    }    
+    }
     if (id_attnum != 0) { /* in case of single timeseries, dummy hash entry to check if timeseries was already initialized is not needed: use entry for timestamp */
         ts->count = 1;
     }
 
     len = sprintf(stmt, "select * from %s", table_name);
-    if (filter != NULL) { 
+    if (filter != NULL) {
         len += sprintf(stmt + len, " where %s", filter);
-    } 
-    if (!already_sorted) { 
+    }
+    if (!already_sorted) {
         sprintf(stmt + len, " order by %s", attr_name[timestamp_attnum-1]);
     }
-    plan = SPI_prepare(stmt, 0, NULL);	
+    plan = SPI_prepare(stmt, 0, NULL);
     portal = SPI_cursor_open(NULL, plan, NULL, NULL, true);
 
 
     while (true) {
         SPI_cursor_fetch(portal, true, 1);
-        if (SPI_processed) { 
+        if (SPI_processed) {
             HeapTuple spi_tuple = SPI_tuptable->vals[0];
             TupleDesc spi_tupdesc = SPI_tuptable->tupdesc;
             char* id = NULL;
@@ -4305,19 +4314,19 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
             int id_len = 0;
             n_records += 1;
             heap_deform_tuple(spi_tuple, spi_tupdesc, values, nulls);
-            if (id_attnum != 0) { 
+            if (id_attnum != 0) {
                 if (nulls[id_attnum-1]) {
                     imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "Timseries identifier can not be NULL");
                 }
-                if (attr_type[id_attnum-1] != TID_char) { 
+                if (attr_type[id_attnum-1] != TID_char) {
                     id = id_cstr = SPI_getvalue(spi_tuple, spi_tupdesc, id_attnum);
                     id_len = strlen(id);
-                } else { 
+                } else {
                     t = DatumGetTextP(values[id_attnum-1]);
                     id = (char*)VARDATA(t);
                     id_len = VARSIZE(t) - VARHDRSZ;
-                    if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
-                        while (id_len != 0 && id[id_len-1] == ' ') { 
+                    if (attr_type_oid[id_attnum-1] == BPCHAROID) {
+                        while (id_len != 0 && id[id_len-1] == ' ') {
                             id_len -= 1;
                         }
                     }
@@ -4326,32 +4335,32 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
             i = timestamp_attnum - 1; /* start with timestamp because it the only attribute which append can fail because of out-of-order date */
             for (j = 0; j < n_attrs; j++, i = (i + 1) % n_attrs) {
                 if (nulls[i]) {
-                    if (imcs_substitute_nulls) { 
+                    if (imcs_substitute_nulls) {
                         values[i] = 0;
-                    } else { 
+                    } else {
                         imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
                     }
                 }
-                if (i+1 != id_attnum) { 
+                if (i+1 != id_attnum) {
                     bool is_timestamp = i+1 == timestamp_attnum;
                     char *str;
-                    if (id_attnum != 0) { 
+                    if (id_attnum != 0) {
                         int prefix_len = cs_id_prefix_len[i];
-                        while (cs_id_max_len < prefix_len + id_len + 2) { 
+                        while (cs_id_max_len < prefix_len + id_len + 2) {
                             cs_id_max_len *= 2;
                         }
                         pfree(cs_id);
                         cs_id = (char*)palloc(cs_id_max_len);
-                        
+
                         memcpy(cs_id, cs_id_prefix[i], prefix_len);
                         cs_id[prefix_len] = '-';
                         memcpy(cs_id + prefix_len + 1, id, id_len);
                         cs_id[prefix_len + id_len + 1] = '\0';
-                    } else { 
+                    } else {
                         cs_id = cs_id_prefix[i];
                     }
                     ts = imcs_get_timeseries(cs_id, attr_type[i], is_timestamp, attr_size[i], true);
-                    switch (attr_type[i]) { 
+                    switch (attr_type[i]) {
                       case TID_int8:
                         imcs_append_int8(ts, DatumGetChar(values[i]));
                         break;
@@ -4365,7 +4374,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                       case TID_int64:
                       case TID_time:
                       case TID_timestamp:
-                      case TID_money:                           
+                      case TID_money:
                         imcs_append_int64(ts, DatumGetInt64(values[i]));
                         break;
                       case TID_float:
@@ -4373,7 +4382,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                         break;
                       case TID_double:
                         imcs_append_double(ts, DatumGetFloat8(values[i]));
-                        break;                    
+                        break;
                       case TID_char:
                         if (attr_size[i] < 0) { /* varying string */
                             bool found;
@@ -4382,40 +4391,40 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                             if (nulls[i]) { /* substitute NULL with empty string */
                                 key.val = NULL;
                                 key.len = 0;
-                            } else { 
+                            } else {
                                 t = DatumGetTextP(values[i]);
                                 key.val = (char*)VARDATA(t);
                                 key.len = VARSIZE(t) - VARHDRSZ;
-                            }                            
+                            }
 							imcs_lock_dictionary(true);
                             entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
-                            if (!found) { 
+                            if (!found) {
                                 entry->code = hash_get_num_entries(imcs_dict);
-                                if (entry->code >= imcs_dict_size) {  
+                                if (entry->code >= imcs_dict_size) {
                                     imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
-                                }   
+                                }
                                 imcs_dict_code_map[entry->code] = entry;
                             }
-                            if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+                            if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
                                 imcs_append_int16(ts, (int16)entry->code);
-                            } else { 
+                            } else {
                                 imcs_append_int32(ts, (int32)entry->code);
                             }
-							imcs_unlock_dictionary();	
-                        } else { 
+							imcs_unlock_dictionary();
+                        } else {
                             if (nulls[i]) { /* substitute NULL with empty string */
                                 imcs_append_char(ts, NULL, 0);
-                            } else { 
+                            } else {
                                 t = DatumGetTextP(values[i]);
                                 str = (char*)VARDATA(t);
                                 len = VARSIZE(t) - VARHDRSZ;
-                                if (attr_type_oid[i] == BPCHAROID) { 
-                                    while (len != 0 && str[len-1] == ' ') { 
+                                if (attr_type_oid[i] == BPCHAROID) {
+                                    while (len != 0 && str[len-1] == ' ') {
                                         len -= 1;
                                     }
                                 }
-                                if (len > attr_size[i]) { 
-                                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);             
+                                if (len > attr_size[i]) {
+                                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);
                                 }
                                 imcs_append_char(ts, str, len);
                             }
@@ -4426,7 +4435,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
                     }
                 }
             }
-            if (id_cstr != NULL) { 
+            if (id_cstr != NULL) {
                 pfree(id_cstr);
             }
             SPI_freetuple(spi_tuple);
@@ -4438,7 +4447,7 @@ Datum columnar_store_load(PG_FUNCTION_ARGS)
     SPI_cursor_close(portal);
     SPI_finish();
     PG_RETURN_INT64(n_records);
-}    
+}
 
 Datum columnar_store_load_column(PG_FUNCTION_ARGS)
 {
@@ -4469,16 +4478,16 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
     char stmt[MAX_SQL_STMT_LEN];
 
     SPI_connect();
-    
+
     sprintf(stmt, "select attname,atttypid,attlen,atttypmod from pg_class,pg_attribute,pg_type where pg_class.relname='%s' and pg_class.oid=pg_attribute.attrelid and pg_attribute.atttypid=pg_type.oid and attnum>0 order by attnum", table_name);
 
     rc = SPI_execute(stmt, true, 0);
-    if (rc != SPI_OK_SELECT) { 
+    if (rc != SPI_OK_SELECT) {
         elog(ERROR, "Select failed with status %d", rc);
     }
     n_attrs = SPI_processed;
-    if (n_attrs == 0) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Table %s doesn't exist", table_name); 
+    if (n_attrs == 0) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Table %s doesn't exist", table_name);
     }
     attr_type_oid = (imcs_elem_typeid_t*)palloc(n_attrs*sizeof(imcs_elem_typeid_t));
     attr_type = (Oid*)palloc(n_attrs*sizeof(Oid));
@@ -4495,13 +4504,13 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
         if (attr_size[i] < 0) { /* attlen=-1: varying type, extract size from atttypmod */
             attr_size[i] = DatumGetInt32(SPI_getbinval(spi_tuple, spi_tupdesc, 4, &isnull)) - VARHDRSZ;
             if (attr_size[i] < 0 && id_attnum != i+1) {
-                if (imcs_dict_size == 0) { 
-                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]); 
+                if (imcs_dict_size == 0) {
+                    imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Size of attribute %s is not statically known", attr_name[i]);
                 }
             }
         }
-        if (strcmp(attr_name[i], column_name) == 0) { 
-            column_id = i;            
+        if (strcmp(attr_name[i], column_name) == 0) {
+            column_id = i;
             cs_id_prefix_len = table_name_len + strlen(attr_name[i]) + 1;
             cs_id_prefix = (char*)palloc(cs_id_prefix_len+1);
             sprintf(cs_id_prefix, "%s-%s", table_name, attr_name[i]);
@@ -4509,20 +4518,20 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
         SPI_freetuple(spi_tuple);
     }
     SPI_freetuptable(SPI_tuptable);
-    if (column_id < 0 || column_id == id_attnum-1 || column_id == timestamp_attnum-1) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Column %s of table %s can not be individually imported", column_name, table_name); 
+    if (column_id < 0 || column_id == id_attnum-1 || column_id == timestamp_attnum-1) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Column %s of table %s can not be individually imported", column_name, table_name);
     }
-    if (id_attnum != 0) { 
+    if (id_attnum != 0) {
         len = sprintf(stmt, "select %s,%s from %s order by %s", column_name, attr_name[id_attnum-1], table_name, attr_name[timestamp_attnum-1]);
-    } else { 
+    } else {
         len = sprintf(stmt, "select %s from %s order by %s", column_name, table_name, attr_name[timestamp_attnum-1]);
     }
-    plan = SPI_prepare(stmt, 0, NULL);	
+    plan = SPI_prepare(stmt, 0, NULL);
     portal = SPI_cursor_open(NULL, plan, NULL, NULL, true);
 
     while (true) {
         SPI_cursor_fetch(portal, true, 1);
-        if (SPI_processed) { 
+        if (SPI_processed) {
             HeapTuple spi_tuple = SPI_tuptable->vals[0];
             TupleDesc spi_tupdesc = SPI_tuptable->tupdesc;
             char* id = NULL;
@@ -4531,36 +4540,36 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
 
             value = SPI_getbinval(spi_tuple, spi_tupdesc, 1, &isnull);
             if (isnull) {
-                if (imcs_substitute_nulls) { 
+                if (imcs_substitute_nulls) {
                     value = 0;
-                } else { 
+                } else {
                     imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
                 }
             }
-            if (id_attnum != 0) { 
+            if (id_attnum != 0) {
                 id = SPI_getvalue(spi_tuple, spi_tupdesc, 2);
                 id_len = strlen(id);
-                if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
-                    while (id_len != 0 && id[id_len-1] == ' ') { 
+                if (attr_type_oid[id_attnum-1] == BPCHAROID) {
+                    while (id_len != 0 && id[id_len-1] == ' ') {
                         id_len -= 1;
                     }
                 }
-                while (cs_id_max_len < cs_id_prefix_len + id_len + 2) { 
+                while (cs_id_max_len < cs_id_prefix_len + id_len + 2) {
                     cs_id_max_len *= 2;
                 }
                 pfree(cs_id);
                 cs_id = (char*)palloc(cs_id_max_len);
-                
+
                 memcpy(cs_id, cs_id_prefix, cs_id_prefix_len);
                 cs_id[cs_id_prefix_len] = '-';
                 memcpy(cs_id + cs_id_prefix_len + 1, id, id_len);
                 cs_id[cs_id_prefix_len + id_len + 1] = '\0';
                 pfree(id);
-            } else { 
+            } else {
                 cs_id = cs_id_prefix;
             }
             ts = imcs_get_timeseries(cs_id, attr_type[column_id], false, attr_size[column_id], true);
-            switch (attr_type[column_id]) { 
+            switch (attr_type[column_id]) {
             case TID_int8:
                 imcs_append_int8(ts, DatumGetChar(value));
                 break;
@@ -4574,7 +4583,7 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
             case TID_int64:
             case TID_time:
             case TID_timestamp:
-            case TID_money:                           
+            case TID_money:
                 imcs_append_int64(ts, DatumGetInt64(value));
                 break;
             case TID_float:
@@ -4582,7 +4591,7 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
                 break;
             case TID_double:
                 imcs_append_double(ts, DatumGetFloat8(value));
-                break;                    
+                break;
             case TID_char:
                 if (attr_size[column_id] < 0) { /* varying string */
                     bool found;
@@ -4591,41 +4600,41 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
                     if (isnull) { /* substitute NULL with empty string */
                         key.val = NULL;
                         key.len = 0;
-                    } else { 
+                    } else {
                         t = DatumGetTextP(value);
                         key.val = (char*)VARDATA(t);
                         key.len = VARSIZE(t) - VARHDRSZ;
-                    }                            
+                    }
 					imcs_lock_dictionary(true);
                     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
-                    if (!found) { 
+                    if (!found) {
                         entry->code = hash_get_num_entries(imcs_dict);
-                        if (entry->code >= imcs_dict_size) {  
+                        if (entry->code >= imcs_dict_size) {
                             imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
-                        }   
+                        }
                         imcs_dict_code_map[entry->code] = entry;
                     }
-                    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+                    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
                         imcs_append_int16(ts, (int16)entry->code);
-                    } else { 
+                    } else {
                         imcs_append_int32(ts, (int32)entry->code);
                     }
-					imcs_unlock_dictionary();	
-                } else { 
+					imcs_unlock_dictionary();
+                } else {
                     if (isnull) { /* substitute NULL with empty string */
                         imcs_append_char(ts, NULL, 0);
-                    } else { 
+                    } else {
                         char* str;
                         t = DatumGetTextP(value);
                         str = (char*)VARDATA(t);
                         len = VARSIZE(t) - VARHDRSZ;
-                        if (attr_type_oid[column_id] == BPCHAROID) { 
-                            while (len != 0 && str[len-1] == ' ') { 
+                        if (attr_type_oid[column_id] == BPCHAROID) {
+                            while (len != 0 && str[len-1] == ' ') {
                                 len -= 1;
                             }
                         }
-                        if (len > attr_size[column_id]) { 
-                            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[column_id], attr_name[column_id]);             
+                        if (len > attr_size[column_id]) {
+                            imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[column_id], attr_name[column_id]);
                         }
                         imcs_append_char(ts, str, len);
                     }
@@ -4636,17 +4645,17 @@ Datum columnar_store_load_column(PG_FUNCTION_ARGS)
             }
             SPI_freetuple(spi_tuple);
             SPI_freetuptable(SPI_tuptable);
-         } else { 
+         } else {
             break;
         }
     }
     SPI_cursor_close(portal);
     SPI_finish();
     PG_RETURN_INT64(n_records);
-}    
+}
 
 Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
-{     
+{
     TriggerData* trigger_data;
     Trigger* trigger;
     char const* table_name;
@@ -4671,8 +4680,8 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
     int len;
     char id_buf[32];
 
-    if (!CALLED_AS_TRIGGER(fcinfo)) { 
-        imcs_ereport(ERRCODE_TRIGGERED_ACTION_EXCEPTION, "columnar_store_insert_trigger can be called only by trigger"); 
+    if (!CALLED_AS_TRIGGER(fcinfo)) {
+        imcs_ereport(ERRCODE_TRIGGERED_ACTION_EXCEPTION, "columnar_store_insert_trigger can be called only by trigger");
     }
     trigger_data = (TriggerData*)fcinfo->context;
     trigger = trigger_data->tg_trigger;
@@ -4703,16 +4712,16 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
     }
 
     ts = imcs_get_timeseries(cs_id_prefix[timestamp_attnum-1], attr_type[timestamp_attnum-1], true, attr_size[timestamp_attnum-1], true);
-    
+
     if (id_attnum != 0) { /* in case of single timeseries, dummy hash entry to check if timeseries was already initialized is not needed: use entry for timestamp */
         ts->count = 1;
     }
     heap_deform_tuple(trigger_data->tg_trigtuple, trigger_data->tg_relation->rd_att, values, nulls);
-    if (id_attnum != 0) { 
+    if (id_attnum != 0) {
         if (nulls[id_attnum-1]) {
             imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "Timseries identifier can not be NULL");
         }
-        switch (attr_type[id_attnum-1]) { 
+        switch (attr_type[id_attnum-1]) {
           case TID_int8:
             id_len = sprintf(id_buf, "%d", DatumGetChar(values[id_attnum-1]));
             break;
@@ -4724,35 +4733,35 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
             break;
           case TID_int64:
             id_len = sprintf(id_buf, "%lld", (long long)DatumGetInt64(values[id_attnum-1]));
-            break;             
+            break;
           case TID_char:
             t = DatumGetTextP(values[id_attnum-1]);
             id = (char*)VARDATA(t);
             id_len = VARSIZE(t) - VARHDRSZ;
-            if (attr_type_oid[id_attnum-1] == BPCHAROID) { 
-                while (id_len != 0 && id[id_len-1] == ' ') { 
+            if (attr_type_oid[id_attnum-1] == BPCHAROID) {
+                while (id_len != 0 && id[id_len-1] == ' ') {
                     id_len -= 1;
                 }
             }
             break;
           default:
-            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Unsupported timeseries ID type %d", attr_type_oid[id_attnum-1]); 
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Unsupported timeseries ID type %d", attr_type_oid[id_attnum-1]);
         }
     }
     for (i = 0; i < n_attrs; i++) {
         if (nulls[i]) {
-            if (imcs_substitute_nulls) { 
+            if (imcs_substitute_nulls) {
                 values[i] = 0;
-            } else { 
+            } else {
                 imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "NULL values are not supported by columnar store");
             }
         }
-        if (i+1 != id_attnum) { 
+        if (i+1 != id_attnum) {
             bool is_timestamp = i+1 == timestamp_attnum;
             char *str;
-            if (id_attnum != 0) { 
+            if (id_attnum != 0) {
                 int prefix_len = cs_id_prefix_len[i];
-                while (cs_id_max_len < prefix_len + id_len + 2) { 
+                while (cs_id_max_len < prefix_len + id_len + 2) {
                     cs_id_max_len *= 2;
                     pfree(cs_id);
                     cs_id = (char*)palloc(cs_id_max_len);
@@ -4761,11 +4770,11 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                 cs_id[prefix_len] = '-';
                 memcpy(cs_id + prefix_len + 1, id, id_len);
                 cs_id[prefix_len + id_len + 1] = '\0';
-            } else { 
+            } else {
                 cs_id = cs_id_prefix[i];
             }
             ts = imcs_get_timeseries(cs_id, attr_type[i], is_timestamp, attr_size[i], true);
-            switch (attr_type[i]) { 
+            switch (attr_type[i]) {
               case TID_int8:
                 imcs_append_int8(ts, DatumGetChar(values[i]));
                 break;
@@ -4779,7 +4788,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
               case TID_int64:
               case TID_time:
               case TID_timestamp:
-              case TID_money:                           
+              case TID_money:
                 imcs_append_int64(ts, DatumGetInt64(values[i]));
                 break;
               case TID_float:
@@ -4787,7 +4796,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                 break;
               case TID_double:
                 imcs_append_double(ts, DatumGetFloat8(values[i]));
-                break;                    
+                break;
               case TID_char:
                 if (attr_size[i] < 0) { /* varying string */
                     bool found;
@@ -4796,39 +4805,39 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
                     if (nulls[i]) { /* substitute NULL with empty string */
                         key.val = NULL;
                         key.len = 0;
-                    } else { 
+                    } else {
                         t = DatumGetTextP(values[i]);
                         key.val = (char*)VARDATA(t);
                         key.len = VARSIZE(t) - VARHDRSZ;
-                    }                            
+                    }
 					imcs_lock_dictionary(true);
                     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_ENTER, &found);
-                    if (!found) { 
+                    if (!found) {
                         entry->code = hash_get_num_entries(imcs_dict);
-                        if (entry->code >= imcs_dict_size) {  
+                        if (entry->code >= imcs_dict_size) {
                             imcs_ereport(ERRCODE_OUT_OF_MEMORY, "IMSC dictionary limit exceeded");
-                        }   
+                        }
                         imcs_dict_code_map[entry->code] = entry;
                     }
-                    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) { 
+                    if (imcs_dict_size <= IMCS_SMALL_DICTIONARY) {
                         imcs_append_int16(ts, (int16)entry->code);
-                    } else { 
+                    } else {
                         imcs_append_int32(ts, (int32)entry->code);
                     }
-					imcs_unlock_dictionary();	
-                } else { 
+					imcs_unlock_dictionary();
+                } else {
                     if (nulls[i]) { /* substitute NULL with empty string */
                         imcs_append_char(ts, NULL, 0);
-                    } else { 
+                    } else {
                         t = DatumGetTextP(values[i]);
                         str = (char*)VARDATA(t);
                         len = VARSIZE(t) - VARHDRSZ;
-                        if (attr_type_oid[i] == BPCHAROID) { 
-                            while (len != 0 && str[len-1] == ' ') { 
+                        if (attr_type_oid[i] == BPCHAROID) {
+                            while (len != 0 && str[len-1] == ' ') {
                                 len -= 1;
                             }
                         }
-                        if (len > attr_size[i]) { 
+                        if (len > attr_size[i]) {
                             imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "String length %d is larger then element size %d for attribute %s", len, attr_size[i], attr_name[i]);
                         }
                         imcs_append_char(ts, str, len);
@@ -4841,7 +4850,7 @@ Datum columnar_store_insert_trigger(PG_FUNCTION_ARGS)
         }
     }
     PG_RETURN_POINTER(NULL);
-}    
+}
 
 Datum cs_cut(PG_FUNCTION_ARGS)
 {
@@ -4858,19 +4867,19 @@ Datum cs_cut(PG_FUNCTION_ARGS)
     size_t pos = 0;
     int i, n_values;
     imcs_key_t value;
-    
-    for (i = 0; *fmt != '\0'; i++) { 
+
+    for (i = 0; *fmt != '\0'; i++) {
         int n;
         char type_letter;
         int elem_size;
         imcs_elem_typeid_t elem_type = TID_char;
-        if (sscanf(fmt, "%c%d%n", &type_letter, &elem_size, &n) != 2) { 
+        if (sscanf(fmt, "%c%d%n", &type_letter, &elem_size, &n) != 2) {
             imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse format string '%s'", fmt);
         }
-        switch (type_letter) { 
+        switch (type_letter) {
           case 'i':
           case 'I':
-            switch (elem_size) { 
+            switch (elem_size) {
               case 1:
                 elem_type = TID_int8;
                 break;
@@ -4890,32 +4899,32 @@ Datum cs_cut(PG_FUNCTION_ARGS)
           case 'd':
           case 'D':
             elem_type = TID_date;
-            if (elem_size != 4)  { 
+            if (elem_size != 4)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 'm':
           case 'M':
             elem_type = TID_money;
-            if (elem_size != 8)  { 
+            if (elem_size != 8)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 't':
             elem_type = TID_time;
-            if (elem_size != 8)  { 
+            if (elem_size != 8)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 'T':
             elem_type = TID_timestamp;
-            if (elem_size != 8)  { 
+            if (elem_size != 8)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 'f':
           case 'F':
-            switch (elem_size) { 
+            switch (elem_size) {
               case 4:
                 elem_type = TID_float;
                 break;
@@ -4928,15 +4937,15 @@ Datum cs_cut(PG_FUNCTION_ARGS)
             break;
           case 'C':
           case 'c':
-            if (elem_size <= 0)  { 
+            if (elem_size <= 0)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             elem_type = TID_char;
             break;
           default:
             imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type character %c", type_letter);
         }
-        if (pos + elem_size > len) { 
+        if (pos + elem_size > len) {
             imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too much values in format string %s", format);
         }
         fmt += n;
@@ -4947,19 +4956,19 @@ Datum cs_cut(PG_FUNCTION_ARGS)
         elem_types[i] = elem_type;
         elem_sizes[i] = elem_size;
     }
-    if (pos != len) { 
+    if (pos != len) {
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too few values in format string %s", format);
     }
     n_values = i;
     desc = CreateTemplateTupleDesc(n_values, false);
-    for (i = 0; i < n_values; i++) { 
+    for (i = 0; i < n_values; i++) {
         TupleDescInitEntry(desc, i+1, NULL, imcs_elem_type_to_oid[elem_types[i]], -1, 0);
         nulls[i] = false;
-        if (elem_types[i] == TID_char) { 
+        if (elem_types[i] == TID_char) {
             values[i] = CStringGetTextDatum(src);
-        } else {             
+        } else {
             memcpy(&value, src, elem_sizes[i]);
-            switch (elem_types[i]) { 
+            switch (elem_types[i]) {
               case TID_int8:
                 values[i] = Int8GetDatum(value.val_int8);
                 break;
@@ -5004,23 +5013,23 @@ Datum cs_as(PG_FUNCTION_ARGS)
     Datum* values;
     bool* nulls;
 
-    if (typid == InvalidOid) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Type %s is not found", type); 
+    if (typid == InvalidOid) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Type %s is not found", type);
     }
     desc = lookup_rowtype_tupdesc(typid, -1);
     n = desc->natts;
     values = (Datum*)palloc(n*sizeof(Datum));
     nulls = (bool*)palloc(n*sizeof(bool));
-    
-    for (i = 0; i < n; i++) { 
-        Form_pg_attribute attr = desc->attrs[i];
+
+    for (i = 0; i < n; i++) {
+        Form_pg_attribute attr = TupleDescAttr(desc, i);
         nulls[i] = false;
-        if (attr->atttypid == BPCHAROID) { 
+        if (attr->atttypid == BPCHAROID) {
             values[i] = CStringGetTextDatum(src);
             src += attr->atttypmod - VARHDRSZ;
-        } else {             
+        } else {
             memcpy(&value, src, attr->attlen);
-            switch (attr->atttypid) { 
+            switch (attr->atttypid) {
               case CHAROID:
                 values[i] = Int8GetDatum(value.val_int8);
                 break;
@@ -5050,7 +5059,7 @@ Datum cs_as(PG_FUNCTION_ARGS)
         }
     }
     ReleaseTupleDesc(desc);
-    if (src != (char*)VARDATA(str) + len) { 
+    if (src != (char*)VARDATA(str) + len) {
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "bytea is not matching target type");
     }
     PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(desc, values, nulls)));
@@ -5070,22 +5079,22 @@ Datum cs_as_array(PG_FUNCTION_ARGS)
     size_t pos = 0;
     int i, n_values;
     imcs_key_t value;
-    int16 elmlen;    
+    int16 elmlen;
     bool elmbyval;
     char elmalign;
-    
-    for (i = 0; *fmt != '\0'; i++) { 
+
+    for (i = 0; *fmt != '\0'; i++) {
         int n;
         char type_letter;
         int elem_size;
         imcs_elem_typeid_t elem_type = TID_char;
-        if (sscanf(fmt, "%c%d%n", &type_letter, &elem_size, &n) != 2) { 
+        if (sscanf(fmt, "%c%d%n", &type_letter, &elem_size, &n) != 2) {
             imcs_ereport(ERRCODE_SYNTAX_ERROR, "failed to parse format string '%s'", fmt);
         }
-        switch (type_letter) { 
+        switch (type_letter) {
           case 'i':
           case 'I':
-            switch (elem_size) { 
+            switch (elem_size) {
               case 1:
                 elem_type = TID_int8;
                 break;
@@ -5105,32 +5114,32 @@ Datum cs_as_array(PG_FUNCTION_ARGS)
           case 'd':
           case 'D':
             elem_type = TID_date;
-            if (elem_size != 4)  { 
+            if (elem_size != 4)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 'm':
           case 'M':
             elem_type = TID_money;
-            if (elem_size != 8)  { 
+            if (elem_size != 8)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 't':
             elem_type = TID_time;
-            if (elem_size != 8)  { 
+            if (elem_size != 8)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 'T':
             elem_type = TID_timestamp;
-            if (elem_size != 8)  { 
+            if (elem_size != 8)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             break;
           case 'f':
           case 'F':
-            switch (elem_size) { 
+            switch (elem_size) {
               case 4:
                 elem_type = TID_float;
                 break;
@@ -5143,15 +5152,15 @@ Datum cs_as_array(PG_FUNCTION_ARGS)
             break;
           case 'C':
           case 'c':
-            if (elem_size <= 0)  { 
+            if (elem_size <= 0)  {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type size %d", elem_size);
-            }    
+            }
             elem_type = TID_char;
             break;
           default:
             imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "invalid type character %c", type_letter);
         }
-        if (pos + elem_size > len) { 
+        if (pos + elem_size > len) {
             imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too much values in format string %s", format);
         }
         fmt += n;
@@ -5162,20 +5171,20 @@ Datum cs_as_array(PG_FUNCTION_ARGS)
         elem_types[i] = elem_type;
         elem_sizes[i] = elem_size;
         if (elem_type != TID_char) {
-            bool is_varlena; 
+            bool is_varlena;
             getTypeOutputInfo(imcs_elem_type_to_oid[elem_type], &type_out[i], &is_varlena);
         }
     }
-    if (pos != len) { 
+    if (pos != len) {
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too few values in format string %s", format);
     }
     n_values = i;
-    for (i = 0; i < n_values; i++) { 
+    for (i = 0; i < n_values; i++) {
         if (elem_types[i] == TID_char) {
             values[i] = CStringGetTextDatum(src);
-        } else {             
+        } else {
             memcpy(&value, src, elem_sizes[i]);
-            switch (elem_types[i]) { 
+            switch (elem_types[i]) {
               case TID_int8:
                 values[i] = Int8GetDatum(value.val_int8);
                 break;
@@ -5211,12 +5220,12 @@ Datum cs_as_array(PG_FUNCTION_ARGS)
 Datum cs_delete_all(PG_FUNCTION_ARGS)
 {
     int64 deleted = 0;
-    if (imcs_hash != NULL) { 
+    if (imcs_hash != NULL) {
         HASH_SEQ_STATUS status;
         imcs_hash_entry_t* entry;
 
-        if (imcs_lock != LOCK_EXCLUSIVE) { 
-            if (imcs_lock != LOCK_NONE) { 
+        if (imcs_lock != LOCK_EXCLUSIVE) {
+            if (imcs_lock != LOCK_NONE) {
                 LWLockRelease(LWLOCK(HASH_LOCK));
             }
             LWLockAcquire(LWLOCK(HASH_LOCK), LW_EXCLUSIVE);
@@ -5227,23 +5236,23 @@ Datum cs_delete_all(PG_FUNCTION_ARGS)
         while ((entry = hash_seq_search(&status)) != NULL) {
             deleted += imcs_delete_all(&entry->value);
         }
-        
+
         LWLockRelease(LWLOCK(HASH_LOCK));
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_INT64(deleted);
 }
 
-Datum columnar_store_truncate(PG_FUNCTION_ARGS)                    
-{                                                                       
-    if (imcs_hash != NULL) { 
-        char const* table_name = PG_GETARG_CSTRING(0);                           
+Datum columnar_store_truncate(PG_FUNCTION_ARGS)
+{
+    if (imcs_hash != NULL) {
+        char const* table_name = PG_GETARG_CSTRING(0);
         HASH_SEQ_STATUS status;
         imcs_hash_entry_t* entry;
         size_t table_name_len = strlen(table_name);
 
-        if (imcs_lock != LOCK_EXCLUSIVE) { 
-            if (imcs_lock != LOCK_NONE) { 
+        if (imcs_lock != LOCK_EXCLUSIVE) {
+            if (imcs_lock != LOCK_NONE) {
                 LWLockRelease(LWLOCK(HASH_LOCK));
             }
             LWLockAcquire(LWLOCK(HASH_LOCK), LW_EXCLUSIVE);
@@ -5251,25 +5260,25 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
         }
 
         hash_seq_init(&status, imcs_hash);
-        while ((entry = hash_seq_search(&status)) != NULL) 
+        while ((entry = hash_seq_search(&status)) != NULL)
         {
-            if (strncmp(entry->key.id, table_name, table_name_len) == 0 
+            if (strncmp(entry->key.id, table_name, table_name_len) == 0
                 && (entry->key.id[table_name_len] == '-' || entry->key.id[table_name_len] == '\0'))
             {
                 imcs_delete_all(&entry->value);
             }
         }
-        
+
         LWLockRelease(LWLOCK(HASH_LOCK));
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_VOID();
 }
 
-Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)                    
-{                                                                       
-    if (imcs_hash != NULL) { 
-        char const* table_name = PG_GETARG_CSTRING(0);                           
+Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
+{
+    if (imcs_hash != NULL) {
+        char const* table_name = PG_GETARG_CSTRING(0);
         char const* column_name = PG_GETARG_CSTRING(1);
         HASH_SEQ_STATUS status;
         imcs_hash_entry_t* entry;
@@ -5277,8 +5286,8 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
         char* cs_id_prefix = (char*)palloc(cs_id_prefix_len+1);
         sprintf(cs_id_prefix, "%s-%s", table_name, column_name);
 
-        if (imcs_lock != LOCK_EXCLUSIVE) { 
-            if (imcs_lock != LOCK_NONE) { 
+        if (imcs_lock != LOCK_EXCLUSIVE) {
+            if (imcs_lock != LOCK_NONE) {
                 LWLockRelease(LWLOCK(HASH_LOCK));
             }
             LWLockAcquire(LWLOCK(HASH_LOCK), LW_EXCLUSIVE);
@@ -5286,23 +5295,23 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
         }
 
         hash_seq_init(&status, imcs_hash);
-        while ((entry = hash_seq_search(&status)) != NULL) 
+        while ((entry = hash_seq_search(&status)) != NULL)
         {
-            if (strncmp(entry->key.id, cs_id_prefix, cs_id_prefix_len) == 0 
+            if (strncmp(entry->key.id, cs_id_prefix, cs_id_prefix_len) == 0
                 && (entry->key.id[cs_id_prefix_len] == '-' || entry->key.id[cs_id_prefix_len] == '\0'))
             {
                 imcs_delete_all(&entry->value);
             }
         }
-        
+
         LWLockRelease(LWLOCK(HASH_LOCK));
         imcs_lock = LOCK_NONE;
     }
     PG_RETURN_VOID();
 }
 
-Datum cs_used_memory(PG_FUNCTION_ARGS)                    
-{                                                                       
+Datum cs_used_memory(PG_FUNCTION_ARGS)
+{
     PG_RETURN_INT64(imcs_used_memory());
 }
 
@@ -5332,12 +5341,12 @@ static int32 imcs_date2wday(int32 date)
     return j2day(date + POSTGRES_EPOCH_JDATE);
 }
 
-static int32 imcs_date2quarter(int32 date) 
+static int32 imcs_date2quarter(int32 date)
 {
     return (imcs_date2month(date) - 1) / 3 + 1;
 }
 
-static int32 imcs_date2week(int32 date) 
+static int32 imcs_date2week(int32 date)
 {
     return (date - imcs_date2wday(date))/7;
 }
@@ -5345,7 +5354,7 @@ static int32 imcs_date2week(int32 date)
 static int64 imcs_time2hour(int64 time)
 {
     struct pg_tm tm;
-	int tz;    
+	int tz;
     abstime2tm(time, &tz, &tm, NULL);
     return tm.tm_hour;
 }
@@ -5353,7 +5362,7 @@ static int64 imcs_time2hour(int64 time)
 static int64 imcs_time2minute(int64 time)
 {
     struct pg_tm tm;
-	int tz;    
+	int tz;
     abstime2tm(time, &tz, &tm, NULL);
     return tm.tm_min;
 }
@@ -5361,7 +5370,7 @@ static int64 imcs_time2minute(int64 time)
 static int64 imcs_time2second(int64 time)
 {
     struct pg_tm tm;
-	int tz;    
+	int tz;
     abstime2tm(time, &tz, &tm, NULL);
     return tm.tm_sec;
 }
@@ -5369,7 +5378,7 @@ static int64 imcs_time2second(int64 time)
 static int64 imcs_timestamp2year(int64 timestamp)
 {
     struct pg_tm tm;
-    fsec_t fsec;    
+    fsec_t fsec;
     timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL);
     return tm.tm_year;
 }
@@ -5377,7 +5386,7 @@ static int64 imcs_timestamp2year(int64 timestamp)
 static int64 imcs_timestamp2month(int64 timestamp)
 {
     struct pg_tm tm;
-    fsec_t fsec;    
+    fsec_t fsec;
     timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL);
     return tm.tm_mon;
 }
@@ -5385,7 +5394,7 @@ static int64 imcs_timestamp2month(int64 timestamp)
 static int64 imcs_timestamp2mday(int64 timestamp)
 {
     struct pg_tm tm;
-    fsec_t fsec;    
+    fsec_t fsec;
     timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL);
     return tm.tm_mday;
 }
@@ -5398,7 +5407,7 @@ static int64 imcs_timestamp2wday(int64 timestamp)
 static int64 imcs_timestamp2hour(int64 timestamp)
 {
     struct pg_tm tm;
-    fsec_t fsec;    
+    fsec_t fsec;
     timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL);
     return tm.tm_hour;
 }
@@ -5406,7 +5415,7 @@ static int64 imcs_timestamp2hour(int64 timestamp)
 static int64 imcs_timestamp2minute(int64 timestamp)
 {
     struct pg_tm tm;
-    fsec_t fsec;    
+    fsec_t fsec;
     timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL);
     return tm.tm_min;
 }
@@ -5414,17 +5423,17 @@ static int64 imcs_timestamp2minute(int64 timestamp)
 static int64 imcs_timestamp2second(int64 timestamp)
 {
     struct pg_tm tm;
-    fsec_t fsec;    
+    fsec_t fsec;
     timestamp2tm(timestamp, NULL, &tm, &fsec, NULL, NULL);
     return tm.tm_sec;
 }
 
-static int64 imcs_timestamp2quarter(int64 timestamp) 
+static int64 imcs_timestamp2quarter(int64 timestamp)
 {
     return (imcs_timestamp2month(timestamp) - 1) / 3 + 1;
 }
 
-static int64 imcs_timestamp2week(int64 timestamp) 
+static int64 imcs_timestamp2week(int64 timestamp)
 {
     return imcs_date2week((int32)imcs_timestamp2date(timestamp));
 }
@@ -5478,9 +5487,9 @@ IMCS_TIME_FUNC(hour);
 IMCS_TIME_FUNC(minute);
 IMCS_TIME_FUNC(second);
 
-Datum cs_call(PG_FUNCTION_ARGS)                                       
-{                                                                       
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);      
+Datum cs_call(PG_FUNCTION_ARGS)
+{
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     Oid funcid = PG_GETARG_OID(1);
     Oid ret_typid;
     Oid arg_typid;
@@ -5493,9 +5502,9 @@ Datum cs_call(PG_FUNCTION_ARGS)
     proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
     if (!HeapTupleIsValid(proctup))
     {
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "%d is not valid function OID", funcid); 
-    }                                                                   
-    procform = (Form_pg_proc) GETSTRUCT(proctup);    
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "%d is not valid function OID", funcid);
+    }
+    procform = (Form_pg_proc) GETSTRUCT(proctup);
     if (procform->pronargs != 1) {
         imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Only function of one argument can be called");
     }
@@ -5506,81 +5515,81 @@ Datum cs_call(PG_FUNCTION_ARGS)
 
     arg_elem_type = imcs_oid_to_typeid(arg_typid);
     ret_elem_type = imcs_oid_to_typeid(ret_typid);
-    if (arg_elem_type != input->elem_type) {         
+    if (arg_elem_type != input->elem_type) {
         input = imcs_cast(input, arg_elem_type, get_typmodin(arg_typid) - VARHDRSZ);
     }
     switch (ret_elem_type) {
-      case TID_int8:                                       
+      case TID_int8:
         IMCS_APPLY(int8_call, arg_elem_type, (input, funcid));
-        break;                                              
-      case TID_int16:                                       
+        break;
+      case TID_int16:
         IMCS_APPLY(int16_call, arg_elem_type, (input, funcid));
-        break;                                              
-      case TID_int32:                                       
-      case TID_date:                                
+        break;
+      case TID_int32:
+      case TID_date:
         IMCS_APPLY(int32_call, arg_elem_type, (input, funcid));
-        break;                                              
-      case TID_int64:                                       
-      case TID_time:                                
-      case TID_timestamp:                           
-      case TID_money:                           
+        break;
+      case TID_int64:
+      case TID_time:
+      case TID_timestamp:
+      case TID_money:
         IMCS_APPLY(int64_call, arg_elem_type, (input, funcid));
-        break;                                              
-      case TID_float:                                       
+        break;
+      case TID_float:
         IMCS_APPLY(float_call, arg_elem_type, (input, funcid));
-        break;                                              
-      case TID_double:                                      
+        break;
+      case TID_double:
         IMCS_APPLY(double_call, arg_elem_type, (input, funcid));
-        break;                                              
-      default:                                              
-        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "function with character return type are not supported"); 
-    }                    
+        break;
+      default:
+        imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "function with character return type are not supported");
+    }
     result->elem_type = ret_elem_type;
     if (!is_bin_function) { /* parallel execution of SQL or PLSQL functions is not possible: SPI code is not reentrant */
         result->flags &= ~FLAG_CONTEXT_FREE;
     }
-    PG_RETURN_POINTER(result);                                          
+    PG_RETURN_POINTER(result);
 }
-    
-    
-Datum cs_to_array(PG_FUNCTION_ARGS)                                       
-{                                                                       
-    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);      
+
+
+Datum cs_to_array(PG_FUNCTION_ARGS)
+{
+    imcs_iterator_h input = (imcs_iterator_h)PG_GETARG_POINTER(0);
     size_t size = (size_t)imcs_count(input);
     Datum* body;
-    int16 elmlen;    
+    int16 elmlen;
     bool elmbyval;
     char elmalign;
     int elem_size = input->elem_size;
     size_t i = 0, j, tile_size;
     Oid elmtyp = imcs_elem_type_to_oid[input->elem_type];
     Oid	rettype = get_fn_expr_rettype(fcinfo->flinfo);
-    if (get_element_type(rettype) != elmtyp) { 
-        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Type of sequence element %s doesn't match with function %s return type", imcs_type_mnems[input->elem_type], get_func_name(fcinfo->flinfo->fn_oid)); 
+    if (get_element_type(rettype) != elmtyp) {
+        imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Type of sequence element %s doesn't match with function %s return type", imcs_type_mnems[input->elem_type], get_func_name(fcinfo->flinfo->fn_oid));
     }
-    IMCS_TRACE(to_array); 
+    IMCS_TRACE(to_array);
     input->reset(input);
     body = palloc(size*sizeof(Datum));
 
-    switch (input->elem_type) { 
+    switch (input->elem_type) {
       case TID_int8:
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = CharGetDatum(input->tile.arr_int8[j]);
             }
         }
         break;
       case TID_int16:
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = Int16GetDatum(input->tile.arr_int16[j]);
             }
         }
         break;
       case TID_int32:
       case TID_date:
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = Int32GetDatum(input->tile.arr_int32[j]);
             }
         }
@@ -5588,30 +5597,30 @@ Datum cs_to_array(PG_FUNCTION_ARGS)
       case TID_time:
       case TID_timestamp:
       case TID_int64:
-      case TID_money:                           
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+      case TID_money:
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = Int64GetDatum(input->tile.arr_int64[j]);
             }
         }
         break;
       case TID_float:
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = Float4GetDatum(input->tile.arr_float[j]);
             }
         }
         break;
       case TID_double:
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = Float8GetDatum(input->tile.arr_double[j]);
             }
         }
-        break;     
+        break;
       case TID_char:
-        while (input->next(input)) { 
-            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) { 
+        while (input->next(input)) {
+            for (j = 0, tile_size = input->tile_size; j < tile_size; j++, i++) {
                 body[i] = PointerGetDatum(cstring_to_text_with_len(input->tile.arr_char + j*elem_size, elem_size));
             }
         }
@@ -5624,7 +5633,7 @@ Datum cs_to_array(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(construct_array(body, size, elmtyp, elmlen, elmbyval, elmalign));
 }
 
-typedef struct { 
+typedef struct {
     Datum* body;
     int count;
     int i;
@@ -5656,16 +5665,16 @@ IMCS_FROM_ARRAY(double, Float8);
 
 static bool imcs_from_array_char_next(imcs_iterator_h iterator)
 {
-    imcs_from_array_context_t* ctx = (imcs_from_array_context_t*)iterator->context; 
-    int j, i = (int)iterator->next_pos;                                                  
-    int available = iterator->last_pos - i + 1;                                     
+    imcs_from_array_context_t* ctx = (imcs_from_array_context_t*)iterator->context;
+    int j, i = (int)iterator->next_pos;
+    int available = iterator->last_pos - i + 1;
     size_t elem_size = iterator->elem_size;
-    if (available > imcs_tile_size) {                                   
-        available = imcs_tile_size;                                     
-    }                                                                   
-    for (j = 0; j < available; j++, i++) { 
+    if (available > imcs_tile_size) {
+        available = imcs_tile_size;
+    }
+    for (j = 0; j < available; j++, i++) {
         text* t = (text*)DatumGetPointer(ctx->body[i]);
-        size_t len = VARSIZE(t) - VARHDRSZ; 
+        size_t len = VARSIZE(t) - VARHDRSZ;
         memcpy(iterator->tile.arr_char + j*elem_size, VARDATA(t), len);
         memset(iterator->tile.arr_char + j*elem_size + len, '\0', elem_size - len);
     }
@@ -5676,42 +5685,42 @@ static bool imcs_from_array_char_next(imcs_iterator_h iterator)
 
 
 
-static const imcs_iterator_next_t imcs_from_array_next[] = 
+static const imcs_iterator_next_t imcs_from_array_next[] =
 {
-    imcs_from_array_int8_next, 
-    imcs_from_array_int16_next, 
-    imcs_from_array_int32_next, 
-    imcs_from_array_int32_next, 
-    imcs_from_array_int64_next, 
-    imcs_from_array_int64_next, 
-    imcs_from_array_int64_next, 
-    imcs_from_array_int64_next, 
-    imcs_from_array_float_next, 
-    imcs_from_array_double_next, 
+    imcs_from_array_int8_next,
+    imcs_from_array_int16_next,
+    imcs_from_array_int32_next,
+    imcs_from_array_int32_next,
+    imcs_from_array_int64_next,
+    imcs_from_array_int64_next,
+    imcs_from_array_int64_next,
+    imcs_from_array_int64_next,
+    imcs_from_array_float_next,
+    imcs_from_array_double_next,
     imcs_from_array_char_next
 };
 
-Datum cs_from_array(PG_FUNCTION_ARGS)                                       
-{                                                                       
+Datum cs_from_array(PG_FUNCTION_ARGS)
+{
     ArrayType* a = PG_GETARG_ARRAYTYPE_P(0);
     imcs_elem_typeid_t elem_type = imcs_oid_to_typeid(a->elemtype);
-    int16 elmlen;    
+    int16 elmlen;
     bool elmbyval;
     char elmalign;
     MemoryContext old_context;
     imcs_iterator_h iterator;
     imcs_from_array_context_t* ctx;
     int elem_size = elem_type == TID_char ? PG_GETARG_INT32(1) : imcs_type_sizeof[elem_type];
-    if (elem_size <= 0) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Element size is not specified"); 
-    }    
-    IMCS_TRACE(from_array); 
-    iterator = imcs_new_iterator(elem_size, sizeof(imcs_from_array_context_t));    
+    if (elem_size <= 0) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Element size is not specified");
+    }
+    IMCS_TRACE(from_array);
+    iterator = imcs_new_iterator(elem_size, sizeof(imcs_from_array_context_t));
     iterator->elem_type = elem_type;
     iterator->flags |= FLAG_RANDOM_ACCESS;
     ctx = (imcs_from_array_context_t*)iterator->context;
 
-    old_context = MemoryContextSwitchTo(imcs_mem_ctx);    
+    old_context = MemoryContextSwitchTo(imcs_mem_ctx);
     get_typlenbyvalalign(a->elemtype, &elmlen, &elmbyval, &elmalign);
     deconstruct_array(a, a->elemtype, elmlen, elmbyval, elmalign, &ctx->body, NULL, &ctx->count);
     MemoryContextSwitchTo(old_context);
@@ -5721,14 +5730,14 @@ Datum cs_from_array(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(iterator);
 }
 
-typedef struct 
+typedef struct
 {
     int total;
     int index;
 } imcs_profile_context_t;
 
-Datum cs_profile(PG_FUNCTION_ARGS)                                       
-{                                                                       
+Datum cs_profile(PG_FUNCTION_ARGS)
+{
     FuncCallContext* funcctx;
     int  i;
     bool reset = PG_GETARG_BOOL(0);
@@ -5741,7 +5750,7 @@ Datum cs_profile(PG_FUNCTION_ARGS)
         funcctx = SRF_FIRSTCALL_INIT();
 
         oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-        if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE) { 
+        if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE) {
             imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "function returning record called in context that cannot accept type record");
         }
         ctx = (imcs_profile_context_t*)palloc0(sizeof(imcs_profile_context_t));
@@ -5752,7 +5761,7 @@ Datum cs_profile(PG_FUNCTION_ARGS)
     funcctx = SRF_PERCALL_SETUP();
     ctx = (imcs_profile_context_t*)funcctx->user_fctx;
     i = ctx->index;
-    while (i < imcs_cmd_last_command) { 
+    while (i < imcs_cmd_last_command) {
         if (imcs_command_profile[i] != 0) {
             char counter[16];
             char* values[2];
@@ -5765,7 +5774,7 @@ Datum cs_profile(PG_FUNCTION_ARGS)
         }
         i += 1;
     }
-    if (i == imcs_cmd_last_command) { 
+    if (i == imcs_cmd_last_command) {
         char counter[16];
         char* values[2];
         sprintf(counter, "%d", ctx->total);
@@ -5773,8 +5782,8 @@ Datum cs_profile(PG_FUNCTION_ARGS)
         values[1] = counter;
         ctx->index = i + 1;
         SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(BuildTupleFromCStrings(funcctx->attinmeta, values)));
-    }        
-    if (reset) { 
+    }
+    if (reset) {
         memset(imcs_command_profile, 0, sizeof imcs_command_profile);
     }
     SRF_RETURN_DONE(funcctx);
@@ -5788,20 +5797,20 @@ Datum cs_str2code(PG_FUNCTION_ARGS)
 	int code;
     key.val = (char*)VARDATA(t);
     key.len = VARSIZE(t) - VARHDRSZ;
-    if (imcs_dict_size == 0) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "IMCS dictionary is disabled"); 
+    if (imcs_dict_size == 0) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "IMCS dictionary is disabled");
     }
 	imcs_lock_dictionary(false);
     entry = (imcs_dict_entry_t*)hash_search(imcs_dict, &key, HASH_FIND, NULL);
-    if (entry == NULL) { 
+    if (entry == NULL) {
 		code = -1;
-	} else { 
+	} else {
 		code = (int)entry->code;
 	}
-	imcs_unlock_dictionary();	
-    if (entry == NULL) { 
+	imcs_unlock_dictionary();
+    if (entry == NULL) {
         PG_RETURN_INT32(code);
-    } else { 
+    } else {
         PG_RETURN_INT32(code);
     }
 }
@@ -5809,8 +5818,8 @@ Datum cs_str2code(PG_FUNCTION_ARGS)
 Datum cs_code2str(PG_FUNCTION_ARGS)
 {
     uint32 code = PG_GETARG_UINT32(0);
-    if (code >= (uint32)imcs_dict_size) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Code %u is out of dictionary range [0..%d)", code, imcs_dict_size); 
+    if (code >= (uint32)imcs_dict_size) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Code %u is out of dictionary range [0..%d)", code, imcs_dict_size);
     }
 	PG_RETURN_TEXT_P(cstring_to_text_with_len(imcs_dict_code_map[code]->key.val, imcs_dict_code_map[code]->key.len));
 }
@@ -5822,12 +5831,12 @@ Datum cs_cut_and_code2str(PG_FUNCTION_ARGS)
     char* src = (char*)VARDATA(str);
     size_t len = VARSIZE(str) - VARHDRSZ;
     uint32 code;
-    if (column_no <= 0 || column_no*(imcs_dict_size <= IMCS_SMALL_DICTIONARY ? 2 : 4) > len) { 
+    if (column_no <= 0 || column_no*(imcs_dict_size <= IMCS_SMALL_DICTIONARY ? 2 : 4) > len) {
         imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Column with number %d doesn't belong to compound key", column_no);
     }
     code = (imcs_dict_size <= IMCS_SMALL_DICTIONARY) ? *((uint16*)src + column_no - 1) : *((uint32*)src + column_no - 1);
-    if (code >= (uint32)imcs_dict_size) { 
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Code %u is out of dictionary range [0..%d)", code, imcs_dict_size); 
+    if (code >= (uint32)imcs_dict_size) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "Code %u is out of dictionary range [0..%d)", code, imcs_dict_size);
     }
 	PG_RETURN_TEXT_P(cstring_to_text_with_len(imcs_dict_code_map[code]->key.val, imcs_dict_code_map[code]->key.len));
 }
@@ -5837,6 +5846,6 @@ Datum cs_dictionary_size(PG_FUNCTION_ARGS)
 	int size;
 	imcs_lock_dictionary(false);
 	size = imcs_dict ? hash_get_num_entries(imcs_dict) : 0;
-	imcs_unlock_dictionary();	
+	imcs_unlock_dictionary();
     PG_RETURN_INT32(size);
 }
