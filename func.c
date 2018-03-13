@@ -5,12 +5,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <float.h>
+#include <math.h>
+#include <limits.h>
 
 double imcs_hash_table_load_factor = 1.0;
 size_t imcs_hash_table_init_size = 1361;
 
 #define MAX_PRIME_NUMBERS 29
-static const uint32 imcs_prime_numbers[MAX_PRIME_NUMBERS] = 
+static const uint32 imcs_prime_numbers[MAX_PRIME_NUMBERS] =
 {
     17,             /* 0 */
     37,             /* 1 */
@@ -48,7 +51,7 @@ const imcs_elem_typeid_t imcs_underlying_type[] = {TID_int8, TID_int16, TID_int3
 #define IMCS_CHECK_TYPE(arg_type, expected_type)                        \
     if (imcs_underlying_type[arg_type] != expected_type) {              \
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "unexpected timeseries data type %s instead of expected %s", imcs_type_mnems[arg_type], imcs_type_mnems[expected_type]); \
-    }                                                                   
+    }
 
 
 #define IMCS_MIN_int32 ((int32)1 << 31)
@@ -56,7 +59,7 @@ const imcs_elem_typeid_t imcs_underlying_type[] = {TID_int8, TID_int16, TID_int3
 
 static uint32 imcs_next_prime_number(uint32 val)
 {
-    int i; 
+    int i;
     for (i = 0; i < MAX_PRIME_NUMBERS-1 && imcs_prime_numbers[i] <= val; i++);
     return imcs_prime_numbers[i];
 }
@@ -83,18 +86,18 @@ IMCS_NEXT_DEF(int64)
 IMCS_NEXT_DEF(float)
 IMCS_NEXT_DEF(double)
 
-bool imcs_next_char(imcs_iterator_h iterator, void* val)     
-{                                                                       
+bool imcs_next_char(imcs_iterator_h iterator, void* val)
+{
     IMCS_CHECK_TYPE(iterator->elem_type, TID_char);
-    if (iterator->tile_offs >= iterator->tile_size) {                   
-        if (!iterator->next(iterator)) { 
-            return false;                                                  
-        }                                                               
-        Assert(iterator->tile_size > 0);               
-        iterator->tile_offs = 0;                                        
-    }                                                                   
-    memcpy(val, iterator->tile.arr_char + iterator->elem_size*iterator->tile_offs++, iterator->elem_size);            
-    return true;                                                    
+    if (iterator->tile_offs >= iterator->tile_size) {
+        if (!iterator->next(iterator)) {
+            return false;
+        }
+        Assert(iterator->tile_size > 0);
+        iterator->tile_offs = 0;
+    }
+    memcpy(val, iterator->tile.arr_char + iterator->elem_size*iterator->tile_offs++, iterator->elem_size);
+    return true;
 }
 
 
@@ -310,89 +313,89 @@ IMCS_UNARY_DEF(int64, int64, bit_not, IMCS_BIT_NOT)
 IMCS_UNARY_DEF(int8, float, isnan, IMCS_ISNAN)
 IMCS_UNARY_DEF(int8, double, isnan, IMCS_ISNAN)
 
-static bool imcs_add_char_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                                
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    }                                                                   
-    tile_size = iterator->opd[0]->tile_size;                            
-    if (!iterator->opd[1]->next(iterator->opd[1])) { 
-        return false;                                                      
-    }                                                                   
-    if (tile_size > iterator->opd[1]->tile_size) {                      
-        tile_size = iterator->opd[1]->tile_size;                        
-    }                                                                   
-    for (i = 0; i < tile_size; i++) {                                   
+static bool imcs_add_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
+    if (!iterator->opd[1]->next(iterator->opd[1])) {
+        return false;
+    }
+    if (tile_size > iterator->opd[1]->tile_size) {
+        tile_size = iterator->opd[1]->tile_size;
+    }
+    for (i = 0; i < tile_size; i++) {
         char* dst = iterator->tile.arr_char + i*iterator->elem_size;
         char* end = dst + iterator->elem_size;
         size_t n = iterator->opd[0]->elem_size;
         char const* src = iterator->opd[0]->tile.arr_char + i*n;
-        while (n-- != 0 && *src != '\0') { 
+        while (n-- != 0 && *src != '\0') {
             *dst++ = *src++;
         }
         n = iterator->opd[1]->elem_size;
         src = iterator->opd[1]->tile.arr_char + i*n;
-        while (n-- != 0 && *src != '\0') { 
+        while (n-- != 0 && *src != '\0') {
             *dst++ = *src++;
         }
-        while (dst < end) { 
+        while (dst < end) {
             *dst++ = '\0';
         }
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_add_char(imcs_iterator_h left, imcs_iterator_h right)  
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(left->elem_size + right->elem_size, 0); 
-    IMCS_CHECK_TYPE(left->elem_type, TID_char);                       
-    IMCS_CHECK_TYPE(right->elem_type, TID_char);                      
-    result->elem_type = TID_char;                                 
-    result->opd[0] = imcs_operand(left);                                              
-    result->opd[1] = imcs_operand(right);                                             
-    result->next = imcs_add_char_next;                         
-    result->flags = FLAG_CONTEXT_FREE;                                 
-    return result;                                                      
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
 }
 
-static bool imcs_cat_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                                
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    }                                                                   
-    tile_size = iterator->opd[0]->tile_size;                            
-    if (!iterator->opd[1]->next(iterator->opd[1])) { 
-        return false;                                                      
-    }                                                                   
-    if (tile_size > iterator->opd[1]->tile_size) {                      
-        tile_size = iterator->opd[1]->tile_size;                        
-    }                                                                   
-    for (i = 0; i < tile_size; i++) {                                   
+imcs_iterator_h imcs_add_char(imcs_iterator_h left, imcs_iterator_h right)
+{
+    imcs_iterator_h result = imcs_new_iterator(left->elem_size + right->elem_size, 0);
+    IMCS_CHECK_TYPE(left->elem_type, TID_char);
+    IMCS_CHECK_TYPE(right->elem_type, TID_char);
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(left);
+    result->opd[1] = imcs_operand(right);
+    result->next = imcs_add_char_next;
+    result->flags = FLAG_CONTEXT_FREE;
+    return result;
+}
+
+static bool imcs_cat_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
+    if (!iterator->opd[1]->next(iterator->opd[1])) {
+        return false;
+    }
+    if (tile_size > iterator->opd[1]->tile_size) {
+        tile_size = iterator->opd[1]->tile_size;
+    }
+    for (i = 0; i < tile_size; i++) {
         memcpy(iterator->tile.arr_char + i*iterator->elem_size, iterator->opd[0]->tile.arr_char + i*iterator->opd[0]->elem_size, iterator->opd[0]->elem_size);
         memcpy(iterator->tile.arr_char + i*iterator->elem_size + iterator->opd[0]->elem_size, iterator->opd[1]->tile.arr_char + i*iterator->opd[1]->elem_size, iterator->opd[1]->elem_size);
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_cat(imcs_iterator_h left, imcs_iterator_h right)  
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(left->elem_size + right->elem_size, 0); 
-    result->elem_type = TID_char;                                 
-    result->opd[0] = imcs_operand(left);                                              
-    result->opd[1] = imcs_operand(right);                                             
-    result->next = imcs_cat_next;                         
-    result->flags = FLAG_CONTEXT_FREE;                                 
-    return result;                                                      
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+imcs_iterator_h imcs_cat(imcs_iterator_h left, imcs_iterator_h right)
+{
+    imcs_iterator_h result = imcs_new_iterator(left->elem_size + right->elem_size, 0);
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(left);
+    result->opd[1] = imcs_operand(right);
+    result->next = imcs_cat_next;
+    result->flags = FLAG_CONTEXT_FREE;
+    return result;
 }
 
 
-typedef struct imcs_parse_context_t_ { 
+typedef struct imcs_parse_context_t_ {
     char const* cur;
     char const* beg;
 } imcs_parse_context_t;
@@ -400,7 +403,7 @@ typedef struct imcs_parse_context_t_ {
 
 static void imcs_reset_parse_iterator(imcs_iterator_h iterator)
 {
-    imcs_parse_context_t* ctx = (imcs_parse_context_t*)iterator->context; 
+    imcs_parse_context_t* ctx = (imcs_parse_context_t*)iterator->context;
     ctx->cur = ctx->beg;
     imcs_reset_iterator(iterator);
 }
@@ -449,60 +452,60 @@ IMCS_PARSE_DEF(int64, long long, "%lli")
 IMCS_PARSE_DEF(float, double, "%lf")
 IMCS_PARSE_DEF(double, double, "%lf")
 
-static bool imcs_parse_char_next(imcs_iterator_h iterator) 
-{                                                                       
-    size_t i;                                                       
-    size_t this_tile_size = imcs_tile_size;                         
+static bool imcs_parse_char_next(imcs_iterator_h iterator)
+{
+    size_t i;
+    size_t this_tile_size = imcs_tile_size;
     size_t elem_size  = iterator->elem_size;
-    imcs_parse_context_t* ctx = (imcs_parse_context_t*)iterator->context; 
-    char const* ptr = ctx->cur;                                         
-    for (i = 0; i < this_tile_size && *ptr != '}' && *ptr != '\0'; i++) { 
-        size_t n = 0; 
+    imcs_parse_context_t* ctx = (imcs_parse_context_t*)iterator->context;
+    char const* ptr = ctx->cur;
+    for (i = 0; i < this_tile_size && *ptr != '}' && *ptr != '\0'; i++) {
+        size_t n = 0;
         char* dst = &iterator->tile.arr_char[i*elem_size];
-        if (*ptr == '\'' || *ptr == '"') { 
+        if (*ptr == '\'' || *ptr == '"') {
             char quote = *ptr++;
-            while (*ptr != quote) { 
-                if (*ptr == '\0') { 
-                    imcs_ereport(ERRCODE_SYNTAX_ERROR, "unterminated string literal %s", ctx->cur); 
+            while (*ptr != quote) {
+                if (*ptr == '\0') {
+                    imcs_ereport(ERRCODE_SYNTAX_ERROR, "unterminated string literal %s", ctx->cur);
                 }
-                if (n == elem_size) { 
-                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
+                if (n == elem_size) {
+                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long");
                 }
                 *dst++ = *ptr++;
                 n += 1;
             }
             ptr += 1;
-        } else { 
+        } else {
             while (*ptr != ',' && *ptr != '}' && *ptr != '\0') {
-                if (n == elem_size) { 
-                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long"); 
+                if (n == elem_size) {
+                    imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "CHAR literal too long");
                 }
                 *dst++ = *ptr++;
                 n += 1;
             }
         }
         memset(dst, 0, elem_size - n);
-        if (*ptr == ',') ptr += 1;                                      
-    }                                                                   
-    ctx->cur = ptr;                                                     
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
+        if (*ptr == ',') ptr += 1;
+    }
+    ctx->cur = ptr;
+    iterator->tile_size = i;
+    iterator->next_pos += i;
     return i != 0;
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_parse_char(char const* input, int elem_size) 
-{ 
-    imcs_iterator_h result = imcs_new_iterator(elem_size, sizeof(imcs_parse_context_t));                                                                
-    imcs_parse_context_t* ctx = (imcs_parse_context_t*)result->context; 
-    result->elem_type = TID_char;                       
-    result->next = imcs_parse_char_next;                         
-    result->reset = imcs_reset_parse_iterator;                       
-    if (*input == '{') input += 1;                                      
-    ctx->cur = ctx->beg = input + 1; // skip '{'
-    return result;                                                    
 }
 
-typedef struct imcs_adt_parse_context_t { 
+imcs_iterator_h imcs_parse_char(char const* input, int elem_size)
+{
+    imcs_iterator_h result = imcs_new_iterator(elem_size, sizeof(imcs_parse_context_t));
+    imcs_parse_context_t* ctx = (imcs_parse_context_t*)result->context;
+    result->elem_type = TID_char;
+    result->next = imcs_parse_char_next;
+    result->reset = imcs_reset_parse_iterator;
+    if (*input == '{') input += 1;
+    ctx->cur = ctx->beg = input + 1; // skip '{'
+    return result;
+}
+
+typedef struct imcs_adt_parse_context_t {
     char* cur;
     char* beg;
     imcs_adt_parser_t* parser;
@@ -511,7 +514,7 @@ typedef struct imcs_adt_parse_context_t {
 
 static void imcs_reset_adt_parse_iterator(imcs_iterator_h iterator)
 {
-    imcs_adt_parse_context_t* ctx = (imcs_adt_parse_context_t*)iterator->context; 
+    imcs_adt_parse_context_t* ctx = (imcs_adt_parse_context_t*)iterator->context;
     ctx->cur = ctx->beg;
     imcs_reset_iterator(iterator);
 }
@@ -576,15 +579,15 @@ IMCS_ADT_PARSE_DEF(int16, Int16);
 IMCS_ADT_PARSE_DEF(int32, Int32);
 IMCS_ADT_PARSE_DEF(int64, Int64);
 
-typedef struct imcs_norm_context_t_ { 
+typedef struct imcs_norm_context_t_ {
     double norm;
 } imcs_norm_context_t;
 
-static void imcs_norm_merge(imcs_iterator_h dst, imcs_iterator_h src)  
+static void imcs_norm_merge(imcs_iterator_h dst, imcs_iterator_h src)
 {
-    imcs_norm_context_t* ctx = (imcs_norm_context_t*)dst->context; 
+    imcs_norm_context_t* ctx = (imcs_norm_context_t*)dst->context;
     dst->tile.arr_double[0] += src->tile.arr_double[0];
-    ctx->norm = sqrt(dst->tile.arr_double[0]);  
+    ctx->norm = sqrt(dst->tile.arr_double[0]);
 }
 
 #define IMCS_NORM_DEF(TYPE)                                             \
@@ -656,7 +659,7 @@ IMCS_NORM_DEF(double)
 typedef struct imcs_thin_context_t_ {
     size_t origin;
     size_t step;
-} imcs_thin_context_t; 
+} imcs_thin_context_t;
 #define IMCS_THIN_DEF(TYPE)                                             \
 static bool imcs_thin_##TYPE##_next(imcs_iterator_h iterator)           \
 {                                                                       \
@@ -707,58 +710,58 @@ IMCS_THIN_DEF(int64)
 IMCS_THIN_DEF(float)
 IMCS_THIN_DEF(double)
 
-static bool imcs_thin_char_next(imcs_iterator_h iterator)  
-{                                                                       
-    size_t i, tile_size = iterator->opd[0]->tile_size;                
-    size_t this_tile_size = imcs_tile_size;                         
-    imcs_thin_context_t* ctx = (imcs_thin_context_t*)iterator->context; 
-    size_t step = ctx->step;                                        
-    imcs_pos_t pos = ctx->origin + iterator->next_pos*step;          
-    imcs_pos_t last = iterator->opd[0]->next_pos; 
+static bool imcs_thin_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size = iterator->opd[0]->tile_size;
+    size_t this_tile_size = imcs_tile_size;
+    imcs_thin_context_t* ctx = (imcs_thin_context_t*)iterator->context;
+    size_t step = ctx->step;
+    imcs_pos_t pos = ctx->origin + iterator->next_pos*step;
+    imcs_pos_t last = iterator->opd[0]->next_pos;
     size_t elem_size = iterator->elem_size;
-    for (i = 0; i < this_tile_size; i++) {                           
-        while (pos >= last) {                                           
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (i != 0) {                 
-                    iterator->tile_size = i;                            
-                    iterator->next_pos += i;                         
-                    return true;                                      
-                }                                                       
-                return false;                                              
-            }                                                           
-            last = iterator->opd[0]->next_pos;                         
-            tile_size = iterator->opd[0]->tile_size;                      
-        }                                                               
-        memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[0]->tile.arr_char + elem_size*(size_t)(pos - last + tile_size), elem_size); 
-        pos += step;                                                    
-    }                                                                   
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
-    return true;                                                    
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_thin_char(imcs_iterator_h input, size_t origin, size_t step) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_thin_context_t)); 
-    imcs_thin_context_t* ctx = (imcs_thin_context_t*)result->context; 
-    IMCS_CHECK_TYPE(input->elem_type, TID_char);                
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(input);                                               
-    result->next = imcs_thin_char_next;                          
-    ctx->origin = origin;                                               
-    ctx->step = step;                                                   
-    return result;                                                    
+    for (i = 0; i < this_tile_size; i++) {
+        while (pos >= last) {
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (i != 0) {
+                    iterator->tile_size = i;
+                    iterator->next_pos += i;
+                    return true;
+                }
+                return false;
+            }
+            last = iterator->opd[0]->next_pos;
+            tile_size = iterator->opd[0]->tile_size;
+        }
+        memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[0]->tile.arr_char + elem_size*(size_t)(pos - last + tile_size), elem_size);
+        pos += step;
+    }
+    iterator->tile_size = i;
+    iterator->next_pos += i;
+    return true;
+}
+
+imcs_iterator_h imcs_thin_char(imcs_iterator_h input, size_t origin, size_t step)
+{
+    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_thin_context_t));
+    imcs_thin_context_t* ctx = (imcs_thin_context_t*)result->context;
+    IMCS_CHECK_TYPE(input->elem_type, TID_char);
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_thin_char_next;
+    ctx->origin = origin;
+    ctx->step = step;
+    return result;
 }
 
 typedef struct imcs_repeat_context_t_ {
     size_t n_times;
     size_t offs;
-} imcs_repeat_context_t; 
+} imcs_repeat_context_t;
 
 static void imcs_reset_repeat_iterator(imcs_iterator_h iterator)
 {
-    imcs_repeat_context_t* ctx = (imcs_repeat_context_t*)iterator->context; 
-    ctx->offs = 0;   
+    imcs_repeat_context_t* ctx = (imcs_repeat_context_t*)iterator->context;
+    ctx->offs = 0;
     imcs_reset_iterator(iterator);
 }
 
@@ -813,48 +816,48 @@ IMCS_REPEAT_DEF(int64)
 IMCS_REPEAT_DEF(float)
 IMCS_REPEAT_DEF(double)
 
-static bool imcs_repeat_char_next(imcs_iterator_h iterator)  
-{                                                                       
-    imcs_repeat_context_t* ctx = (imcs_repeat_context_t*)iterator->context; 
-    size_t this_tile_size = imcs_tile_size;                         
-    size_t n_times = ctx->n_times;                                  
-    size_t i, tile_size = iterator->opd[0]->tile_size*n_times;        
-    size_t offs = ctx->offs;                                        
+static bool imcs_repeat_char_next(imcs_iterator_h iterator)
+{
+    imcs_repeat_context_t* ctx = (imcs_repeat_context_t*)iterator->context;
+    size_t this_tile_size = imcs_tile_size;
+    size_t n_times = ctx->n_times;
+    size_t i, tile_size = iterator->opd[0]->tile_size*n_times;
+    size_t offs = ctx->offs;
     size_t elem_size = iterator->elem_size;
-    for (i = 0; i < this_tile_size; i++, offs++) {                           
-        if (offs >= tile_size) {                                        
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (i != 0) {                 
-                    iterator->tile_size = i;                            
-                    iterator->next_pos += i;                         
-                    ctx->offs = offs;                                   
-                    return true;                                      
-                }                                                       
-                return false;                                              
-            }                                                           
-            tile_size = iterator->opd[0]->tile_size*n_times;              
-            offs = 0;                                                   
-        }                                                               
-        memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[0]->tile.arr_char + elem_size*(offs/n_times), elem_size);  
-    }                                                                   
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
-    ctx->offs = offs;                                                   
-    return true;      
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_repeat_char(imcs_iterator_h input, int n_times) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_repeat_context_t)); 
-    imcs_repeat_context_t* ctx = (imcs_repeat_context_t*)result->context; 
+    for (i = 0; i < this_tile_size; i++, offs++) {
+        if (offs >= tile_size) {
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (i != 0) {
+                    iterator->tile_size = i;
+                    iterator->next_pos += i;
+                    ctx->offs = offs;
+                    return true;
+                }
+                return false;
+            }
+            tile_size = iterator->opd[0]->tile_size*n_times;
+            offs = 0;
+        }
+        memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[0]->tile.arr_char + elem_size*(offs/n_times), elem_size);
+    }
+    iterator->tile_size = i;
+    iterator->next_pos += i;
+    ctx->offs = offs;
+    return true;
+}
+
+imcs_iterator_h imcs_repeat_char(imcs_iterator_h input, int n_times)
+{
+    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_repeat_context_t));
+    imcs_repeat_context_t* ctx = (imcs_repeat_context_t*)result->context;
     IMCS_CHECK_TYPE(input->elem_type, TID_char);
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(input);                                               
-    result->next = imcs_repeat_char_next;                          
-    result->reset = imcs_reset_repeat_iterator;                   
-    ctx->offs = 0;                                                      
-    ctx->n_times = n_times;                                             
-    return result;                                                    
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_repeat_char_next;
+    result->reset = imcs_reset_repeat_iterator;
+    ctx->offs = 0;
+    ctx->n_times = n_times;
+    return result;
 }
 
 #define IMCS_UNARY_FUNC_DEF(RET_TYPE, ARG_TYPE)                         \
@@ -1027,20 +1030,20 @@ imcs_iterator_h imcs_##TO_TYPE##_from_##FROM_TYPE(imcs_iterator_h input)\
     IMCS_CAST_DEF(TYPE, int32)  \
     IMCS_CAST_DEF(TYPE, int64)  \
     IMCS_CAST_DEF(TYPE, float)  \
-    IMCS_CAST_DEF(TYPE, double) 
+    IMCS_CAST_DEF(TYPE, double)
 
-IMCS_CASTS_DEF(int8) 
-IMCS_CASTS_DEF(int16) 
-IMCS_CASTS_DEF(int32) 
-IMCS_CASTS_DEF(int64) 
+IMCS_CASTS_DEF(int8)
+IMCS_CASTS_DEF(int16)
+IMCS_CASTS_DEF(int32)
+IMCS_CASTS_DEF(int64)
 IMCS_CASTS_DEF(float)
 IMCS_CASTS_DEF(double)
 
 #define SPRINTF_BUF_SIZE 64
 
-static bool imcs_cast_to_char_next(imcs_iterator_h iterator) 
-{                                                                       
-    size_t i, tile_size;       
+static bool imcs_cast_to_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     int elem_size = iterator->elem_size;
     imcs_elem_typeid_t elem_type = iterator->opd[0]->elem_type;
     int ndig = 0;
@@ -1050,11 +1053,11 @@ static bool imcs_cast_to_char_next(imcs_iterator_h iterator)
     char buf[SPRINTF_BUF_SIZE];
     char* src = buf;
 
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    }  
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
 
-    switch (elem_type) { 
+    switch (elem_type) {
       case TID_date:
       case TID_time:
       case TID_timestamp:
@@ -1064,9 +1067,9 @@ static bool imcs_cast_to_char_next(imcs_iterator_h iterator)
       case TID_float:
       case TID_double:
         ndig = FLT_DIG + extra_float_digits;
-        if (ndig < 1) { 
-            ndig = 1;         
-        }  
+        if (ndig < 1) {
+            ndig = 1;
+        }
         break;
       case TID_char:
         len = iterator->opd[0]->elem_size;
@@ -1074,16 +1077,16 @@ static bool imcs_cast_to_char_next(imcs_iterator_h iterator)
       default:
         break;
     };
-    tile_size = iterator->opd[0]->tile_size;                            
-    for (i = 0; i < tile_size; i++) {                                   
-        switch (elem_type) { 
+    tile_size = iterator->opd[0]->tile_size;
+    for (i = 0; i < tile_size; i++) {
+        switch (elem_type) {
           case TID_int8:
             len = sprintf(buf, "%d", iterator->opd[0]->tile.arr_int8[i]);
             break;
-          case TID_int16:                                                   
+          case TID_int16:
             len = sprintf(buf, "%d", iterator->opd[0]->tile.arr_int16[i]);
             break;
-          case TID_int32:                                                   
+          case TID_int32:
             len = sprintf(buf, "%d", iterator->opd[0]->tile.arr_int32[i]);
             break;
           case TID_int64:
@@ -1109,91 +1112,91 @@ static bool imcs_cast_to_char_next(imcs_iterator_h iterator)
             len = strlen(src);
             break;
           default:
-            Assert(false);                  
+            Assert(false);
         }
-        if (len <= elem_size) { 
+        if (len <= elem_size) {
             memcpy(iterator->tile.arr_char + i*elem_size, src, len);
             memset(iterator->tile.arr_char + i*elem_size + len, 0, elem_size - len);
-        } else { 
+        } else {
             memcpy(iterator->tile.arr_char + i*elem_size, src, elem_size);
         }
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}                                                                       
-                                                                        
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
 imcs_iterator_h imcs_cast_to_char(imcs_iterator_h input, int elem_size)
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(elem_size, 0);     
-    result->elem_type = TID_char;                                  
-    result->opd[0] = imcs_operand(input);                               
-    result->next = imcs_cast_to_char_next;          
-    switch (input->elem_type) { 
+{
+    imcs_iterator_h result = imcs_new_iterator(elem_size, 0);
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_cast_to_char_next;
+    switch (input->elem_type) {
       case TID_date:
       case TID_time:
       case TID_timestamp:
       case TID_money:
         break;
       default:
-        result->flags = FLAG_CONTEXT_FREE;                                  
+        result->flags = FLAG_CONTEXT_FREE;
     }
-    return result;                                                      
-}                                                                       
-
-
-typedef struct { 
-    void* arr;
-} imcs_array_context_t;
-
-static bool imcs_from_array_next(imcs_iterator_h iterator)    
-{              
-    imcs_array_context_t* ctx = (imcs_array_context_t*)iterator->context;
-    size_t i = (size_t)iterator->next_pos;                           
-    size_t tile_size = i + imcs_tile_size - 1 < iterator->last_pos ? imcs_tile_size : (size_t)iterator->last_pos - i + 1; 
-    if (tile_size == 0) {                                               
-        return false;                                                   
-    }                                                                   
-    memcpy(iterator->tile.arr_char, (char*)ctx->arr + i*iterator->elem_size, tile_size*iterator->elem_size); 
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                 
-    return true;                                                    
-}                                                                       
-                                                                        
-void imcs_from_array(imcs_iterator_h result, void const* buf, size_t buf_size) 
-{         
-    imcs_array_context_t* ctx = (imcs_array_context_t*)result->context;
-    ctx->arr = (void*)buf;                                           
-    result->last_pos = buf_size-1;                                   
-    result->next = imcs_from_array_next;                         
+    return result;
 }
 
 
-void imcs_to_array(imcs_iterator_h input, void* buf, size_t buf_size) 
-{                                                                       
-    size_t count = 0;                                               
-    size_t available; 
+typedef struct {
+    void* arr;
+} imcs_array_context_t;
+
+static bool imcs_from_array_next(imcs_iterator_h iterator)
+{
+    imcs_array_context_t* ctx = (imcs_array_context_t*)iterator->context;
+    size_t i = (size_t)iterator->next_pos;
+    size_t tile_size = i + imcs_tile_size - 1 < iterator->last_pos ? imcs_tile_size : (size_t)iterator->last_pos - i + 1;
+    if (tile_size == 0) {
+        return false;
+    }
+    memcpy(iterator->tile.arr_char, (char*)ctx->arr + i*iterator->elem_size, tile_size*iterator->elem_size);
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+void imcs_from_array(imcs_iterator_h result, void const* buf, size_t buf_size)
+{
+    imcs_array_context_t* ctx = (imcs_array_context_t*)result->context;
+    ctx->arr = (void*)buf;
+    result->last_pos = buf_size-1;
+    result->next = imcs_from_array_next;
+}
+
+
+void imcs_to_array(imcs_iterator_h input, void* buf, size_t buf_size)
+{
+    size_t count = 0;
+    size_t available;
     size_t elem_size = input->elem_size;
     input->reset(input);
-    while (buf_size != 0) {                                              
-        if (input->tile_offs >= input->tile_size) {                     
-            if (!input->next(input)) {                
-                imcs_ereport(ERRCODE_INTERNAL_ERROR, "failed to extract array at position %ld", count); 
-                break;                                                  
-            } else {                                                    
-                Assert(input->tile_size > 0);          
-                input->tile_offs = 0;                                   
-            }                                                           
-        }                                                               
-        available = input->tile_size - input->tile_offs;                
-        if (available > buf_size) {                                     
-            available = buf_size;                                       
-        }                                                               
-        memcpy((char*)buf + count*elem_size, input->tile.arr_char + input->tile_offs*elem_size, available*elem_size); 
-        buf_size -= available;                                          
-        count += available;                                             
-        input->tile_offs += available;                                  
-    }                                                                   
+    while (buf_size != 0) {
+        if (input->tile_offs >= input->tile_size) {
+            if (!input->next(input)) {
+                imcs_ereport(ERRCODE_INTERNAL_ERROR, "failed to extract array at position %ld", count);
+                break;
+            } else {
+                Assert(input->tile_size > 0);
+                input->tile_offs = 0;
+            }
+        }
+        available = input->tile_size - input->tile_offs;
+        if (available > buf_size) {
+            available = buf_size;
+        }
+        memcpy((char*)buf + count*elem_size, input->tile.arr_char + input->tile_offs*elem_size, available*elem_size);
+        buf_size -= available;
+        count += available;
+        input->tile_offs += available;
+    }
 }
 
 #define IMCS_REVERSE_DEF(TYPE)                                          \
@@ -1251,63 +1254,63 @@ IMCS_REVERSE_DEF(int64)
 IMCS_REVERSE_DEF(float)
 IMCS_REVERSE_DEF(double)
 
-static bool imcs_reverse_char_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                            
+static bool imcs_reverse_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     size_t elem_size = iterator->elem_size;
-    if (iterator->next_pos != 0) {                                   
+    if (iterator->next_pos != 0) {
         return false;
-    }                                                                   
-    if (!iterator->opd[0]->next(iterator->opd[0])) { 
-        return false;                                                      
-    }                                                                   
-    tile_size = iterator->opd[0]->tile_size;                              
-    if (iterator->opd[0]->next(iterator->opd[0])) {     
-        size_t size;                                      
-        char* buf;                                                      
+    }
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
+    if (iterator->opd[0]->next(iterator->opd[0])) {
+        size_t size;
+        char* buf;
         char* tmp = (char*)palloc(elem_size);
         size = imcs_count(iterator->opd[0]);
-        buf = imcs_alloc(size*elem_size);                        
-        imcs_to_array(iterator->opd[0], buf, size);        
-        for (i = 0; i < size/2; i++) {                                  
+        buf = imcs_alloc(size*elem_size);
+        imcs_to_array(iterator->opd[0], buf, size);
+        for (i = 0; i < size/2; i++) {
             memcpy(tmp, buf + i*elem_size, elem_size);
             memcpy(buf + i*elem_size, buf + (size-i-1)*elem_size, elem_size);
             memcpy(buf + (size-i-1)*elem_size, tmp, elem_size);
-        }                   
+        }
         pfree(tmp);
-        imcs_from_array(iterator, buf, size);               
-        return iterator->next(iterator);                                
-    } else {                                                                   
-        size_t from = (size_t)iterator->first_pos;                      
-        size_t till = iterator->last_pos >= tile_size ? tile_size-1 : (size_t)iterator->last_pos; 
-        for (i = from; i <= till; i++) {                               
-            memcpy(iterator->tile.arr_char + elem_size*(i-from), iterator->opd[0]->tile.arr_char + elem_size*(tile_size-i-1), elem_size); 
-        }                                                               
-        iterator->tile_size = till-from+1;                              
-        iterator->next_pos = till;                                      
-        return true;                                                    
+        imcs_from_array(iterator, buf, size);
+        return iterator->next(iterator);
+    } else {
+        size_t from = (size_t)iterator->first_pos;
+        size_t till = iterator->last_pos >= tile_size ? tile_size-1 : (size_t)iterator->last_pos;
+        for (i = from; i <= till; i++) {
+            memcpy(iterator->tile.arr_char + elem_size*(i-from), iterator->opd[0]->tile.arr_char + elem_size*(tile_size-i-1), elem_size);
+        }
+        iterator->tile_size = till-from+1;
+        iterator->next_pos = till;
+        return true;
     }
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_reverse_char(imcs_iterator_h input) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_array_context_t)); 
+}
+
+imcs_iterator_h imcs_reverse_char(imcs_iterator_h input)
+{
+    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_array_context_t));
     IMCS_CHECK_TYPE(input->elem_type, TID_char);
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(input);                                               
-    result->next = imcs_reverse_char_next;                               
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_reverse_char_next;
     result->flags |= FLAG_RANDOM_ACCESS;
-    return result;                                                    
+    return result;
 }
 
 
-static bool imcs_const_next(imcs_iterator_h iterator) 
-{                                                                       
-    iterator->tile_size = imcs_tile_size;                            
-    iterator->next_pos += imcs_tile_size;                         
-    return true;                                                    
-}                                                                       
-                                                                        
+static bool imcs_const_next(imcs_iterator_h iterator)
+{
+    iterator->tile_size = imcs_tile_size;
+    iterator->next_pos += imcs_tile_size;
+    return true;
+}
+
 
 #define IMCS_CONST_DEF(TYPE)                                            \
 imcs_iterator_h imcs_const_##TYPE(TYPE val)                             \
@@ -1332,18 +1335,18 @@ IMCS_CONST_DEF(int64)
 IMCS_CONST_DEF(float)
 IMCS_CONST_DEF(double)
 
-imcs_iterator_h imcs_const_char(void const* val, size_t elem_size)       
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(elem_size, 0); 
-    size_t i;                                                       
-    size_t this_tile_size = imcs_tile_size;                         
-    for (i = 0; i < this_tile_size; i++) {                           
-        memcpy(result->tile.arr_char + i*elem_size, val, elem_size);                               
-    }                                                                   
-    result->elem_type = TID_char;                       
-    result->next = imcs_const_next;                         
-    result->flags = FLAG_CONTEXT_FREE;                                 
-    return result;                                                    
+imcs_iterator_h imcs_const_char(void const* val, size_t elem_size)
+{
+    imcs_iterator_h result = imcs_new_iterator(elem_size, 0);
+    size_t i;
+    size_t this_tile_size = imcs_tile_size;
+    for (i = 0; i < this_tile_size; i++) {
+        memcpy(result->tile.arr_char + i*elem_size, val, elem_size);
+    }
+    result->elem_type = TID_char;
+    result->next = imcs_const_next;
+    result->flags = FLAG_CONTEXT_FREE;
+    return result;
 }
 
 #define IMCS_AGG_DEF(TYPE, AGG_TYPE, MNEM, INIT, ACCUMULATE, RESULT)    \
@@ -1486,14 +1489,14 @@ IMCS_AGG_DEF(int64, double, dev, IMCS_VAR_INIT, IMCS_VAR_ACCUMULATE, IMCS_DEV_RE
 IMCS_AGG_DEF(float, double, dev, IMCS_VAR_INIT, IMCS_VAR_ACCUMULATE, IMCS_DEV_RESULT)
 IMCS_AGG_DEF(double, double, dev, IMCS_VAR_INIT, IMCS_VAR_ACCUMULATE, IMCS_DEV_RESULT)
 
-typedef struct {                                                        
+typedef struct {
     double sx;
     double sy;
     double sxx;
     double sxy;
     double syy;
     imcs_count_t count;
-} imcs_bin_agg_context_t;                                  
+} imcs_bin_agg_context_t;
 
 #define IMCS_BIN_AGG_DEF(TYPE, AGG_TYPE, MNEM, ACCUMULATE, RESULT) \
 static void imcs_##MNEM##_##TYPE##_merge(imcs_iterator_h dst, imcs_iterator_h src) \
@@ -1605,14 +1608,14 @@ IMCS_BIN_AGG_DEF(int64, double, wavg, IMCS_WAVG_ACCUMULATE, IMCS_WAVG_RESULT)
 IMCS_BIN_AGG_DEF(float, double, wavg, IMCS_WAVG_ACCUMULATE, IMCS_WAVG_RESULT)
 IMCS_BIN_AGG_DEF(double, double, wavg, IMCS_WAVG_ACCUMULATE, IMCS_WAVG_RESULT)
 
-typedef struct imcs_agg_context_t_ 
+typedef struct imcs_agg_context_t_
 {
     size_t interval;
     size_t count;
     size_t offset;
     imcs_key_t accumulator;
     double norm;
-    union { 
+    union {
         int8 trend;
         char arr_char[1];
         int8 arr_int8[1];
@@ -1702,7 +1705,7 @@ IMCS_WINDOW_AGG_DEF(double, double, window_avg, IMCS_WINDOW_AVG_NEXT, 0)
         acc = min;                                                      \
     }                                                                   \
     result = acc;                                                       \
-} 
+}
 
 IMCS_WINDOW_AGG_DEF(int8, int8, window_min, IMCS_WINDOW_MIN_NEXT, 0)
 IMCS_WINDOW_AGG_DEF(int16, int16, window_min, IMCS_WINDOW_MIN_NEXT, 0)
@@ -1728,7 +1731,7 @@ IMCS_WINDOW_AGG_DEF(double, double, window_min, IMCS_WINDOW_MIN_NEXT, 0)
         acc = max;                                                      \
     }                                                                   \
     result = acc;                                                       \
-} 
+}
 
 IMCS_WINDOW_AGG_DEF(int8, int8, window_max, IMCS_WINDOW_MAX_NEXT, 0)
 IMCS_WINDOW_AGG_DEF(int16, int16, window_max, IMCS_WINDOW_MAX_NEXT, 0)
@@ -1763,7 +1766,7 @@ IMCS_WINDOW_AGG_DEF(double, double, window_dev, IMCS_WINDOW_DEV_NEXT, 0)
     } else {                                                            \
         double p = 2.0 / (ctx->interval + 1);                           \
         result = acc = val*p + acc * (1 - p);                           \
-    } 
+    }
 
 IMCS_WINDOW_AGG_DEF(int8, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
 IMCS_WINDOW_AGG_DEF(int16, double, window_ema, IMCS_WINDOW_EMA_NEXT, 0)
@@ -1885,8 +1888,8 @@ IMCS_CUMULATIVE_AGG_DEF(double, double, cum_min, IMCS_CUMULATIVE_AGG_INIT, IMCS_
 
 static void imcs_reset_binary_agg_iterator(imcs_iterator_h iterator)
 {
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context; 
-    ctx->offset = ctx->count = 0;  
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;
+    ctx->offset = ctx->count = 0;
     imcs_reset_iterator(iterator);
 }
 
@@ -2028,12 +2031,12 @@ IMCS_GROUP_AGG_DEF(int64, int64, group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_
 
 imcs_iterator_h imcs_group_all_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types");
     return NULL;
 }
 imcs_iterator_h imcs_group_all_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types");
     return NULL;
 }
 
@@ -2045,12 +2048,12 @@ IMCS_GROUP_AGG_DEF(int64, int64, group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_
 
 imcs_iterator_h imcs_group_any_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types");
     return NULL;
 }
 imcs_iterator_h imcs_group_any_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types");
     return NULL;
 }
 
@@ -2082,84 +2085,84 @@ IMCS_GROUP_AGG_DEF(double, double, group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VA
 
 static void imcs_reset_unary_agg_iterator(imcs_iterator_h iterator)
 {
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context; 
-    ctx->offset = ctx->count = 0;  
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;
+    ctx->offset = ctx->count = 0;
     imcs_reset_iterator(iterator);
 }
 
-static bool imcs_group_agg_count_next(imcs_iterator_h iterator) 
-{                                                                       
-    size_t i, j = 0, tile_size;                                     
-    size_t this_tile_size = imcs_tile_size;                         
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context; 
-    size_t elem_size = iterator->opd[0]->elem_size; 
-    while (true) {                                                         
-        if (ctx->offset >= iterator->opd[0]->tile_size) {                 
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (j + ctx->count != 0) {      
-                    if (ctx->count != 0) {                              
-                        iterator->tile.arr_int64[j++] = ctx->count;     
-                        iterator->next_pos += 1;                     
-                        ctx->count = 0;                                 
-                    }                                                   
-                    iterator->tile_size = j;                            
-                    return true;                                      
-                }                                                       
-                return false;                                                  
-            }                                                           
-            ctx->offset = 0;                                            
-        }                                                               
-        tile_size = iterator->opd[0]->tile_size;                          
-        for (i = ctx->offset; i < tile_size; i++) {                     
-            bool same;                                              
-            switch (elem_size) {                                        
-              case 1:                                                   
-                same = ctx->accumulator.val_int8 == iterator->opd[0]->tile.arr_int8[i]; 
-                ctx->accumulator.val_int8 = iterator->opd[0]->tile.arr_int8[i]; 
-                break;                                                  
-              case 2:                                                   
-                same = ctx->accumulator.val_int16 == iterator->opd[0]->tile.arr_int16[i]; 
-                ctx->accumulator.val_int16 = iterator->opd[0]->tile.arr_int16[i];       
-                break;                                                  
-              case 4:                                                   
-                same = ctx->accumulator.val_int32 == iterator->opd[0]->tile.arr_int32[i]; 
-                ctx->accumulator.val_int32 = iterator->opd[0]->tile.arr_int32[i];       
-                break;                                                  
-              case 8:                                                  
-                same = ctx->accumulator.val_int64 == iterator->opd[0]->tile.arr_int64[i]; 
-                ctx->accumulator.val_int64 = iterator->opd[0]->tile.arr_int64[i]; 
-                break;                                                  
-              default:                                                  
-                same = memcmp(ctx->history.arr_char, &iterator->opd[1]->tile.arr_char[i*elem_size], elem_size) == 0; 
-                memcpy(ctx->history.arr_char, &iterator->opd[1]->tile.arr_char[i*elem_size], elem_size);              
-            }                                                           
-            if (ctx->count != 0 && !same) {                             
-                iterator->tile.arr_int64[j] = ctx->count;               
-                iterator->next_pos += 1;                             
-                ctx->count = 1;                                         
-                if (++j == this_tile_size) {                         
-                    ctx->offset = i + 1;                                
-                    iterator->tile_size = this_tile_size;            
-                    return true;                                    
-                }                                                       
-            } else {                                                    
-                ctx->count += 1;                                        
-            }                                                           
-        }                                                               
-        ctx->offset = tile_size;                                        
-    }                                                                   
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_group_count(imcs_iterator_h group_by) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_count_t), sizeof(imcs_agg_context_t)); 
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context; 
-    result->elem_type = TID_int64;                   
-    result->opd[0] = imcs_operand(group_by);                                            
-    result->next = imcs_group_agg_count_next;                        
-    result->reset = imcs_reset_unary_agg_iterator;                   
-    ctx->offset = ctx->count = 0;                                       
-    return result;                                                    
+static bool imcs_group_agg_count_next(imcs_iterator_h iterator)
+{
+    size_t i, j = 0, tile_size;
+    size_t this_tile_size = imcs_tile_size;
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;
+    size_t elem_size = iterator->opd[0]->elem_size;
+    while (true) {
+        if (ctx->offset >= iterator->opd[0]->tile_size) {
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (j + ctx->count != 0) {
+                    if (ctx->count != 0) {
+                        iterator->tile.arr_int64[j++] = ctx->count;
+                        iterator->next_pos += 1;
+                        ctx->count = 0;
+                    }
+                    iterator->tile_size = j;
+                    return true;
+                }
+                return false;
+            }
+            ctx->offset = 0;
+        }
+        tile_size = iterator->opd[0]->tile_size;
+        for (i = ctx->offset; i < tile_size; i++) {
+            bool same;
+            switch (elem_size) {
+              case 1:
+                same = ctx->accumulator.val_int8 == iterator->opd[0]->tile.arr_int8[i];
+                ctx->accumulator.val_int8 = iterator->opd[0]->tile.arr_int8[i];
+                break;
+              case 2:
+                same = ctx->accumulator.val_int16 == iterator->opd[0]->tile.arr_int16[i];
+                ctx->accumulator.val_int16 = iterator->opd[0]->tile.arr_int16[i];
+                break;
+              case 4:
+                same = ctx->accumulator.val_int32 == iterator->opd[0]->tile.arr_int32[i];
+                ctx->accumulator.val_int32 = iterator->opd[0]->tile.arr_int32[i];
+                break;
+              case 8:
+                same = ctx->accumulator.val_int64 == iterator->opd[0]->tile.arr_int64[i];
+                ctx->accumulator.val_int64 = iterator->opd[0]->tile.arr_int64[i];
+                break;
+              default:
+                same = memcmp(ctx->history.arr_char, &iterator->opd[1]->tile.arr_char[i*elem_size], elem_size) == 0;
+                memcpy(ctx->history.arr_char, &iterator->opd[1]->tile.arr_char[i*elem_size], elem_size);
+            }
+            if (ctx->count != 0 && !same) {
+                iterator->tile.arr_int64[j] = ctx->count;
+                iterator->next_pos += 1;
+                ctx->count = 1;
+                if (++j == this_tile_size) {
+                    ctx->offset = i + 1;
+                    iterator->tile_size = this_tile_size;
+                    return true;
+                }
+            } else {
+                ctx->count += 1;
+            }
+        }
+        ctx->offset = tile_size;
+    }
+}
+
+imcs_iterator_h imcs_group_count(imcs_iterator_h group_by)
+{
+    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_count_t), sizeof(imcs_agg_context_t));
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context;
+    result->elem_type = TID_int64;
+    result->opd[0] = imcs_operand(group_by);
+    result->next = imcs_group_agg_count_next;
+    result->reset = imcs_reset_unary_agg_iterator;
+    ctx->offset = ctx->count = 0;
+    return result;
 }
 
 
@@ -2346,108 +2349,108 @@ typedef struct imcs_concat_context_t_ {
     imcs_iterator_h opd[2];
 } imcs_concat_context_t;
 
-static bool imcs_concat_next(imcs_iterator_h iterator)         
-{                                                                       
-    imcs_concat_context_t* ctx = (imcs_concat_context_t*)iterator->context; 
-    size_t tile_size = 0; 
+static bool imcs_concat_next(imcs_iterator_h iterator)
+{
+    imcs_concat_context_t* ctx = (imcs_concat_context_t*)iterator->context;
+    size_t tile_size = 0;
     size_t elem_size = iterator->elem_size;
-    size_t this_tile_size = imcs_tile_size; 
+    size_t this_tile_size = imcs_tile_size;
     size_t available;
 
-    while (true) { 
-        if (ctx->left_array) {            
-            if (ctx->left_offs != 0) { 
+    while (true) {
+        if (ctx->left_array) {
+            if (ctx->left_offs != 0) {
                 available = iterator->opd[0]->tile_size - ctx->left_offs;
-                if (available > this_tile_size - tile_size) { 
+                if (available > this_tile_size - tile_size) {
                     available = this_tile_size - tile_size;
                 }
-                memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[0]->tile.arr_char + ctx->left_offs*elem_size, available*elem_size); 
+                memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[0]->tile.arr_char + ctx->left_offs*elem_size, available*elem_size);
                 tile_size += available;
                 ctx->left_offs += available;
-                if (tile_size == this_tile_size) { 
+                if (tile_size == this_tile_size) {
                     break;
                 }
             }
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (iterator->opd[1]->next == imcs_concat_next) { 
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (iterator->opd[1]->next == imcs_concat_next) {
                     iterator->opd[0] = iterator->opd[1]->opd[0];
                     iterator->opd[1] = iterator->opd[1]->opd[1];
                     ctx->left_offs = 0;
                     continue;
                 }
                 ctx->left_array = false;
-            } else {                                    
+            } else {
                 available = iterator->opd[0]->tile_size;
-                if (available > this_tile_size - tile_size) { 
+                if (available > this_tile_size - tile_size) {
                     ctx->left_offs = available = this_tile_size - tile_size;
-                } else { 
+                } else {
                     ctx->left_offs = 0;
                 }
-                memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[0]->tile.arr_char, available*elem_size); 
+                memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[0]->tile.arr_char, available*elem_size);
                 tile_size += available;
-                if (tile_size == this_tile_size) { 
+                if (tile_size == this_tile_size) {
                     break;
-                } 
+                }
                 continue;
             }
-        } else if (ctx->right_offs != 0) { 
-            available = iterator->opd[1]->tile_size - ctx->right_offs;       
-            if (available > this_tile_size - tile_size) { 
+        } else if (ctx->right_offs != 0) {
+            available = iterator->opd[1]->tile_size - ctx->right_offs;
+            if (available > this_tile_size - tile_size) {
                 available = this_tile_size - tile_size;
             }
-            memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[1]->tile.arr_char + ctx->right_offs*elem_size, available*elem_size); 
+            memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[1]->tile.arr_char + ctx->right_offs*elem_size, available*elem_size);
             tile_size += available;
             ctx->right_offs += available;
-            if (tile_size == this_tile_size) { 
+            if (tile_size == this_tile_size) {
                 break;
             }
-        }                                                                   
+        }
         ctx->right_offs = 0;
-        if (!iterator->opd[1]->next(iterator->opd[1])) { 
+        if (!iterator->opd[1]->next(iterator->opd[1])) {
             if (tile_size == 0) {
-                return false;                                                      
+                return false;
             }
-        } else {            
+        } else {
             available = iterator->opd[1]->tile_size;
-            if (available > this_tile_size - tile_size) { 
+            if (available > this_tile_size - tile_size) {
                 ctx->right_offs = available = this_tile_size - tile_size;
             }
-            memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[1]->tile.arr_char, available*elem_size); 
+            memcpy(iterator->tile.arr_char + tile_size*elem_size, iterator->opd[1]->tile.arr_char, available*elem_size);
             tile_size += available;
         }
         break;
     }
-    iterator->tile_size = tile_size;                            
-    iterator->next_pos += tile_size;                         
-    return true;                                                    
-}                                                                       
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
 
-static void imcs_concat_reset(imcs_iterator_h iterator)         
-{    
-    imcs_concat_context_t* ctx = (imcs_concat_context_t*)iterator->context; 
-    ctx->left_array = true;                                          
-    ctx->left_offs = ctx->right_offs = 0;                                                
+static void imcs_concat_reset(imcs_iterator_h iterator)
+{
+    imcs_concat_context_t* ctx = (imcs_concat_context_t*)iterator->context;
+    ctx->left_array = true;
+    ctx->left_offs = ctx->right_offs = 0;
     iterator->opd[0] = ctx->opd[0];
     iterator->opd[1] = ctx->opd[1];
     imcs_reset_iterator(iterator);
 }
 
-imcs_iterator_h imcs_concat(imcs_iterator_h left, imcs_iterator_h right) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(left->elem_size, sizeof(imcs_concat_context_t)); 
-    imcs_concat_context_t* ctx = (imcs_concat_context_t*)result->context; 
+imcs_iterator_h imcs_concat(imcs_iterator_h left, imcs_iterator_h right)
+{
+    imcs_iterator_h result = imcs_new_iterator(left->elem_size, sizeof(imcs_concat_context_t));
+    imcs_concat_context_t* ctx = (imcs_concat_context_t*)result->context;
     IMCS_CHECK_TYPE(left->elem_type, right->elem_type);
-    if (left->elem_size != right->elem_size) {                          
-        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); 
-    }                                                                   
+    if (left->elem_size != right->elem_size) {
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size");
+    }
     result->elem_type = left->elem_type;
-    ctx->opd[0] = result->opd[0] = imcs_operand(left);                                                
-    ctx->opd[1] = result->opd[1] = imcs_operand(right);                                              
-    result->next = imcs_concat_next;                                 
-    result->reset = imcs_concat_reset;                               
-    ctx->left_array = true;                                          
-    ctx->left_offs = ctx->right_offs = 0;                                                
-    return result;                                                    
+    ctx->opd[0] = result->opd[0] = imcs_operand(left);
+    ctx->opd[1] = result->opd[1] = imcs_operand(right);
+    result->next = imcs_concat_next;
+    result->reset = imcs_concat_reset;
+    ctx->left_array = true;
+    ctx->left_offs = ctx->right_offs = 0;
+    return result;
 }
 
 #define IMCS_IIF_DEF(TYPE)                                              \
@@ -2500,53 +2503,53 @@ IMCS_IIF_DEF(int64)
 IMCS_IIF_DEF(float)
 IMCS_IIF_DEF(double)
 
-static bool imcs_iif_char_next(imcs_iterator_h iterator)   
-{                                                                       
-    size_t i, tile_size;                                            
+static bool imcs_iif_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     size_t elem_size = iterator->elem_size;
-    if (!iterator->opd[0]->next(iterator->opd[0])) { 
-        return false;                                                      
-    }                                                                   
-    tile_size = iterator->opd[0]->tile_size;                              
-    if (!iterator->opd[1]->next(iterator->opd[1])) { 
-        return false;                                                      
-    }                                                                   
-    if (tile_size > iterator->opd[1]->tile_size) {                        
-        tile_size = iterator->opd[1]->tile_size;                          
-    }                                                                   
-    if (!iterator->opd[2]->next(iterator->opd[2])) { 
-        return false;                                                      
-    }                                                                   
-    if (tile_size > iterator->opd[2]->tile_size) {                        
-        tile_size = iterator->opd[2]->tile_size;                          
-    }                                                                   
-    for (i = 0; i < tile_size; i++) {                                   
-        memcpy(iterator->tile.arr_char + i*elem_size, (iterator->opd[0]->tile.arr_int8[i] ? iterator->opd[1]->tile.arr_char : iterator->opd[2]->tile.arr_char) + i*elem_size, elem_size); 
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                 
-    return true;                                                    
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_iif_char(imcs_iterator_h cond, imcs_iterator_h then_iter, imcs_iterator_h else_iter) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(then_iter->elem_size, 0);   
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
+    if (!iterator->opd[1]->next(iterator->opd[1])) {
+        return false;
+    }
+    if (tile_size > iterator->opd[1]->tile_size) {
+        tile_size = iterator->opd[1]->tile_size;
+    }
+    if (!iterator->opd[2]->next(iterator->opd[2])) {
+        return false;
+    }
+    if (tile_size > iterator->opd[2]->tile_size) {
+        tile_size = iterator->opd[2]->tile_size;
+    }
+    for (i = 0; i < tile_size; i++) {
+        memcpy(iterator->tile.arr_char + i*elem_size, (iterator->opd[0]->tile.arr_int8[i] ? iterator->opd[1]->tile.arr_char : iterator->opd[2]->tile.arr_char) + i*elem_size, elem_size);
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+imcs_iterator_h imcs_iif_char(imcs_iterator_h cond, imcs_iterator_h then_iter, imcs_iterator_h else_iter)
+{
+    imcs_iterator_h result = imcs_new_iterator(then_iter->elem_size, 0);
     IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
     IMCS_CHECK_TYPE(then_iter->elem_type, TID_char);
     IMCS_CHECK_TYPE(else_iter->elem_type, TID_char);
-    if (then_iter->elem_size != else_iter->elem_size) {                
-        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); 
-    }                                                                   
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(cond);                                                
-    result->opd[1] = imcs_operand(then_iter);                                         
-    result->opd[2] = imcs_operand(else_iter);                                         
-    result->next = imcs_iif_char_next;                           
-    result->flags = FLAG_CONTEXT_FREE;                                  
-    return result;                                                    
+    if (then_iter->elem_size != else_iter->elem_size) {
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size");
+    }
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(cond);
+    result->opd[1] = imcs_operand(then_iter);
+    result->opd[2] = imcs_operand(else_iter);
+    result->next = imcs_iif_char_next;
+    result->flags = FLAG_CONTEXT_FREE;
+    return result;
 }
 
-typedef struct imcs_if_context_t_ { 
+typedef struct imcs_if_context_t_ {
     size_t then_offs;
     size_t else_offs;
 } imcs_if_context_t;
@@ -2610,69 +2613,69 @@ IMCS_IF_DEF(int64)
 IMCS_IF_DEF(float)
 IMCS_IF_DEF(double)
 
-static bool imcs_if_char_next(imcs_iterator_h iterator)   
-{                                                                       
-    size_t i, tile_size;                                            
+static bool imcs_if_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     size_t elem_size = iterator->elem_size;
-    imcs_if_context_t* ctx = (imcs_if_context_t*)iterator->context; 
-    if (!iterator->opd[0]->next(iterator->opd[0])) { 
-        return false;                                                      
-    }                                                                   
-    tile_size = iterator->opd[0]->tile_size;                              
-    for (i = 0; i < tile_size; i++) {                                   
-        if (iterator->opd[0]->tile.arr_int8[i]) {                 
-            if (ctx->then_offs >= iterator->opd[1]->tile_size) {          
-                if (!iterator->opd[1]->next(iterator->opd[1])) {               
-                    return false;                                          
-                }                                                       
-                Assert(iterator->opd[1]->tile_size > 0); 
-                ctx->then_offs = 0;                                     
-            }                                                           
-            memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[1]->tile.arr_char + elem_size*ctx->then_offs++, elem_size); 
-        } else {                                                        
-            if (ctx->else_offs >= iterator->opd[2]->tile_size) {          
-                if (!iterator->opd[2]->next(iterator->opd[2])) {               
-                    return false;                                          
-                }                                                       
-                Assert(iterator->opd[2]->tile_size > 0); 
-                ctx->else_offs = 0;                                     
-            }                                                           
-            memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[2]->tile.arr_char + elem_size*ctx->else_offs++, elem_size); 
-        }                                                               
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                 
-    return true;                                                    
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_if_char(imcs_iterator_h cond, imcs_iterator_h then_iter, imcs_iterator_h else_iter) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(then_iter->elem_size, sizeof(imcs_if_context_t)); 
-    imcs_if_context_t* ctx = (imcs_if_context_t*)result->context; 
+    imcs_if_context_t* ctx = (imcs_if_context_t*)iterator->context;
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
+    for (i = 0; i < tile_size; i++) {
+        if (iterator->opd[0]->tile.arr_int8[i]) {
+            if (ctx->then_offs >= iterator->opd[1]->tile_size) {
+                if (!iterator->opd[1]->next(iterator->opd[1])) {
+                    return false;
+                }
+                Assert(iterator->opd[1]->tile_size > 0);
+                ctx->then_offs = 0;
+            }
+            memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[1]->tile.arr_char + elem_size*ctx->then_offs++, elem_size);
+        } else {
+            if (ctx->else_offs >= iterator->opd[2]->tile_size) {
+                if (!iterator->opd[2]->next(iterator->opd[2])) {
+                    return false;
+                }
+                Assert(iterator->opd[2]->tile_size > 0);
+                ctx->else_offs = 0;
+            }
+            memcpy(iterator->tile.arr_char + i*elem_size, iterator->opd[2]->tile.arr_char + elem_size*ctx->else_offs++, elem_size);
+        }
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+imcs_iterator_h imcs_if_char(imcs_iterator_h cond, imcs_iterator_h then_iter, imcs_iterator_h else_iter)
+{
+    imcs_iterator_h result = imcs_new_iterator(then_iter->elem_size, sizeof(imcs_if_context_t));
+    imcs_if_context_t* ctx = (imcs_if_context_t*)result->context;
     IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
     IMCS_CHECK_TYPE(then_iter->elem_type, TID_char);
     IMCS_CHECK_TYPE(else_iter->elem_type, TID_char);
-    if (then_iter->elem_size != else_iter->elem_size) {                
-        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size"); 
-    }                                                                   
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(cond);                                                
-    result->opd[1] = imcs_operand(then_iter);                                         
-    result->opd[2] = imcs_operand(else_iter);                                         
-    ctx->then_offs = ctx->else_offs = 0;                                
-    result->next = imcs_if_char_next;                            
-    return result;                                                    
+    if (then_iter->elem_size != else_iter->elem_size) {
+        imcs_ereport(ERRCODE_STRING_DATA_LENGTH_MISMATCH, "timeseries of CHAR have different element size");
+    }
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(cond);
+    result->opd[1] = imcs_operand(then_iter);
+    result->opd[2] = imcs_operand(else_iter);
+    ctx->then_offs = ctx->else_offs = 0;
+    result->next = imcs_if_char_next;
+    return result;
 }
 
-typedef struct imcs_filter_context_t_ { 
+typedef struct imcs_filter_context_t_ {
     size_t left_offs;
     size_t right_offs;
 } imcs_filter_context_t;
 
-static void imcs_filter_reset(imcs_iterator_h iterator)   
+static void imcs_filter_reset(imcs_iterator_h iterator)
 {
-    imcs_filter_context_t* ctx = (imcs_filter_context_t*)iterator->context; 
-    ctx->left_offs = ctx->right_offs = 0;                               
+    imcs_filter_context_t* ctx = (imcs_filter_context_t*)iterator->context;
+    ctx->left_offs = ctx->right_offs = 0;
     imcs_reset_iterator(iterator);
 }
 #define IMCS_FILTER_DEF(TYPE)                                           \
@@ -2748,134 +2751,134 @@ IMCS_FILTER_DEF(int64)
 IMCS_FILTER_DEF(float)
 IMCS_FILTER_DEF(double)
 
-static bool imcs_filter_char_next(imcs_iterator_h iterator) 
-{                                                                       
-    size_t i, n, tile_size = 0;                                     
-    size_t this_tile_size = imcs_tile_size;                         
+static bool imcs_filter_char_next(imcs_iterator_h iterator)
+{
+    size_t i, n, tile_size = 0;
+    size_t this_tile_size = imcs_tile_size;
     size_t elem_size = iterator->elem_size;
-    imcs_filter_context_t* ctx = (imcs_filter_context_t*)iterator->context; 
-    do {                                                                
-        if (ctx->left_offs >= iterator->opd[0]->tile_size) {              
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (tile_size != 0) {               
-                    iterator->tile_size = tile_size;                        
-                    iterator->next_pos += tile_size;                     
-                    return true;                                        
-                }                                                           
-                return false;                                               
-            }                                                           
-            ctx->left_offs = 0;                                         
-        }                                                               
-        if (ctx->right_offs >= iterator->opd[1]->tile_size) {            
-            if (!iterator->opd[1]->next(iterator->opd[1])) { 
-                if (tile_size != 0) {               
-                    iterator->tile_size = tile_size;                        
-                    iterator->next_pos += tile_size;                     
-                    return true;                                        
-                }                                                           
-                return false;                                               
-            }                                                           
-            ctx->right_offs = 0;                                        
-        }                                                               
-        n = iterator->opd[0]->tile_size - ctx->left_offs;                 
-        if (n > iterator->opd[1]->tile_size - ctx->right_offs) {         
-            n = iterator->opd[1]->tile_size - ctx->right_offs;           
-        }                                                               
-        for (i = 0; i < n; i++) {                                       
-            if (iterator->opd[0]->tile.arr_int8[ctx->left_offs + i]) { 
+    imcs_filter_context_t* ctx = (imcs_filter_context_t*)iterator->context;
+    do {
+        if (ctx->left_offs >= iterator->opd[0]->tile_size) {
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (tile_size != 0) {
+                    iterator->tile_size = tile_size;
+                    iterator->next_pos += tile_size;
+                    return true;
+                }
+                return false;
+            }
+            ctx->left_offs = 0;
+        }
+        if (ctx->right_offs >= iterator->opd[1]->tile_size) {
+            if (!iterator->opd[1]->next(iterator->opd[1])) {
+                if (tile_size != 0) {
+                    iterator->tile_size = tile_size;
+                    iterator->next_pos += tile_size;
+                    return true;
+                }
+                return false;
+            }
+            ctx->right_offs = 0;
+        }
+        n = iterator->opd[0]->tile_size - ctx->left_offs;
+        if (n > iterator->opd[1]->tile_size - ctx->right_offs) {
+            n = iterator->opd[1]->tile_size - ctx->right_offs;
+        }
+        for (i = 0; i < n; i++) {
+            if (iterator->opd[0]->tile.arr_int8[ctx->left_offs + i]) {
                 memcpy(iterator->tile.arr_char + elem_size*tile_size, iterator->opd[1]->tile.arr_char + elem_size*(ctx->right_offs + i), elem_size);
-                if (++tile_size == this_tile_size) {                 
-                    i += 1;                                             
-                    break;                                              
-                }                                                       
-            }                                                           
-        }                                                               
-        ctx->left_offs += i;                                            
-        ctx->right_offs += i;                                           
-    } while (tile_size < this_tile_size);                            
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                 
-    return true;                                                    
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_filter_char(imcs_iterator_h cond, imcs_iterator_h input) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_filter_context_t)); 
-    imcs_filter_context_t* ctx = (imcs_filter_context_t*)result->context; 
+                if (++tile_size == this_tile_size) {
+                    i += 1;
+                    break;
+                }
+            }
+        }
+        ctx->left_offs += i;
+        ctx->right_offs += i;
+    } while (tile_size < this_tile_size);
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+imcs_iterator_h imcs_filter_char(imcs_iterator_h cond, imcs_iterator_h input)
+{
+    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_filter_context_t));
+    imcs_filter_context_t* ctx = (imcs_filter_context_t*)result->context;
     IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
     IMCS_CHECK_TYPE(input->elem_type, TID_char);
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(cond);                                                
-    result->opd[1] = imcs_operand(input);                                              
-    result->next = imcs_filter_char_next;                        
-    result->reset = imcs_filter_reset;   
-    result->flags = FLAG_CONTEXT_FREE;                            
-    ctx->left_offs = ctx->right_offs = 0;                               
-    return result;                                                    
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(cond);
+    result->opd[1] = imcs_operand(input);
+    result->next = imcs_filter_char_next;
+    result->reset = imcs_filter_reset;
+    result->flags = FLAG_CONTEXT_FREE;
+    ctx->left_offs = ctx->right_offs = 0;
+    return result;
 }
 
 
-typedef struct imcs_filter_pos_context_t_ { 
+typedef struct imcs_filter_pos_context_t_ {
     size_t     offs;
     imcs_pos_t origin;
 } imcs_filter_pos_context_t;
 
 
-static void imcs_filter_pos_reset(imcs_iterator_h iterator)   
+static void imcs_filter_pos_reset(imcs_iterator_h iterator)
 {
-    imcs_filter_pos_context_t* ctx = (imcs_filter_pos_context_t*)iterator->context; 
+    imcs_filter_pos_context_t* ctx = (imcs_filter_pos_context_t*)iterator->context;
     ctx->offs = 0;
     imcs_reset_iterator(iterator);
 }
-static bool imcs_filter_pos_next(imcs_iterator_h iterator) 
-{                                                                       
-    size_t i, n, tile_size = 0;                                     
-    size_t this_tile_size = imcs_tile_size;                         
-    imcs_filter_pos_context_t* ctx = (imcs_filter_pos_context_t*)iterator->context; 
+static bool imcs_filter_pos_next(imcs_iterator_h iterator)
+{
+    size_t i, n, tile_size = 0;
+    size_t this_tile_size = imcs_tile_size;
+    imcs_filter_pos_context_t* ctx = (imcs_filter_pos_context_t*)iterator->context;
     int64 pos;
-    do {                                                                
-        if (ctx->offs >= iterator->opd[0]->tile_size) {              
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (tile_size != 0) {             
-                    iterator->tile_size = tile_size;                        
-                    iterator->next_pos += tile_size;                     
-                    return true;                                        
-                }                                                           
-                return false;                                               
-            }                                                           
-            ctx->offs = 0;                                         
-        }                                                               
-        n = iterator->opd[0]->tile_size - ctx->offs;                 
+    do {
+        if (ctx->offs >= iterator->opd[0]->tile_size) {
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (tile_size != 0) {
+                    iterator->tile_size = tile_size;
+                    iterator->next_pos += tile_size;
+                    return true;
+                }
+                return false;
+            }
+            ctx->offs = 0;
+        }
+        n = iterator->opd[0]->tile_size - ctx->offs;
         pos = iterator->opd[0]->next_pos - n - ctx->origin;
-        for (i = 0; i < n; i++) {                                       
-            if (iterator->opd[0]->tile.arr_int8[ctx->offs + i]) { 
-                iterator->tile.arr_int64[tile_size] = pos + i; 
-                if (++tile_size == this_tile_size) {                 
-                    i += 1;                                             
-                    break;                                              
-                }                                                       
-            }                                                           
-        }                                                               
-        ctx->offs += i;                                            
-    } while (tile_size < this_tile_size);                            
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                 
-    return true;                                                    
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_filter_pos(imcs_iterator_h cond) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_pos_t), sizeof(imcs_filter_pos_context_t)); 
-    imcs_filter_pos_context_t* ctx = (imcs_filter_pos_context_t*)result->context; 
+        for (i = 0; i < n; i++) {
+            if (iterator->opd[0]->tile.arr_int8[ctx->offs + i]) {
+                iterator->tile.arr_int64[tile_size] = pos + i;
+                if (++tile_size == this_tile_size) {
+                    i += 1;
+                    break;
+                }
+            }
+        }
+        ctx->offs += i;
+    } while (tile_size < this_tile_size);
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+imcs_iterator_h imcs_filter_pos(imcs_iterator_h cond)
+{
+    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_pos_t), sizeof(imcs_filter_pos_context_t));
+    imcs_filter_pos_context_t* ctx = (imcs_filter_pos_context_t*)result->context;
     IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
-    result->elem_type = TID_int64;                        
-    result->opd[0] = imcs_operand(cond);                                                    
-    result->next = imcs_filter_pos_next;                    
-    result->reset = imcs_filter_pos_reset;                           
-    result->flags = FLAG_CONTEXT_FREE;                            
+    result->elem_type = TID_int64;
+    result->opd[0] = imcs_operand(cond);
+    result->next = imcs_filter_pos_next;
+    result->reset = imcs_filter_pos_reset;
+    result->flags = FLAG_CONTEXT_FREE;
     ctx->offs = 0;
     ctx->origin = cond->first_pos;
-    return result;                                                    
+    return result;
 }
 
 
@@ -2883,10 +2886,10 @@ static imcs_pos_t imcs_get_first_pos(imcs_iterator_h iterator)
 {
     imcs_pos_t max_first_pos = iterator->first_pos;
     int i;
-    for (i = 0; i < 3; i++) { 
-        if (iterator->opd[i]) { 
+    for (i = 0; i < 3; i++) {
+        if (iterator->opd[i]) {
             imcs_pos_t first_pos = imcs_get_first_pos(iterator->opd[i]);
-            if (first_pos > max_first_pos) { 
+            if (first_pos > max_first_pos) {
                 max_first_pos = first_pos;
             }
         }
@@ -2901,21 +2904,21 @@ static void imcs_filter_first_pos_merge(imcs_iterator_h dst, imcs_iterator_h src
     size_t l = 0, r = tile_size;
     imcs_pos_t pos = src->tile.arr_int64[0];
     size_t ins = src->tile_size;
-    do { 
+    do {
         size_t m = (l + r) >> 1;
-        if (dst->tile.arr_int64[m] < pos) { 
+        if (dst->tile.arr_int64[m] < pos) {
             l = m+1;
-        } else { 
+        } else {
             r = m;
         }
     } while (l < r);
 
-    if (l + ins > n) { 
+    if (l + ins > n) {
         ins = n - l;
     }
-    if (ins > 0) { 
+    if (ins > 0) {
         size_t shift = tile_size - l;
-        if (l + ins + shift > n) { 
+        if (l + ins + shift > n) {
             shift = n - l - ins;
         }
         memmove(&dst->tile.arr_int64[l+ins], &dst->tile.arr_int64[l], shift*sizeof(imcs_pos_t));
@@ -2929,50 +2932,50 @@ static bool imcs_filter_first_pos_next(imcs_iterator_h iterator)
     size_t n = iterator->last_pos;
     size_t this_tile_size = 0;
     imcs_pos_t pos;
-    if (iterator->flags & FLAG_PREPARED) {                              
-        return iterator->tile_size != 0;                                
-    }                                                                   
-    if (iterator->next_pos != 0) {                                      
-        return false;                                                   
-    }                   
+    if (iterator->flags & FLAG_PREPARED) {
+        return iterator->tile_size != 0;
+    }
+    if (iterator->next_pos != 0) {
+        return false;
+    }
     pos = imcs_get_first_pos(iterator);
-    while (this_tile_size < n && iterator->opd[0]->next(iterator->opd[0])) {                  
-        size_t i, tile_size = iterator->opd[0]->tile_size;              
-        for (i = 0; i < tile_size; i++, pos++) {                               
-            if (iterator->opd[0]->tile.arr_int8[i]) { 
+    while (this_tile_size < n && iterator->opd[0]->next(iterator->opd[0])) {
+        size_t i, tile_size = iterator->opd[0]->tile_size;
+        for (i = 0; i < tile_size; i++, pos++) {
+            if (iterator->opd[0]->tile.arr_int8[i]) {
                 iterator->tile.arr_int64[this_tile_size] = pos;
-                if (++this_tile_size >= n) { 
+                if (++this_tile_size >= n) {
                     break;
                 }
             }
         }
     }
-    iterator->tile_size = this_tile_size;                                    
-    iterator->next_pos = this_tile_size;                                 
-    return this_tile_size != 0;                                                    
-}                                                                       
-                
-    
-imcs_iterator_h imcs_filter_first_pos(imcs_iterator_h cond, size_t n) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_pos_t), 0); 
-    IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
-    if (n > imcs_tile_size) {                                         
-        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "N should not be larger than tile size"); 
-    }                                                                   
-    result->elem_type = TID_int64;                        
-    result->opd[0] = imcs_operand(cond);                                                    
-    result->next = imcs_filter_first_pos_next;                    
-    result->prepare = imcs_filter_first_pos_next;                    
-    result->merge = imcs_filter_first_pos_merge;                           
-    result->last_pos = n;
-    return result;                                                    
+    iterator->tile_size = this_tile_size;
+    iterator->next_pos = this_tile_size;
+    return this_tile_size != 0;
 }
 
 
-typedef struct imcs_top_context_t_ {               
+imcs_iterator_h imcs_filter_first_pos(imcs_iterator_h cond, size_t n)
+{
+    imcs_iterator_h result = imcs_new_iterator(sizeof(imcs_pos_t), 0);
+    IMCS_CHECK_TYPE(cond->elem_type, TID_int8);
+    if (n > imcs_tile_size) {
+        imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "N should not be larger than tile size");
+    }
+    result->elem_type = TID_int64;
+    result->opd[0] = imcs_operand(cond);
+    result->next = imcs_filter_first_pos_next;
+    result->prepare = imcs_filter_first_pos_next;
+    result->merge = imcs_filter_first_pos_merge;
+    result->last_pos = n;
+    return result;
+}
+
+
+typedef struct imcs_top_context_t_ {
     size_t top;
-} imcs_top_context_t;                              
+} imcs_top_context_t;
 
 #define IMCS_TOP_DEF(TYPE, MNEM, CMP)                                   \
 static void imcs_##MNEM##_##TYPE##_merge(imcs_iterator_h dst, imcs_iterator_h src)  \
@@ -3066,19 +3069,19 @@ imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, size_t top) \
 }
 
 IMCS_TOP_DEF(int8, top_max, >=)
-IMCS_TOP_DEF(int16, top_max, >=) 
+IMCS_TOP_DEF(int16, top_max, >=)
 IMCS_TOP_DEF(int32, top_max, >=)
-IMCS_TOP_DEF(int64, top_max, >=) 
+IMCS_TOP_DEF(int64, top_max, >=)
 IMCS_TOP_DEF(float, top_max, >=)
-IMCS_TOP_DEF(double, top_max, >=) 
+IMCS_TOP_DEF(double, top_max, >=)
 
 
 IMCS_TOP_DEF(int8, top_min, <=)
-IMCS_TOP_DEF(int16, top_min, <=) 
+IMCS_TOP_DEF(int16, top_min, <=)
 IMCS_TOP_DEF(int32, top_min, <=)
-IMCS_TOP_DEF(int64, top_min, <=) 
+IMCS_TOP_DEF(int64, top_min, <=)
 IMCS_TOP_DEF(float, top_min, <=)
-IMCS_TOP_DEF(double, top_min, <=) 
+IMCS_TOP_DEF(double, top_min, <=)
 
 
 #define IMCS_TOP_POS_DEF(TYPE, MNEM, CMP)                               \
@@ -3189,24 +3192,24 @@ imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, size_t top) \
 }
 
 IMCS_TOP_POS_DEF(int8, top_max_pos, >=)
-IMCS_TOP_POS_DEF(int16, top_max_pos, >=) 
+IMCS_TOP_POS_DEF(int16, top_max_pos, >=)
 IMCS_TOP_POS_DEF(int32, top_max_pos, >=)
-IMCS_TOP_POS_DEF(int64, top_max_pos, >=) 
+IMCS_TOP_POS_DEF(int64, top_max_pos, >=)
 IMCS_TOP_POS_DEF(float, top_max_pos, >=)
-IMCS_TOP_POS_DEF(double, top_max_pos, >=) 
+IMCS_TOP_POS_DEF(double, top_max_pos, >=)
 
 
 IMCS_TOP_POS_DEF(int8, top_min_pos, <=)
-IMCS_TOP_POS_DEF(int16, top_min_pos, <=) 
+IMCS_TOP_POS_DEF(int16, top_min_pos, <=)
 IMCS_TOP_POS_DEF(int32, top_min_pos, <=)
-IMCS_TOP_POS_DEF(int64, top_min_pos, <=) 
+IMCS_TOP_POS_DEF(int64, top_min_pos, <=)
 IMCS_TOP_POS_DEF(float, top_min_pos, <=)
-IMCS_TOP_POS_DEF(double, top_min_pos, <=) 
+IMCS_TOP_POS_DEF(double, top_min_pos, <=)
 
 
 #define SWAP(x, y) ((void)(temp = *(x), *(x) = *(y), *(y) = temp))
 
-typedef struct { 
+typedef struct {
     imcs_order_t order;
 } imcs_sort_context_t;
 
@@ -3626,7 +3629,7 @@ typedef struct {
         result->next = imcs_median_##TYPE##_next;                       \
         return result;                                                  \
     }                                                                   \
-     
+
 IMCS_SORT_DEF(int8)
 IMCS_SORT_DEF(int16)
 IMCS_SORT_DEF(int32)
@@ -3634,7 +3637,7 @@ IMCS_SORT_DEF(int64)
 IMCS_SORT_DEF(float)
 IMCS_SORT_DEF(double)
 
-typedef struct { 
+typedef struct {
     imcs_pos_t permutation[1];
 } imcs_map_context_t;
 
@@ -3688,46 +3691,46 @@ IMCS_MAP_DEF(int64)
 IMCS_MAP_DEF(float)
 IMCS_MAP_DEF(double)
 
-static bool imcs_map_char_next(imcs_iterator_h iterator)    
-{                                                                       
-    size_t i, tile_size;                                            
+static bool imcs_map_char_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     size_t elem_size = iterator->elem_size;
-    imcs_map_context_t* ctx = (imcs_map_context_t*)iterator->context;   
-    if (!iterator->opd[0]->next(iterator->opd[0])) {      
-        return false;                                                      
-    }                                                                   
-    tile_size = iterator->opd[0]->tile_size;                              
-    imcs_sort_array_int64(iterator->opd[0]->tile.arr_int64, ctx->permutation, tile_size, IMCS_ASC_ORDER); 
-    for (i = 0; i < tile_size; i++) {                                   
-        imcs_pos_t seq = iterator->opd[0]->tile.arr_int64[ctx->permutation[i]];           
-        while (true) { 
-           while (iterator ->opd[1]->next_pos <= seq) {                 
-                if (!iterator->opd[1]->next(iterator->opd[1])) {                
-                    return false;                                              
-                }                                                           
-            }                                                               
-            if (iterator->opd[1]->next_pos - seq <= iterator->opd[1]->tile_size) { 
+    imcs_map_context_t* ctx = (imcs_map_context_t*)iterator->context;
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
+    imcs_sort_array_int64(iterator->opd[0]->tile.arr_int64, ctx->permutation, tile_size, IMCS_ASC_ORDER);
+    for (i = 0; i < tile_size; i++) {
+        imcs_pos_t seq = iterator->opd[0]->tile.arr_int64[ctx->permutation[i]];
+        while (true) {
+           while (iterator ->opd[1]->next_pos <= seq) {
+                if (!iterator->opd[1]->next(iterator->opd[1])) {
+                    return false;
+                }
+            }
+            if (iterator->opd[1]->next_pos - seq <= iterator->opd[1]->tile_size) {
                 break;
             }
             iterator->opd[1]->reset(iterator->opd[1]);
-        }                                                               
-        memcpy(iterator->tile.arr_char + elem_size*ctx->permutation[i], iterator->opd[1]->tile.arr_char + elem_size*(seq - (iterator->opd[1]->next_pos - iterator->opd[1]->tile_size)), elem_size); 
-    }                                                                   
-    iterator->next_pos += tile_size;                                 
-    iterator->tile_size = tile_size;                                    
-    return true;                                                    
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_map_char(imcs_iterator_h input, imcs_iterator_h positions) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(input->elem_size, imcs_tile_size*sizeof(int));     
-    IMCS_CHECK_TYPE(positions->elem_type, TID_int64);                   
-    IMCS_CHECK_TYPE(input->elem_type, TID_char);                      
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(positions);                                                
-    result->opd[1] = imcs_operand(input);                                              
-    result->next = imcs_map_char_next;                           
-    return result;                                                    
+        }
+        memcpy(iterator->tile.arr_char + elem_size*ctx->permutation[i], iterator->opd[1]->tile.arr_char + elem_size*(seq - (iterator->opd[1]->next_pos - iterator->opd[1]->tile_size)), elem_size);
+    }
+    iterator->next_pos += tile_size;
+    iterator->tile_size = tile_size;
+    return true;
+}
+
+imcs_iterator_h imcs_map_char(imcs_iterator_h input, imcs_iterator_h positions)
+{
+    imcs_iterator_h result = imcs_new_iterator(input->elem_size, imcs_tile_size*sizeof(int));
+    IMCS_CHECK_TYPE(positions->elem_type, TID_int64);
+    IMCS_CHECK_TYPE(input->elem_type, TID_char);
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(positions);
+    result->opd[1] = imcs_operand(input);
+    result->next = imcs_map_char_next;
+    return result;
 }
 
 #define IMCS_UNIQ_DEF(TYPE)                                             \
@@ -3776,7 +3779,7 @@ imcs_iterator_h imcs_unique_##TYPE(imcs_iterator_h input)               \
     ctx->offset = ctx->count = 0;                                       \
     return result;                                                      \
 }
- 
+
 IMCS_UNIQ_DEF(int8)
 IMCS_UNIQ_DEF(int16)
 IMCS_UNIQ_DEF(int32)
@@ -3784,60 +3787,60 @@ IMCS_UNIQ_DEF(int64)
 IMCS_UNIQ_DEF(float)
 IMCS_UNIQ_DEF(double)
 
-static bool imcs_unique_char_next(imcs_iterator_h iterator)  
-{                                                                       
-    size_t i, j = 0, tile_size;                                     
+static bool imcs_unique_char_next(imcs_iterator_h iterator)
+{
+    size_t i, j = 0, tile_size;
     size_t elem_size = iterator->elem_size;
-    size_t this_tile_size = imcs_tile_size;                  
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context; 
-    while (true) {                                                         
-        if (ctx->offset >= iterator->opd[0]->tile_size) {                 
-            if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                if (j != 0) {                 
-                    iterator->tile_size = j;                            
-                    return true;                                      
-                }                                                       
-                return false;                                              
-            }                                                           
-            ctx->offset = 0;                                            
-        }                                                               
-        tile_size = iterator->opd[0]->tile_size;                          
-        for (i = ctx->offset; i < tile_size; i++) {                     
-            if (iterator->next_pos == 0 || memcmp(ctx->accumulator.val_ptr, iterator->opd[0]->tile.arr_char + elem_size*i, elem_size) != 0) { 
+    size_t this_tile_size = imcs_tile_size;
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;
+    while (true) {
+        if (ctx->offset >= iterator->opd[0]->tile_size) {
+            if (!iterator->opd[0]->next(iterator->opd[0])) {
+                if (j != 0) {
+                    iterator->tile_size = j;
+                    return true;
+                }
+                return false;
+            }
+            ctx->offset = 0;
+        }
+        tile_size = iterator->opd[0]->tile_size;
+        for (i = ctx->offset; i < tile_size; i++) {
+            if (iterator->next_pos == 0 || memcmp(ctx->accumulator.val_ptr, iterator->opd[0]->tile.arr_char + elem_size*i, elem_size) != 0) {
                 memcpy(iterator->tile.arr_char + elem_size*j, iterator->opd[0]->tile.arr_char + elem_size*i, elem_size);
-                memcpy(ctx->accumulator.val_ptr, iterator->opd[0]->tile.arr_char + elem_size*i, elem_size); 
-                iterator->next_pos += 1;                             
-                if (++j == this_tile_size) {                         
-                    ctx->offset = i + 1;                                
-                    iterator->tile_size = this_tile_size;            
-                    return true;                                    
-                }                                                       
-            }                                                           
-        }                                                               
-        ctx->offset = tile_size;                                        
-    }                                                                   
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_unique_char(imcs_iterator_h input) 
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_agg_context_t)); 
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context; 
-    IMCS_CHECK_TYPE(input->elem_type, TID_char);                
-    result->elem_type = TID_char;                       
-    result->opd[0] = imcs_operand(input);                                               
-    result->next = imcs_unique_char_next;                          
-    result->reset = imcs_reset_unary_agg_iterator;                   
-    ctx->offset = ctx->count = 0;                                       
-    ctx->accumulator.val_ptr = (char*)imcs_alloc(input->elem_size);
-    return result;                                                    
+                memcpy(ctx->accumulator.val_ptr, iterator->opd[0]->tile.arr_char + elem_size*i, elem_size);
+                iterator->next_pos += 1;
+                if (++j == this_tile_size) {
+                    ctx->offset = i + 1;
+                    iterator->tile_size = this_tile_size;
+                    return true;
+                }
+            }
+        }
+        ctx->offset = tile_size;
+    }
 }
 
-typedef struct imcs_union_context_t_ {               
+imcs_iterator_h imcs_unique_char(imcs_iterator_h input)
+{
+    imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_agg_context_t));
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context;
+    IMCS_CHECK_TYPE(input->elem_type, TID_char);
+    result->elem_type = TID_char;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_unique_char_next;
+    result->reset = imcs_reset_unary_agg_iterator;
+    ctx->offset = ctx->count = 0;
+    ctx->accumulator.val_ptr = (char*)imcs_alloc(input->elem_size);
+    return result;
+}
+
+typedef struct imcs_union_context_t_ {
     size_t left_offs;
     size_t right_offs;
     bool left_end;
     bool right_end;
-} imcs_union_context_t;                              
+} imcs_union_context_t;
 
 static void imcs_reset_union_iterator(imcs_iterator_h iterator)
 {
@@ -3923,7 +3926,7 @@ imcs_iterator_h imcs_union_##TYPE(imcs_iterator_h left, imcs_iterator_h right) \
     ctx->left_end = ctx->right_end = false;                             \
     return result;                                                      \
 }
- 
+
 IMCS_UNION_DEF(int8)
 IMCS_UNION_DEF(int16)
 IMCS_UNION_DEF(int32)
@@ -3931,51 +3934,51 @@ IMCS_UNION_DEF(int64)
 IMCS_UNION_DEF(float)
 IMCS_UNION_DEF(double)
 
-static bool imcs_limit_next(imcs_iterator_h iterator)  
-{                                                                       
-   size_t j = 0, available;                                     
-   imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context; 
-   size_t elem_size = iterator->elem_size; 
-   size_t this_tile_size = imcs_tile_size;  
-   if ((int64)iterator->first_pos < 0 || (int64)iterator->last_pos < 0) { 
-       imcs_count_t count = imcs_count(iterator->opd[0]);    
+static bool imcs_limit_next(imcs_iterator_h iterator)
+{
+   size_t j = 0, available;
+   imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;
+   size_t elem_size = iterator->elem_size;
+   size_t this_tile_size = imcs_tile_size;
+   if ((int64)iterator->first_pos < 0 || (int64)iterator->last_pos < 0) {
+       imcs_count_t count = imcs_count(iterator->opd[0]);
        iterator->opd[0]->reset(iterator->opd[0]);
-       if ((int64)iterator->last_pos < 0) { 
-           if (count < -iterator->last_pos) { 
+       if ((int64)iterator->last_pos < 0) {
+           if (count < -iterator->last_pos) {
                return false;
            }
            iterator->last_pos = count + iterator->last_pos;
        }
-       if ((int64)iterator->first_pos < 0) { 
+       if ((int64)iterator->first_pos < 0) {
            iterator->first_pos = (count < -iterator->first_pos) ? 0 : count + iterator->first_pos;
        }
    }
-   if (iterator->next_pos < iterator->first_pos) {               
-       do {                                                                
-           if (!iterator->opd[0]->next(iterator->opd[0])) { 
-               return false;                                              
-           }                                                           
-           iterator->next_pos += iterator->opd[0]->tile_size;         
-       } while (iterator->next_pos <= iterator->first_pos);      
-       ctx->offset = (size_t)(iterator->first_pos - iterator->next_pos + iterator->opd[0]->tile_size);  
-       iterator->next_pos = iterator->first_pos;                 
-   }                                                                   
-   while (iterator->next_pos <= iterator->last_pos && j < this_tile_size) {  
-       if (ctx->offset >= iterator->opd[0]->tile_size) {                 
+   if (iterator->next_pos < iterator->first_pos) {
+       do {
            if (!iterator->opd[0]->next(iterator->opd[0])) {
-               if (j != 0) {                   
-                   iterator->tile_size = j;                            
-                   return true;                                      
-               }                                                       
-               return false;                                              
-           }                                                           
-           ctx->offset = 0;                                            
-       }                                                               
-       available = iterator->opd[0]->tile_size - ctx->offset;                          
+               return false;
+           }
+           iterator->next_pos += iterator->opd[0]->tile_size;
+       } while (iterator->next_pos <= iterator->first_pos);
+       ctx->offset = (size_t)(iterator->first_pos - iterator->next_pos + iterator->opd[0]->tile_size);
+       iterator->next_pos = iterator->first_pos;
+   }
+   while (iterator->next_pos <= iterator->last_pos && j < this_tile_size) {
+       if (ctx->offset >= iterator->opd[0]->tile_size) {
+           if (!iterator->opd[0]->next(iterator->opd[0])) {
+               if (j != 0) {
+                   iterator->tile_size = j;
+                   return true;
+               }
+               return false;
+           }
+           ctx->offset = 0;
+       }
+       available = iterator->opd[0]->tile_size - ctx->offset;
        if (available > iterator->last_pos - iterator->next_pos + 1)  {
            available = (size_t)(iterator->last_pos - iterator->next_pos + 1);
        }
-       if (available > this_tile_size - j) { 
+       if (available > this_tile_size - j) {
            available = this_tile_size - j;
        }
        memcpy(&iterator->tile.arr_char[j*elem_size], &iterator->opd[0]->tile.arr_char[ctx->offset*elem_size], available*elem_size);
@@ -3983,47 +3986,47 @@ static bool imcs_limit_next(imcs_iterator_h iterator)
        iterator->next_pos += available;
        j += available;
    }
-   if (j != 0) { 
-       iterator->tile_size = j;                            
-       return true;                                      
-   } 
+   if (j != 0) {
+       iterator->tile_size = j;
+       return true;
+   }
    return false;
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_limit(imcs_iterator_h input, imcs_pos_t from, imcs_pos_t till) 
-{                          
-    if (input->flags & FLAG_RANDOM_ACCESS) { 
+}
+
+imcs_iterator_h imcs_limit(imcs_iterator_h input, imcs_pos_t from, imcs_pos_t till)
+{
+    if (input->flags & FLAG_RANDOM_ACCESS) {
         imcs_subseq_random_access_iterator(input, from, till);
         return input;
     } else {
-        imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_agg_context_t)); 
-        imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context; 
-        result->elem_type = input->elem_type;                       
-        result->opd[0] = imcs_operand(input);                                               
-        result->next_pos = 0;                                            
-        result->first_pos = from;                                        
-        result->last_pos = till;                                         
-        result->next = imcs_limit_next; 
+        imcs_iterator_h result = imcs_new_iterator(input->elem_size, sizeof(imcs_agg_context_t));
+        imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context;
+        result->elem_type = input->elem_type;
+        result->opd[0] = imcs_operand(input);
+        result->next_pos = 0;
+        result->first_pos = from;
+        result->last_pos = till;
+        result->next = imcs_limit_next;
         result->flags = (input->flags & FLAG_TRANSLATED);
-        result->reset = imcs_reset_unary_agg_iterator;                   
-        ctx->offset = ctx->count = 0;                                       
-        return result;                                           
-    }         
+        result->reset = imcs_reset_unary_agg_iterator;
+        ctx->offset = ctx->count = 0;
+        return result;
+    }
 }
 
 
 
-static bool imcs_tee_next(imcs_iterator_h iterator) 
-{                     
-    size_t elem_size = iterator->elem_size; 
+static bool imcs_tee_next(imcs_iterator_h iterator)
+{
+    size_t elem_size = iterator->elem_size;
     imcs_iterator_h input;
-    if (iterator->opd[1]->next_pos > iterator->next_pos) {        
+    if (iterator->opd[1]->next_pos > iterator->next_pos) {
         input = iterator->opd[1];
         Assert(iterator->tile_size == 0 || input->next_pos == iterator->next_pos + input->tile_size);
-    } else {     
-        if (!iterator->opd[0]->next(iterator->opd[0])) { 
-            return false;                                                      
-        }                                                                   
+    } else {
+        if (!iterator->opd[0]->next(iterator->opd[0])) {
+            return false;
+        }
         input = iterator->opd[0];
     }
     memcpy(iterator->tile.arr_char, input->tile.arr_char, input->tile_size*elem_size);
@@ -4038,20 +4041,20 @@ void imcs_tee(imcs_iterator_h out_iterator[2], imcs_iterator_h input)
     out_iterator[1] = imcs_new_iterator(input->elem_size, 0);
 
     out_iterator[0]->elem_type = input->elem_type;
-    out_iterator[0]->opd[0] = imcs_operand(input);                                                
-    out_iterator[0]->opd[1] = out_iterator[1];                                              
-    out_iterator[0]->next = imcs_tee_next;                      
-                     
+    out_iterator[0]->opd[0] = imcs_operand(input);
+    out_iterator[0]->opd[1] = out_iterator[1];
+    out_iterator[0]->next = imcs_tee_next;
+
     out_iterator[1]->elem_type = input->elem_type;
     out_iterator[1]->opd[0] = out_iterator[0]->opd[0];
-    out_iterator[1]->opd[1] = out_iterator[0];                                              
-    out_iterator[1]->next = imcs_tee_next;                      
+    out_iterator[1]->opd[1] = out_iterator[0];
+    out_iterator[1]->next = imcs_tee_next;
 }
 
-static void imcs_histogram_merge(imcs_iterator_h dst, imcs_iterator_h src)      
-{                                                                       
-     size_t i, tile_size = dst->tile_size;                              
-     for (i = 0; i < tile_size; i++) {                                  
+static void imcs_histogram_merge(imcs_iterator_h dst, imcs_iterator_h src)
+{
+     size_t i, tile_size = dst->tile_size;
+     for (i = 0; i < tile_size; i++) {
          dst->tile.arr_int64[i] += src->tile.arr_int64[i];
      }
 }
@@ -4130,8 +4133,8 @@ typedef struct imcs_cross_context_t_ {
 
 static void imcs_cross_reset_iterator(imcs_iterator_h iterator)
 {
-    imcs_cross_context_t* ctx = (imcs_cross_context_t*)iterator->context; 
-    ctx->offset = 0;  
+    imcs_cross_context_t* ctx = (imcs_cross_context_t*)iterator->context;
+    ctx->offset = 0;
     ctx->eos = false;
     ctx->prev_sign = 0;
     ctx->n_zeros = 0;
@@ -4650,18 +4653,18 @@ imcs_iterator_h imcs_asof_join_pos_##TS_TYPE(imcs_iterator_h ts1, imcs_iterator_
 IMCS_ASOF_JOIN_POS_DEF(int32);
 IMCS_ASOF_JOIN_POS_DEF(int64);
 
-typedef struct imcs_join_context_t_ {                   
+typedef struct imcs_join_context_t_ {
     size_t left_offs;
     size_t right_offs;
 } imcs_join_context_t;
 
-static void imcs_join_reset(imcs_iterator_h iterator)   
-{                                                                       
-    imcs_join_context_t* ctx = (imcs_join_context_t*)iterator->context; 
-    ctx->left_offs = 0;                                                      
-    ctx->right_offs = 0;                                                      
-    imcs_reset_iterator(iterator);                                      
-}                                                                       
+static void imcs_join_reset(imcs_iterator_h iterator)
+{
+    imcs_join_context_t* ctx = (imcs_join_context_t*)iterator->context;
+    ctx->left_offs = 0;
+    ctx->right_offs = 0;
+    imcs_reset_iterator(iterator);
+}
 
 #define IMCS_JOIN_POS_DEF(TS_TYPE)                                      \
 static bool imcs_join_pos_##TS_TYPE##_next(imcs_iterator_h iterator)    \
@@ -4797,58 +4800,58 @@ static uint32 murmur_hash3_32(const void* key, const int len, const uint32 seed)
 {
     const uint8* data = (const uint8*)key;
     const int nblocks = len / 4;
-    
+
     uint32 h1 = seed;
-    
+
     uint32 c1 = 0xcc9e2d51;
     uint32 c2 = 0x1b873593;
     int i;
     uint32 k1;
     const uint8* tail;
     const uint32* blocks = (const uint32 *)(data + nblocks*4);
-    
+
     for(i = -nblocks; i; i++)
     {
         k1 = blocks[i];
-        
+
         k1 *= c1;
         k1 = ROTL32(k1,15);
         k1 *= c2;
-        
+
         h1 ^= k1;
-        h1 = ROTL32(h1,13); 
+        h1 = ROTL32(h1,13);
         h1 = h1*5+0xe6546b64;
     }
-    
+
     tail = (const uint8*)(data + nblocks*4);
-    
+
     k1 = 0;
 
     switch(len & 3)
     {
-      case 3: 
+      case 3:
         k1 ^= tail[2] << 16;
         /* no break */
-      case 2: 
+      case 2:
         k1 ^= tail[1] << 8;
         /* no break */
-      case 1: 
+      case 1:
         k1 ^= tail[0];
         k1 *= c1;
-        k1 = ROTL32(k1,15); 
-        k1 *= c2; 
+        k1 = ROTL32(k1,15);
+        k1 *= c2;
         h1 ^= k1;
     }
-    
-    h1 ^= len;   
+
+    h1 ^= len;
     h1 ^= h1 >> 16;
     h1 *= 0x85ebca6b;
     h1 ^= h1 >> 13;
     h1 *= 0xc2b2ae35;
     h1 ^= h1 >> 16;
-    
+
     return h1;
-} 
+}
 
 inline static void calculate_zero_bits(uint32 h, uint8* max_zero_bits)
 {
@@ -4858,7 +4861,7 @@ inline static void calculate_zero_bits(uint32 h, uint8* max_zero_bits)
         h >>= 1;
         zero_bits += 1;
     }
-    if (max_zero_bits[j] < zero_bits) { 
+    if (max_zero_bits[j] < zero_bits) {
         max_zero_bits[j] = zero_bits;
     }
 }
@@ -4872,8 +4875,8 @@ inline static void calculate_hash_functions(void const* val, int size, uint8* ma
 inline static void merge_zero_bits(uint8* dst_max_zero_bits, uint8* src_max_zero_bits)
 {
     int i;
-    for (i = 0; i < N_HASHES; i++) { 
-        if (dst_max_zero_bits[i] < src_max_zero_bits[i]) { 
+    for (i = 0; i < N_HASHES; i++) {
+        if (dst_max_zero_bits[i] < src_max_zero_bits[i]) {
             dst_max_zero_bits[i] = src_max_zero_bits[i];
         }
     }
@@ -4890,7 +4893,7 @@ static uint32 approximate_distinct_count(uint8* max_zero_bits)
     {
         c += 1 / pow(2., (double)max_zero_bits[i]);
     }
-    E = alpha_m * m * m / c;    
+    E = alpha_m * m * m / c;
 
     if (E <= (5 / 2. * m))
     {
@@ -4912,147 +4915,147 @@ static uint32 approximate_distinct_count(uint8* max_zero_bits)
     return (uint32)E;
 }
 
-typedef struct {                                                        
+typedef struct {
     uint8 max_zero_bits[N_HASHES];
-} imcs_agg_approxdc_context_t;                                  
+} imcs_agg_approxdc_context_t;
 
-static void imcs_approxdc_merge(imcs_iterator_h dst, imcs_iterator_h src) 
-{                                                                       
-    imcs_agg_approxdc_context_t* src_ctx = (imcs_agg_approxdc_context_t*)src->context; 
-    imcs_agg_approxdc_context_t* dst_ctx = (imcs_agg_approxdc_context_t*)dst->context; 
+static void imcs_approxdc_merge(imcs_iterator_h dst, imcs_iterator_h src)
+{
+    imcs_agg_approxdc_context_t* src_ctx = (imcs_agg_approxdc_context_t*)src->context;
+    imcs_agg_approxdc_context_t* dst_ctx = (imcs_agg_approxdc_context_t*)dst->context;
     merge_zero_bits(dst_ctx->max_zero_bits, src_ctx->max_zero_bits);
     dst->tile.arr_int64[0] = approximate_distinct_count(dst_ctx->max_zero_bits);
-}                             
-                                          
-static bool imcs_approxdc_next(imcs_iterator_h iterator) 
-{                                                                       
-    imcs_agg_approxdc_context_t* ctx = (imcs_agg_approxdc_context_t*)iterator->context; 
-    size_t i, tile_size;                                            
+}
+
+static bool imcs_approxdc_next(imcs_iterator_h iterator)
+{
+    imcs_agg_approxdc_context_t* ctx = (imcs_agg_approxdc_context_t*)iterator->context;
+    size_t i, tile_size;
     uint8 max_zero_bits[N_HASHES] = {0};
     size_t elem_size = iterator->opd[0]->elem_size;
-    if (iterator->flags & FLAG_PREPARED) {                              
-        return iterator->tile_size != 0;                                
-    }                                                                   
-    if (iterator->next_pos != 0) {                                   
-        return false;                                        
-    }                                                                   
-    while (iterator->opd[0]->next(iterator->opd[0])) { 
-        tile_size = iterator->opd[0]->tile_size;                      
-        for (i = 0; i < tile_size; i++) { 
+    if (iterator->flags & FLAG_PREPARED) {
+        return iterator->tile_size != 0;
+    }
+    if (iterator->next_pos != 0) {
+        return false;
+    }
+    while (iterator->opd[0]->next(iterator->opd[0])) {
+        tile_size = iterator->opd[0]->tile_size;
+        for (i = 0; i < tile_size; i++) {
             calculate_hash_functions(iterator->opd[0]->tile.arr_char + i*elem_size, elem_size, max_zero_bits);
         }
     }
-    iterator->next_pos = 1;                                          
-    iterator->tile_size = 1;                                            
+    iterator->next_pos = 1;
+    iterator->tile_size = 1;
     iterator->tile.arr_int64[0] = approximate_distinct_count(max_zero_bits);
     memcpy(ctx->max_zero_bits, max_zero_bits, sizeof max_zero_bits);
-    return true;                                                    
-}                                                                       
- 
-imcs_iterator_h imcs_approxdc(imcs_iterator_h input) 
-{                                                                       
+    return true;
+}
+
+imcs_iterator_h imcs_approxdc(imcs_iterator_h input)
+{
     imcs_iterator_h result = imcs_new_iterator(sizeof(int64), sizeof(imcs_agg_approxdc_context_t));
-    result->elem_type = TID_int64;                   
-    result->opd[0] = imcs_operand(input);                                               
-    result->next = imcs_approxdc_next;                      
-    result->prepare = imcs_approxdc_next;                   
-    result->merge = imcs_approxdc_merge;                    
-    return result;                                                    
+    result->elem_type = TID_int64;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_approxdc_next;
+    result->prepare = imcs_approxdc_next;
+    result->merge = imcs_approxdc_merge;
+    return result;
 }
 
 
-static bool imcs_group_approxdc_next(imcs_iterator_h iterator) 
-{                                                                       
-    size_t i, j = 0, tile_size;                                     
-    size_t this_tile_size = imcs_tile_size;                         
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context; 
-    size_t grp_elem_size = iterator->opd[1]->elem_size;                  
-    size_t inp_elem_size = iterator->opd[0]->elem_size;                  
-    while (true) {                                                         
-        if (ctx->offset >= iterator->opd[1]->tile_size) {                
-            if (!iterator->opd[1]->next(iterator->opd[1])) { 
-                if (j + ctx->count != 0) {    
-                    if (ctx->count != 0) {                              
+static bool imcs_group_approxdc_next(imcs_iterator_h iterator)
+{
+    size_t i, j = 0, tile_size;
+    size_t this_tile_size = imcs_tile_size;
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;
+    size_t grp_elem_size = iterator->opd[1]->elem_size;
+    size_t inp_elem_size = iterator->opd[0]->elem_size;
+    while (true) {
+        if (ctx->offset >= iterator->opd[1]->tile_size) {
+            if (!iterator->opd[1]->next(iterator->opd[1])) {
+                if (j + ctx->count != 0) {
+                    if (ctx->count != 0) {
                         iterator->tile.arr_int64[j++] = approximate_distinct_count((uint8*)ctx->history.arr_int8);
-                        iterator->next_pos += 1;                     
-                        ctx->count = 0;                                 
-                    }                                                   
-                    iterator->tile_size = j;                            
-                    return true;                                      
-                }                                                       
-                return false;                                                  
-            } else {                                                    
-                Assert(ctx->offset == iterator->opd[0]->tile_size); 
-                if (!iterator->opd[0]->next(iterator->opd[0])) { 
-                    return false;                                              
-                }                                                       
-                if (iterator->opd[1]->tile_size > iterator->opd[0]->tile_size) { 
+                        iterator->next_pos += 1;
+                        ctx->count = 0;
+                    }
+                    iterator->tile_size = j;
+                    return true;
+                }
+                return false;
+            } else {
+                Assert(ctx->offset == iterator->opd[0]->tile_size);
+                if (!iterator->opd[0]->next(iterator->opd[0])) {
+                    return false;
+                }
+                if (iterator->opd[1]->tile_size > iterator->opd[0]->tile_size) {
                     imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); \
                 }
-            }                                                           
-            ctx->offset = 0;                                            
-        }                                                               
-        tile_size = iterator->opd[1]->tile_size;                         
-        for (i = ctx->offset; i < tile_size; i++) {                     
-            bool same;                                              
-            switch (grp_elem_size) {                                        
-              case 1:                                                   
-                same = ctx->accumulator.val_int8 == iterator->opd[1]->tile.arr_int8[i]; 
-                ctx->accumulator.val_int8 = iterator->opd[1]->tile.arr_int8[i];       
-                break;                                                  
-              case 2:                                                   
-                same = ctx->accumulator.val_int16 == iterator->opd[1]->tile.arr_int16[i]; 
-                ctx->accumulator.val_int16 = iterator->opd[1]->tile.arr_int16[i];       
-                break;                                                  
-              case 4:                                                   
-                same = ctx->accumulator.val_int32 == iterator->opd[1]->tile.arr_int32[i]; 
-                ctx->accumulator.val_int32 = iterator->opd[1]->tile.arr_int32[i];       
-                break;                                                  
-              case 8:                                                  
-                same = ctx->accumulator.val_int64 == iterator->opd[1]->tile.arr_int64[i]; 
-                ctx->accumulator.val_int64 = iterator->opd[1]->tile.arr_int64[i];       
+            }
+            ctx->offset = 0;
+        }
+        tile_size = iterator->opd[1]->tile_size;
+        for (i = ctx->offset; i < tile_size; i++) {
+            bool same;
+            switch (grp_elem_size) {
+              case 1:
+                same = ctx->accumulator.val_int8 == iterator->opd[1]->tile.arr_int8[i];
+                ctx->accumulator.val_int8 = iterator->opd[1]->tile.arr_int8[i];
                 break;
-              default:                                                  
-                same = memcmp(ctx->accumulator.val_ptr, &iterator->opd[1]->tile.arr_char[i*grp_elem_size], grp_elem_size) == 0; 
-                memcpy(ctx->accumulator.val_ptr, &iterator->opd[1]->tile.arr_char[i*grp_elem_size], grp_elem_size);              
-            }                                                           
-            if (ctx->count != 0 && !same) {                             
+              case 2:
+                same = ctx->accumulator.val_int16 == iterator->opd[1]->tile.arr_int16[i];
+                ctx->accumulator.val_int16 = iterator->opd[1]->tile.arr_int16[i];
+                break;
+              case 4:
+                same = ctx->accumulator.val_int32 == iterator->opd[1]->tile.arr_int32[i];
+                ctx->accumulator.val_int32 = iterator->opd[1]->tile.arr_int32[i];
+                break;
+              case 8:
+                same = ctx->accumulator.val_int64 == iterator->opd[1]->tile.arr_int64[i];
+                ctx->accumulator.val_int64 = iterator->opd[1]->tile.arr_int64[i];
+                break;
+              default:
+                same = memcmp(ctx->accumulator.val_ptr, &iterator->opd[1]->tile.arr_char[i*grp_elem_size], grp_elem_size) == 0;
+                memcpy(ctx->accumulator.val_ptr, &iterator->opd[1]->tile.arr_char[i*grp_elem_size], grp_elem_size);
+            }
+            if (ctx->count != 0 && !same) {
                 iterator->tile.arr_int64[j] = approximate_distinct_count((uint8*)ctx->history.arr_int8);
-                iterator->next_pos += 1;                             
-                ctx->count = 0;                                         
-                j += 1;                                                 
-            }                                                           
+                iterator->next_pos += 1;
+                ctx->count = 0;
+                j += 1;
+            }
             if (ctx->count == 0) {
                 memset(ctx->history.arr_int8, 0, N_HASHES);
             }
             calculate_hash_functions(iterator->opd[0]->tile.arr_char + i*inp_elem_size, inp_elem_size, (uint8*)ctx->history.arr_int8);
-            ctx->count += 1;                                            
-            if (j == this_tile_size) {                               
-                ctx->offset = i + 1;                                    
-                iterator->tile_size = this_tile_size;                
-                return true;                                        
-            }                                                           
-        }                                                               
-        ctx->offset = tile_size;                                        
-    }                                                                   
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_group_approxdc(imcs_iterator_h input, imcs_iterator_h group_by) 
-{                                                                       
+            ctx->count += 1;
+            if (j == this_tile_size) {
+                ctx->offset = i + 1;
+                iterator->tile_size = this_tile_size;
+                return true;
+            }
+        }
+        ctx->offset = tile_size;
+    }
+}
+
+imcs_iterator_h imcs_group_approxdc(imcs_iterator_h input, imcs_iterator_h group_by)
+{
     imcs_iterator_h result = imcs_new_iterator(sizeof(int64), sizeof(imcs_agg_context_t) + N_HASHES);
-    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context; 
-    result->elem_type = TID_int64;                   
-    result->opd[0] = imcs_operand(input);                                               
-    result->opd[1] = imcs_operand(group_by);                                           
-    result->next = imcs_group_approxdc_next;                      
-    ctx->offset = ctx->count = 0;           
-    if (group_by->elem_type == TID_char) { 
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context;
+    result->elem_type = TID_int64;
+    result->opd[0] = imcs_operand(input);
+    result->opd[1] = imcs_operand(group_by);
+    result->next = imcs_group_approxdc_next;
+    ctx->offset = ctx->count = 0;
+    if (group_by->elem_type == TID_char) {
         ctx->accumulator.val_ptr = (char*)imcs_alloc(group_by->elem_size);
     }
-    return result;                                                    
+    return result;
 }
-                                                                        
-typedef struct imcs_hash_elem_t_ { 
+
+typedef struct imcs_hash_elem_t_ {
     imcs_key_t grp;
     imcs_key_t agg;
     struct imcs_hash_elem_t_* collision;
@@ -5064,9 +5067,9 @@ typedef struct imcs_hash_elem_t_ {
 #define IMCS_HASH_BASKET_N_ELEMS 1024
 #define IMCS_HASH_BASKET_SIZE    (IMCS_HASH_BASKET_N_ELEMS*sizeof(imcs_hash_elem_t))
 
-typedef struct imcs_hash_basket_t_ {    
+typedef struct imcs_hash_basket_t_ {
     struct imcs_hash_basket_t_* next;
-    union { 
+    union {
         imcs_hash_elem_t elems[IMCS_HASH_BASKET_N_ELEMS];
         char keys[IMCS_HASH_BASKET_SIZE];
     } u;
@@ -5079,19 +5082,19 @@ typedef struct {
     imcs_hash_elem_t** table;
 } imcs_hash_t;
 
-typedef struct { 
+typedef struct {
     imcs_hash_t* hash;
-} imcs_shared_hash_t;    
+} imcs_shared_hash_t;
 
-typedef struct imcs_hash_iterator_context_t_ { 
+typedef struct imcs_hash_iterator_context_t_ {
     size_t n_groups;
     size_t chain_no;
-    imcs_hash_elem_t* curr_elem;    
+    imcs_hash_elem_t* curr_elem;
     imcs_shared_hash_t* shared;
     imcs_hash_t* private_hash;
 } imcs_hash_iterator_context_t;
 
-static void imcs_hash_agg_reset(imcs_iterator_h iterator) 
+static void imcs_hash_agg_reset(imcs_iterator_h iterator)
 {
     imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context;
     ctx->curr_elem = 0;
@@ -5403,13 +5406,13 @@ IMCS_HASH_AGG_DEF(int16, int16, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULAT
 IMCS_HASH_AGG_DEF(int32, int32, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULATE, IMCS_HASH_AGG_RESULT)
 IMCS_HASH_AGG_DEF(int64, int64, any, IMCS_HASH_AGG_INIT, IMCS_HASH_ANY_ACCUMULATE, IMCS_HASH_AGG_RESULT)
 
-void imcs_hash_any_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+void imcs_hash_any_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ANY is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ANY is supported only for integer types");
 }
-void imcs_hash_any_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+void imcs_hash_any_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ANY is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ANY is supported only for integer types");
 }
 
 #define IMCS_HASH_ALL_ACCUMULATE(acc, val) acc &= val
@@ -5418,13 +5421,13 @@ IMCS_HASH_AGG_DEF(int16, int16, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULAT
 IMCS_HASH_AGG_DEF(int32, int32, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULATE, IMCS_HASH_AGG_RESULT)
 IMCS_HASH_AGG_DEF(int64, int64, all, IMCS_HASH_AGG_INIT, IMCS_HASH_ALL_ACCUMULATE, IMCS_HASH_AGG_RESULT)
 
-void imcs_hash_all_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+void imcs_hash_all_float(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ALL is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ALL is supported only for integer types");
 }
-void imcs_hash_all_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
+void imcs_hash_all_double(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by)
 {
-    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ALL is supported only for integer types"); 
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_HASH_ALL is supported only for integer types");
 }
 
 #define IMCS_HASH_AVG_RESULT(acc, count) acc/count
@@ -5436,7 +5439,7 @@ IMCS_HASH_AGG_DEF(double, float, avg, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULA
 IMCS_HASH_AGG_DEF(double, double, avg, IMCS_HASH_AGG_INIT, IMCS_HASH_SUM_ACCUMULATE, IMCS_HASH_AVG_RESULT)
 
 #define IMCS_HASH_COUNT_INIT(val) 0
-#define IMCS_HASH_COUNT_ACCUMULATE(acc, val) 
+#define IMCS_HASH_COUNT_ACCUMULATE(acc, val)
 #define IMCS_HASH_COUNT_RESULT(acc, count) count
 
 void imcs_hash_count_int64(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by);
@@ -5447,288 +5450,288 @@ void imcs_hash_count(imcs_iterator_h result[2], imcs_iterator_h group_by)
     imcs_hash_count_int64(result, NULL, group_by);
 }
 
-static bool imcs_hash_initialize_approxdc(imcs_iterator_h iterator) 
-{                                                                       
-    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context; 
-    imcs_hash_t* hash;                                               
-    size_t i, tile_size;                                            
-    size_t agg_elem_size = iterator->opd[0]->elem_size;                  
-    size_t grp_elem_size = iterator->opd[1]->elem_size;                  
-    imcs_hash_elem_t* elem;                                          
-    imcs_key_t val;                                                
-    size_t elems_basket_used = IMCS_HASH_BASKET_N_ELEMS;         
-    size_t keys_basket_used = IMCS_HASH_BASKET_SIZE;             
-    imcs_hash_basket_t* elems_basket = 0;                            
-    imcs_hash_basket_t* keys_basket = 0;                             
-    size_t distinct_count = 0;                                      
-    size_t hash_table_size = ctx->n_groups;                         
-    size_t threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1; 
-                                                                        
-    hash = (imcs_hash_t*)imcs_alloc(sizeof(imcs_hash_t));     
-    hash->table_size = hash_table_size;                                 
-    hash->table = (imcs_hash_elem_t**)imcs_alloc(hash_table_size*sizeof(imcs_hash_elem_t*)); 
-    hash->baskets = 0;                                                  
-    memset(hash->table, 0, sizeof(imcs_hash_elem_t*)*hash_table_size); 
-    ctx->private_hash = hash;                                           
-    val.val_int64 = 0;                                                   
-    while (iterator->opd[1]->next(iterator->opd[1])) { 
-        if (iterator->opd[0] != 0) {                                      
-            if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { 
-                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); 
-            }                                                           
-        }                                                               
-        tile_size = iterator->opd[1]->tile_size;                         
-        for (i = 0; i < tile_size; i++) {                               
-            uint32 hash_value = murmur_hash3_32(iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size, MURMUR_SEED); 
-            uint32 hash_index = hash_value % hash_table_size;            
-            imcs_hash_elem_t** pprev = &hash->table[hash_index];    
-            int64 diff = 1;
-            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
-                memcpy(&val.val_int8, iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size); 
-                for (elem = *pprev; elem != NULL && (diff = elem->grp.val_int64 - val.val_int64) < 0; elem = *(pprev = &elem->collision));
-            } else {                                                    
-                val.val_ptr = iterator->opd[1]->tile.arr_char + i*grp_elem_size; 
-                for (elem = *pprev; elem != NULL && (diff = memcmp(elem->grp.val_ptr, val.val_ptr, grp_elem_size)) < 0; elem = *(pprev = &elem->collision));
-            } 
-            if (diff == 0) {                                         
-                calculate_hash_functions(iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size, (uint8*)elem->agg.val_ptr); 
-            } else {                                                    
-                if (elems_basket_used == IMCS_HASH_BASKET_N_ELEMS) { 
-                    elems_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                    elems_basket->next = hash->baskets;                 
-                    hash->baskets = elems_basket;                       
-                    elems_basket_used = 0;                              
-                }                                                       
-                elem = &elems_basket->u.elems[elems_basket_used++];     
-                if (grp_elem_size <= sizeof(imcs_key_t)) {               
-                    elem->grp.val_int64 = val.val_int64;                  
-                } else {                                                
-                    if (keys_basket_used + grp_elem_size > IMCS_HASH_BASKET_SIZE) { 
-                        keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                        keys_basket->next = hash->baskets;              
-                        hash->baskets = keys_basket;                    
-                        keys_basket_used = 0;                           
-                    }                                                   
-                    elem->grp.val_ptr = &keys_basket->u.keys[keys_basket_used]; 
-                    keys_basket_used += grp_elem_size;                      
-                    memcpy(elem->grp.val_ptr, val.val_ptr, grp_elem_size); 
-                }               
-                if (keys_basket_used + N_HASHES > IMCS_HASH_BASKET_SIZE) { 
-                    keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                    keys_basket->next = hash->baskets;              
-                    hash->baskets = keys_basket;                    
-                    keys_basket_used = 0;                           
-                }                                                   
-                elem->agg.val_ptr = &keys_basket->u.keys[keys_basket_used]; 
-                keys_basket_used += N_HASHES;          
-                memset(elem->agg.val_ptr, 0, N_HASHES);
-                calculate_hash_functions(iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size, (uint8*)elem->agg.val_ptr); 
-                elem->grp_hash = hash_value;                            
-                elem->collision = *pprev;              
-                *pprev = elem;                         
+static bool imcs_hash_initialize_approxdc(imcs_iterator_h iterator)
+{
+    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context;
+    imcs_hash_t* hash;
+    size_t i, tile_size;
+    size_t agg_elem_size = iterator->opd[0]->elem_size;
+    size_t grp_elem_size = iterator->opd[1]->elem_size;
+    imcs_hash_elem_t* elem;
+    imcs_key_t val;
+    size_t elems_basket_used = IMCS_HASH_BASKET_N_ELEMS;
+    size_t keys_basket_used = IMCS_HASH_BASKET_SIZE;
+    imcs_hash_basket_t* elems_basket = 0;
+    imcs_hash_basket_t* keys_basket = 0;
+    size_t distinct_count = 0;
+    size_t hash_table_size = ctx->n_groups;
+    size_t threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
 
-                if (++distinct_count >= threshold) {                    
-                    imcs_hash_elem_t** table;                        
-                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);                     
-                    size_t j;                                   
-                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    for (j = 0; j < hash_table_size; j++) {             
-                        imcs_hash_elem_t* next;                      
-                        for (elem = hash->table[j]; elem != NULL; elem = next) { 
-                            imcs_hash_elem_t* ep;      
-                            next = elem->collision;                     
-                            pprev = &table[elem->grp_hash % new_hash_table_size];    
-                            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
+    hash = (imcs_hash_t*)imcs_alloc(sizeof(imcs_hash_t));
+    hash->table_size = hash_table_size;
+    hash->table = (imcs_hash_elem_t**)imcs_alloc(hash_table_size*sizeof(imcs_hash_elem_t*));
+    hash->baskets = 0;
+    memset(hash->table, 0, sizeof(imcs_hash_elem_t*)*hash_table_size);
+    ctx->private_hash = hash;
+    val.val_int64 = 0;
+    while (iterator->opd[1]->next(iterator->opd[1])) {
+        if (iterator->opd[0] != 0) {
+            if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) {
+                imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence");
+            }
+        }
+        tile_size = iterator->opd[1]->tile_size;
+        for (i = 0; i < tile_size; i++) {
+            uint32 hash_value = murmur_hash3_32(iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size, MURMUR_SEED);
+            uint32 hash_index = hash_value % hash_table_size;
+            imcs_hash_elem_t** pprev = &hash->table[hash_index];
+            int64 diff = 1;
+            if (grp_elem_size <= sizeof(imcs_key_t)) {
+                memcpy(&val.val_int8, iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size);
+                for (elem = *pprev; elem != NULL && (diff = elem->grp.val_int64 - val.val_int64) < 0; elem = *(pprev = &elem->collision));
+            } else {
+                val.val_ptr = iterator->opd[1]->tile.arr_char + i*grp_elem_size;
+                for (elem = *pprev; elem != NULL && (diff = memcmp(elem->grp.val_ptr, val.val_ptr, grp_elem_size)) < 0; elem = *(pprev = &elem->collision));
+            }
+            if (diff == 0) {
+                calculate_hash_functions(iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size, (uint8*)elem->agg.val_ptr);
+            } else {
+                if (elems_basket_used == IMCS_HASH_BASKET_N_ELEMS) {
+                    elems_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                    elems_basket->next = hash->baskets;
+                    hash->baskets = elems_basket;
+                    elems_basket_used = 0;
+                }
+                elem = &elems_basket->u.elems[elems_basket_used++];
+                if (grp_elem_size <= sizeof(imcs_key_t)) {
+                    elem->grp.val_int64 = val.val_int64;
+                } else {
+                    if (keys_basket_used + grp_elem_size > IMCS_HASH_BASKET_SIZE) {
+                        keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                        keys_basket->next = hash->baskets;
+                        hash->baskets = keys_basket;
+                        keys_basket_used = 0;
+                    }
+                    elem->grp.val_ptr = &keys_basket->u.keys[keys_basket_used];
+                    keys_basket_used += grp_elem_size;
+                    memcpy(elem->grp.val_ptr, val.val_ptr, grp_elem_size);
+                }
+                if (keys_basket_used + N_HASHES > IMCS_HASH_BASKET_SIZE) {
+                    keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                    keys_basket->next = hash->baskets;
+                    hash->baskets = keys_basket;
+                    keys_basket_used = 0;
+                }
+                elem->agg.val_ptr = &keys_basket->u.keys[keys_basket_used];
+                keys_basket_used += N_HASHES;
+                memset(elem->agg.val_ptr, 0, N_HASHES);
+                calculate_hash_functions(iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size, (uint8*)elem->agg.val_ptr);
+                elem->grp_hash = hash_value;
+                elem->collision = *pprev;
+                *pprev = elem;
+
+                if (++distinct_count >= threshold) {
+                    imcs_hash_elem_t** table;
+                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);
+                    size_t j;
+                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    for (j = 0; j < hash_table_size; j++) {
+                        imcs_hash_elem_t* next;
+                        for (elem = hash->table[j]; elem != NULL; elem = next) {
+                            imcs_hash_elem_t* ep;
+                            next = elem->collision;
+                            pprev = &table[elem->grp_hash % new_hash_table_size];
+                            if (grp_elem_size <= sizeof(imcs_key_t)) {
                                 for (ep = *pprev; ep != NULL && (diff = ep->grp.val_int64 - elem->grp.val_int64) < 0; ep = *(pprev = &ep->collision));
-                            } else {                                                    
+                            } else {
                                 for (ep = *pprev; ep != NULL && (diff = memcmp(ep->grp.val_ptr, elem->grp.val_ptr, grp_elem_size)) < 0; ep = *(pprev = &ep->collision));
                             }
                             elem->collision = *pprev;
                             *pprev = elem;
-                        }                                               
-                    }                                                   
-                    hash->table_size = hash_table_size = new_hash_table_size; 
-                    imcs_free(hash->table);                          
-                    hash->table = table;                                
-                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1; 
-                }                                                       
-            }                                                           
-        }                                                               
-    }                                                                   
+                        }
+                    }
+                    hash->table_size = hash_table_size = new_hash_table_size;
+                    imcs_free(hash->table);
+                    hash->table = table;
+                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
+                }
+            }
+        }
+    }
     hash->table_used = distinct_count;
     return true;
-}                                                                       
-static void imcs_hash_merge_approxdc(imcs_iterator_h dst, imcs_iterator_h src) 
-{                                                                       
-    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)dst->context; 
-    imcs_hash_iterator_context_t* src_ctx  = (imcs_hash_iterator_context_t*)src->context; 
-    imcs_hash_t* hash = ctx->private_hash;                           
-    imcs_hash_t* src_hash = src_ctx->private_hash;                   
-    size_t i, n;                                                    
-    size_t grp_elem_size = dst->opd[1]->elem_size;                       
-    imcs_hash_elem_t* elem;                                          
-    imcs_hash_elem_t* next;                                          
-    imcs_hash_elem_t* src_elem;                                      
-    size_t distinct_count = hash->table_used;                       
-    size_t hash_table_size = hash->table_size;                      
-    size_t threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1; 
-                                                                        
-    for (i = 0, n = src_hash->table_size; i < n; i++) {                 
-        for (src_elem = src_hash->table[i]; src_elem != NULL; src_elem = next) { 
-            uint32 hash_value = src_elem->grp_hash;                      
-            uint32 hash_index = hash_value % hash_table_size;            
-            imcs_hash_elem_t** pprev = &hash->table[hash_index];    
+}
+static void imcs_hash_merge_approxdc(imcs_iterator_h dst, imcs_iterator_h src)
+{
+    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)dst->context;
+    imcs_hash_iterator_context_t* src_ctx  = (imcs_hash_iterator_context_t*)src->context;
+    imcs_hash_t* hash = ctx->private_hash;
+    imcs_hash_t* src_hash = src_ctx->private_hash;
+    size_t i, n;
+    size_t grp_elem_size = dst->opd[1]->elem_size;
+    imcs_hash_elem_t* elem;
+    imcs_hash_elem_t* next;
+    imcs_hash_elem_t* src_elem;
+    size_t distinct_count = hash->table_used;
+    size_t hash_table_size = hash->table_size;
+    size_t threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
+
+    for (i = 0, n = src_hash->table_size; i < n; i++) {
+        for (src_elem = src_hash->table[i]; src_elem != NULL; src_elem = next) {
+            uint32 hash_value = src_elem->grp_hash;
+            uint32 hash_index = hash_value % hash_table_size;
+            imcs_hash_elem_t** pprev = &hash->table[hash_index];
             int64 diff = 1;
-            next = src_elem->collision;                                 
-            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
+            next = src_elem->collision;
+            if (grp_elem_size <= sizeof(imcs_key_t)) {
                 for (elem = *pprev; elem != NULL && (diff = elem->grp.val_int64 - src_elem->grp.val_int64) < 0; elem = *(pprev = &elem->collision));
-            } else {                                                    
+            } else {
                 for (elem = *pprev; elem != NULL && (diff = memcmp(elem->grp.val_ptr, src_elem->grp.val_ptr, grp_elem_size)) < 0; elem = *(pprev = &elem->collision));
-            } 
-            if (diff == 0) {                                         
+            }
+            if (diff == 0) {
                 merge_zero_bits((uint8*)elem->agg.val_ptr, (uint8*)src_elem->agg.val_ptr);
-            } else {                                                    
+            } else {
                 src_elem->collision = *pprev;
-                *pprev = src_elem;                      
-                if (++distinct_count >= threshold) {                    
-                    imcs_hash_elem_t** table;                        
-                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);                     
-                    size_t j;                                   
-                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    for (j = 0; j < hash_table_size; j++) {             
-                        imcs_hash_elem_t* next;                      
-                        for (elem = hash->table[j]; elem != NULL; elem = next) { 
-                            imcs_hash_elem_t* ep;      
-                            next = elem->collision;                     
-                            pprev = &table[elem->grp_hash % new_hash_table_size];    
-                            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
+                *pprev = src_elem;
+                if (++distinct_count >= threshold) {
+                    imcs_hash_elem_t** table;
+                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);
+                    size_t j;
+                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    for (j = 0; j < hash_table_size; j++) {
+                        imcs_hash_elem_t* next;
+                        for (elem = hash->table[j]; elem != NULL; elem = next) {
+                            imcs_hash_elem_t* ep;
+                            next = elem->collision;
+                            pprev = &table[elem->grp_hash % new_hash_table_size];
+                            if (grp_elem_size <= sizeof(imcs_key_t)) {
                                 for (ep = *pprev; ep != NULL && (diff = ep->grp.val_int64 - elem->grp.val_int64) < 0; ep = *(pprev = &ep->collision));
-                            } else {                                                    
+                            } else {
                                 for (ep = *pprev; ep != NULL && (diff = memcmp(ep->grp.val_ptr, elem->grp.val_ptr, grp_elem_size)) < 0; ep = *(pprev = &ep->collision));
                             }
                             elem->collision = *pprev;
                             *pprev = elem;
-                        }                                               
-                    }                                                   
-                    hash->table_size = hash_table_size = new_hash_table_size; 
-                    imcs_free(hash->table);                          
-                    hash->table = table;                                
-                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1; 
-                }                                                                       
-            }                                                           
-        }                                                               
-    }                                                                   
-    hash->table_used = distinct_count;                                  
-    ctx->shared->hash = hash;                                           
-}                                                                       
-static bool imcs_hash_approxdc_next_agg(imcs_iterator_h iterator) 
-{                                                                       
-    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context; 
-    size_t this_tile_size = imcs_tile_size;                         
-    size_t i;                                                       
-    imcs_hash_elem_t* elem;                                          
-    size_t chain_no;                                                
-    size_t table_size;                                              
-    imcs_hash_t* hash = ctx->shared->hash;                           
-    if (!hash) {                                                        
-        imcs_hash_initialize_approxdc(iterator); 
-        hash = ctx->shared->hash = ctx->private_hash;                                       
-    }                                                                   
-    elem = ctx->curr_elem;                                              
-    chain_no = ctx->chain_no;                                           
-    table_size = hash->table_size;                                      
-    for (i = 0; i < this_tile_size; i++) {                           
-        while (elem == NULL && chain_no < table_size) {                    
-            elem = hash->table[chain_no++];                        
-        }                                                               
-        if (elem != NULL) {                                                
-            iterator->tile.arr_int64[i] = approximate_distinct_count((uint8*)elem->agg.val_ptr); 
-            elem = elem->collision;                                     
-        } else {                                                        
-            break;                                                      
-        }                                                               
-    }                                                                   
-    ctx->curr_elem = elem;                                              
-    ctx->chain_no = chain_no;                                           
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
-    return i != 0;                        
-}                                                                       
-static bool imcs_hash_approxdc_next_grp(imcs_iterator_h iterator) 
-{                                                                       
-    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context; 
+                        }
+                    }
+                    hash->table_size = hash_table_size = new_hash_table_size;
+                    imcs_free(hash->table);
+                    hash->table = table;
+                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
+                }
+            }
+        }
+    }
+    hash->table_used = distinct_count;
+    ctx->shared->hash = hash;
+}
+static bool imcs_hash_approxdc_next_agg(imcs_iterator_h iterator)
+{
+    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context;
+    size_t this_tile_size = imcs_tile_size;
+    size_t i;
+    imcs_hash_elem_t* elem;
+    size_t chain_no;
+    size_t table_size;
+    imcs_hash_t* hash = ctx->shared->hash;
+    if (!hash) {
+        imcs_hash_initialize_approxdc(iterator);
+        hash = ctx->shared->hash = ctx->private_hash;
+    }
+    elem = ctx->curr_elem;
+    chain_no = ctx->chain_no;
+    table_size = hash->table_size;
+    for (i = 0; i < this_tile_size; i++) {
+        while (elem == NULL && chain_no < table_size) {
+            elem = hash->table[chain_no++];
+        }
+        if (elem != NULL) {
+            iterator->tile.arr_int64[i] = approximate_distinct_count((uint8*)elem->agg.val_ptr);
+            elem = elem->collision;
+        } else {
+            break;
+        }
+    }
+    ctx->curr_elem = elem;
+    ctx->chain_no = chain_no;
+    iterator->tile_size = i;
+    iterator->next_pos += i;
+    return i != 0;
+}
+static bool imcs_hash_approxdc_next_grp(imcs_iterator_h iterator)
+{
+    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context;
     size_t this_tile_size = imcs_tile_size;                         \
-    size_t i;                                                       
-    imcs_hash_elem_t* elem;                                          
-    size_t chain_no;                                                
-    size_t table_size;                                              
-    size_t grp_elem_size = iterator->elem_size;                  
-    imcs_hash_t* hash = ctx->shared->hash;                           
-    if (!hash) {                                                        
-        imcs_hash_initialize_approxdc(iterator); 
-        hash = ctx->shared->hash = ctx->private_hash;                                       
-    }                                                                   
-    elem = ctx->curr_elem;                                              
-    chain_no = ctx->chain_no;                                           
-    table_size = hash->table_size;                                      
-    for (i = 0; i < this_tile_size; i++) {                           
-        while (elem == NULL && chain_no < table_size) {                    
-            elem = hash->table[chain_no++];                             
-        }                                                               
-        if (elem != NULL) {                                                
-            memcpy(iterator->tile.arr_char + i*grp_elem_size, (grp_elem_size <= sizeof(imcs_key_t)) ? (char*)&elem->grp.val_int8 : elem->grp.val_ptr, grp_elem_size); 
-            elem = elem->collision;                                     
-        } else {                                                        
-            break;                                                      
-        }                                                               
-    }                                                                   
-    ctx->curr_elem = elem;                                              
-    ctx->chain_no = chain_no;                                           
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
-    return i != 0;                        
-}                                                                       
-void imcs_hash_approxdc(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by) 
-{                                                                       
-    imcs_iterator_h result_agg = imcs_new_iterator(sizeof(imcs_count_t), sizeof(imcs_hash_iterator_context_t)); 
-    imcs_iterator_h result_grp = imcs_new_iterator(group_by->elem_size, sizeof(imcs_hash_iterator_context_t)); 
-    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)result_agg->context; 
-    imcs_shared_hash_t* shared;                                      
-    shared = (imcs_shared_hash_t*)imcs_alloc(sizeof(imcs_shared_hash_t)); 
-    shared->hash = 0;                                                   
+    size_t i;
+    imcs_hash_elem_t* elem;
+    size_t chain_no;
+    size_t table_size;
+    size_t grp_elem_size = iterator->elem_size;
+    imcs_hash_t* hash = ctx->shared->hash;
+    if (!hash) {
+        imcs_hash_initialize_approxdc(iterator);
+        hash = ctx->shared->hash = ctx->private_hash;
+    }
+    elem = ctx->curr_elem;
+    chain_no = ctx->chain_no;
+    table_size = hash->table_size;
+    for (i = 0; i < this_tile_size; i++) {
+        while (elem == NULL && chain_no < table_size) {
+            elem = hash->table[chain_no++];
+        }
+        if (elem != NULL) {
+            memcpy(iterator->tile.arr_char + i*grp_elem_size, (grp_elem_size <= sizeof(imcs_key_t)) ? (char*)&elem->grp.val_int8 : elem->grp.val_ptr, grp_elem_size);
+            elem = elem->collision;
+        } else {
+            break;
+        }
+    }
+    ctx->curr_elem = elem;
+    ctx->chain_no = chain_no;
+    iterator->tile_size = i;
+    iterator->next_pos += i;
+    return i != 0;
+}
+void imcs_hash_approxdc(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by)
+{
+    imcs_iterator_h result_agg = imcs_new_iterator(sizeof(imcs_count_t), sizeof(imcs_hash_iterator_context_t));
+    imcs_iterator_h result_grp = imcs_new_iterator(group_by->elem_size, sizeof(imcs_hash_iterator_context_t));
+    imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)result_agg->context;
+    imcs_shared_hash_t* shared;
+    shared = (imcs_shared_hash_t*)imcs_alloc(sizeof(imcs_shared_hash_t));
+    shared->hash = 0;
 
     ctx->n_groups = imcs_hash_table_init_size;
-    ctx->shared = shared;                                               
-    ctx->curr_elem = 0;                                                 
-    ctx->chain_no = 0;                                                  
-    result_agg->opd[0] = imcs_operand(input);                                           
-    result_agg->opd[1] = imcs_operand(group_by);                                       
-    result_agg->elem_type = TID_int64;               
-    result_agg->next = imcs_hash_approxdc_next_agg;    
-    result_agg->reset = imcs_hash_agg_reset;                         
-    result_agg->prepare = imcs_hash_initialize_approxdc;     
-    result_agg->merge = imcs_hash_merge_approxdc;            
-                                                                        
-    ctx = (imcs_hash_iterator_context_t*)result_grp->context;        
+    ctx->shared = shared;
+    ctx->curr_elem = 0;
+    ctx->chain_no = 0;
+    result_agg->opd[0] = imcs_operand(input);
+    result_agg->opd[1] = imcs_operand(group_by);
+    result_agg->elem_type = TID_int64;
+    result_agg->next = imcs_hash_approxdc_next_agg;
+    result_agg->reset = imcs_hash_agg_reset;
+    result_agg->prepare = imcs_hash_initialize_approxdc;
+    result_agg->merge = imcs_hash_merge_approxdc;
+
+    ctx = (imcs_hash_iterator_context_t*)result_grp->context;
     ctx->n_groups = imcs_hash_table_init_size;
-    ctx->shared = shared;                                               
-    ctx->curr_elem = 0;                                                 
-    ctx->chain_no = 0;                                                  
-    result_grp->opd[0] = imcs_operand(input);                                           
-    result_grp->opd[1] = imcs_operand(group_by);                                       
-    result_grp->elem_type = group_by->elem_type;                        
-    result_grp->next = imcs_hash_approxdc_next_grp;    
-    result_grp->reset = imcs_hash_agg_reset;                         
-    
+    ctx->shared = shared;
+    ctx->curr_elem = 0;
+    ctx->chain_no = 0;
+    result_grp->opd[0] = imcs_operand(input);
+    result_grp->opd[1] = imcs_operand(group_by);
+    result_grp->elem_type = group_by->elem_type;
+    result_grp->next = imcs_hash_approxdc_next_grp;
+    result_grp->reset = imcs_hash_agg_reset;
+
     result[0] = result_agg;
     result[1] = result_grp;
 }
 
 
 
-typedef struct { 
+typedef struct {
     imcs_hash_iterator_context_t groups;
     size_t n_pairs;
     size_t min_occurrences;
@@ -5736,468 +5739,468 @@ typedef struct {
 } imcs_dup_hash_iterator_context_t;
 
 
-static bool imcs_dup_hash_initialize(imcs_iterator_h iterator) 
-{                                                                       
-    imcs_dup_hash_iterator_context_t* ctx = (imcs_dup_hash_iterator_context_t*)iterator->context; 
+static bool imcs_dup_hash_initialize(imcs_iterator_h iterator)
+{
+    imcs_dup_hash_iterator_context_t* ctx = (imcs_dup_hash_iterator_context_t*)iterator->context;
     imcs_hash_t* hash;
     imcs_hash_t* agg_hash;
     size_t i, tile_size;
-    size_t agg_elem_size = iterator->opd[0]->elem_size; 
-    size_t grp_elem_size = iterator->opd[1]->elem_size; 
-    imcs_hash_elem_t* elem;                                          
-    imcs_key_t grp_val;                                                
-    imcs_key_t agg_val;                                                
-    size_t grp_elems_basket_used = IMCS_HASH_BASKET_N_ELEMS;         
-    size_t grp_keys_basket_used = IMCS_HASH_BASKET_SIZE;             
-    size_t agg_elems_basket_used = IMCS_HASH_BASKET_N_ELEMS;         
-    size_t agg_keys_basket_used = IMCS_HASH_BASKET_SIZE;             
-    imcs_hash_basket_t* grp_elems_basket = 0;                            
-    imcs_hash_basket_t* grp_keys_basket = 0;                             
-    imcs_hash_basket_t* agg_elems_basket = 0;                            
-    imcs_hash_basket_t* agg_keys_basket = 0;                             
-    size_t hash_table_size = ctx->groups.n_groups; 
-    size_t agg_hash_table_size = ctx->n_pairs; 
+    size_t agg_elem_size = iterator->opd[0]->elem_size;
+    size_t grp_elem_size = iterator->opd[1]->elem_size;
+    imcs_hash_elem_t* elem;
+    imcs_key_t grp_val;
+    imcs_key_t agg_val;
+    size_t grp_elems_basket_used = IMCS_HASH_BASKET_N_ELEMS;
+    size_t grp_keys_basket_used = IMCS_HASH_BASKET_SIZE;
+    size_t agg_elems_basket_used = IMCS_HASH_BASKET_N_ELEMS;
+    size_t agg_keys_basket_used = IMCS_HASH_BASKET_SIZE;
+    imcs_hash_basket_t* grp_elems_basket = 0;
+    imcs_hash_basket_t* grp_keys_basket = 0;
+    imcs_hash_basket_t* agg_elems_basket = 0;
+    imcs_hash_basket_t* agg_keys_basket = 0;
+    size_t hash_table_size = ctx->groups.n_groups;
+    size_t agg_hash_table_size = ctx->n_pairs;
     size_t threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
-    size_t agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1; 
-    size_t distinct_count = 0;                                      
-    size_t agg_distinct_count = 0;                                      
+    size_t agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1;
+    size_t distinct_count = 0;
+    size_t agg_distinct_count = 0;
 
     hash = (imcs_hash_t*)imcs_alloc(sizeof(imcs_hash_t));
-    hash->table = (imcs_hash_elem_t**)imcs_alloc(hash_table_size*sizeof(imcs_hash_elem_t*)); 
-    memset(hash->table, 0, hash_table_size*sizeof(imcs_hash_elem_t*)); 
+    hash->table = (imcs_hash_elem_t**)imcs_alloc(hash_table_size*sizeof(imcs_hash_elem_t*));
+    memset(hash->table, 0, hash_table_size*sizeof(imcs_hash_elem_t*));
     hash->table_size = hash_table_size;
     ctx->groups.private_hash = hash;
 
     agg_hash = (imcs_hash_t*)imcs_alloc(sizeof(imcs_hash_t));
     agg_hash->table = (imcs_hash_elem_t**)imcs_alloc(agg_hash_table_size*sizeof(imcs_hash_elem_t*));
-    memset(agg_hash->table, 0, agg_hash_table_size*sizeof(imcs_hash_elem_t*)); 
+    memset(agg_hash->table, 0, agg_hash_table_size*sizeof(imcs_hash_elem_t*));
     agg_hash->table_size = agg_hash_table_size;
     ctx->agg_hash = agg_hash;
 
-    hash->baskets = 0;                                             
-    agg_hash->baskets = 0;                                             
+    hash->baskets = 0;
+    agg_hash->baskets = 0;
     agg_hash->table_size = agg_hash_table_size;
-    grp_val.val_int64 = 0;                                                   
-    agg_val.val_int64 = 0;                                                   
+    grp_val.val_int64 = 0;
+    agg_val.val_int64 = 0;
 
-    while (iterator->opd[1]->next(iterator->opd[1])) {   
-        if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) { 
-            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence"); 
+    while (iterator->opd[1]->next(iterator->opd[1])) {
+        if (!iterator->opd[0]->next(iterator->opd[0]) || iterator->opd[0]->tile_size != iterator->opd[1]->tile_size) {
+            imcs_ereport(ERRCODE_INVALID_PARAMETER_VALUE, "group by sequence doesn't match values sequence");
         }
-        tile_size = iterator->opd[1]->tile_size; 
-        for (i = 0; i < tile_size; i++) {      
-            uint32 grp_hash_value = murmur_hash3_32(iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size, MURMUR_SEED); 
-            uint32 agg_hash_value = murmur_hash3_32(iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size, grp_hash_value);         
+        tile_size = iterator->opd[1]->tile_size;
+        for (i = 0; i < tile_size; i++) {
+            uint32 grp_hash_value = murmur_hash3_32(iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size, MURMUR_SEED);
+            uint32 agg_hash_value = murmur_hash3_32(iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size, grp_hash_value);
             uint32 grp_index = grp_hash_value % hash_table_size;
-            uint32 agg_index = agg_hash_value % agg_hash_table_size;         
-            imcs_hash_elem_t* agg_elem = 0;    
-            imcs_hash_elem_t** pprev = &hash->table[grp_index];    
+            uint32 agg_index = agg_hash_value % agg_hash_table_size;
+            imcs_hash_elem_t* agg_elem = 0;
+            imcs_hash_elem_t** pprev = &hash->table[grp_index];
             int64 diff = 1;
-            if (agg_elem_size <= sizeof(imcs_key_t)) { 
-                memcpy(&agg_val.val_int8, iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size); 
-            } else { 
+            if (agg_elem_size <= sizeof(imcs_key_t)) {
+                memcpy(&agg_val.val_int8, iterator->opd[0]->tile.arr_char + i*agg_elem_size, agg_elem_size);
+            } else {
                 agg_val.val_ptr = iterator->opd[0]->tile.arr_char + i*agg_elem_size;
             }
-            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
-                memcpy(&grp_val.val_int8, iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size); 
+            if (grp_elem_size <= sizeof(imcs_key_t)) {
+                memcpy(&grp_val.val_int8, iterator->opd[1]->tile.arr_char + i*grp_elem_size, grp_elem_size);
                 for (elem = *pprev; elem != NULL && (diff = elem->grp.val_int64 - grp_val.val_int64) < 0; elem = *(pprev = &elem->collision));
-            } else {                                                    
-                grp_val.val_ptr = iterator->opd[1]->tile.arr_char + i*grp_elem_size; 
+            } else {
+                grp_val.val_ptr = iterator->opd[1]->tile.arr_char + i*grp_elem_size;
                 for (elem = *pprev; elem != NULL && (diff = memcmp(elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size)) < 0; elem = *(pprev = &elem->collision));
-            } 
-            if (diff != 0) {                                         
-                if (grp_elems_basket_used == IMCS_HASH_BASKET_N_ELEMS) {          
-                    grp_elems_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                    grp_elems_basket->next = hash->baskets;                  
-                    hash->baskets = grp_elems_basket;                        
-                    grp_elems_basket_used = 0;                                    
-                }             
-                elem = &grp_elems_basket->u.elems[grp_elems_basket_used++];       
-                if (grp_elem_size <= sizeof(imcs_key_t)) {               
-                    elem->grp.val_int64 = grp_val.val_int64;                  
-                } else {                                                
-                    if (grp_keys_basket_used + grp_elem_size > IMCS_HASH_BASKET_SIZE) { 
-                        grp_keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                        grp_keys_basket->next = hash->baskets;              
-                        hash->baskets = grp_keys_basket;                    
-                        grp_keys_basket_used = 0;                           
-                    }                                                   
-                    elem->grp.val_ptr = &grp_keys_basket->u.keys[grp_keys_basket_used]; 
-                    grp_keys_basket_used += grp_elem_size;                      
-                    memcpy(elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size); 
-                }                                                       
+            }
+            if (diff != 0) {
+                if (grp_elems_basket_used == IMCS_HASH_BASKET_N_ELEMS) {
+                    grp_elems_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                    grp_elems_basket->next = hash->baskets;
+                    hash->baskets = grp_elems_basket;
+                    grp_elems_basket_used = 0;
+                }
+                elem = &grp_elems_basket->u.elems[grp_elems_basket_used++];
+                if (grp_elem_size <= sizeof(imcs_key_t)) {
+                    elem->grp.val_int64 = grp_val.val_int64;
+                } else {
+                    if (grp_keys_basket_used + grp_elem_size > IMCS_HASH_BASKET_SIZE) {
+                        grp_keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                        grp_keys_basket->next = hash->baskets;
+                        hash->baskets = grp_keys_basket;
+                        grp_keys_basket_used = 0;
+                    }
+                    elem->grp.val_ptr = &grp_keys_basket->u.keys[grp_keys_basket_used];
+                    grp_keys_basket_used += grp_elem_size;
+                    memcpy(elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size);
+                }
                 elem->count = 0;
                 elem->grp_hash = grp_hash_value;
                 elem->collision = *pprev;
-                *pprev = elem;                             
+                *pprev = elem;
 
-                if (++distinct_count >= threshold) {                    
-                    imcs_hash_elem_t** table;                         
-                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);                     
-                    size_t j;                                   
-                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    for (j = 0; j < hash_table_size; j++) {             
-                        imcs_hash_elem_t *curr, *next;                      
-                        for (curr = hash->table[j]; curr != NULL; curr = next) { 
-                            imcs_hash_elem_t* ep;      
-                            next = curr->collision;                     
-                            pprev = &table[curr->grp_hash % new_hash_table_size];    
-                            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
+                if (++distinct_count >= threshold) {
+                    imcs_hash_elem_t** table;
+                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);
+                    size_t j;
+                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    for (j = 0; j < hash_table_size; j++) {
+                        imcs_hash_elem_t *curr, *next;
+                        for (curr = hash->table[j]; curr != NULL; curr = next) {
+                            imcs_hash_elem_t* ep;
+                            next = curr->collision;
+                            pprev = &table[curr->grp_hash % new_hash_table_size];
+                            if (grp_elem_size <= sizeof(imcs_key_t)) {
                                 for (ep = *pprev; ep != NULL && (diff = ep->grp.val_int64 - curr->grp.val_int64) < 0; ep = *(pprev = &ep->collision));
-                            } else {                                                    
+                            } else {
                                 for (ep = *pprev; ep != NULL && (diff = memcmp(ep->grp.val_ptr, curr->grp.val_ptr, grp_elem_size)) < 0; ep = *(pprev = &ep->collision));
                             }
                             curr->collision = *pprev;
                             *pprev = curr;
-                        }                                               
-                    }                                                   
-                    hash->table_size = hash_table_size = new_hash_table_size; 
-                    imcs_free(hash->table);                          
-                    hash->table = table;                                
-                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1; 
-                }                                                                        
-            } else {    
-                if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value || memcmp(agg_elem->agg.val_ptr, agg_val.val_ptr, agg_elem_size) != 0 || memcmp(agg_elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size) != 0); 
+                        }
+                    }
+                    hash->table_size = hash_table_size = new_hash_table_size;
+                    imcs_free(hash->table);
+                    hash->table = table;
+                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
+                }
+            } else {
+                if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value || memcmp(agg_elem->agg.val_ptr, agg_val.val_ptr, agg_elem_size) != 0 || memcmp(agg_elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size) != 0);
                          agg_elem = agg_elem->collision);
-                } else if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size <= sizeof(imcs_key_t)) { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value || memcmp(agg_elem->agg.val_ptr, agg_val.val_ptr, agg_elem_size) != 0 || agg_elem->grp.val_int64 != grp_val.val_int64); 
+                } else if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size <= sizeof(imcs_key_t)) {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value || memcmp(agg_elem->agg.val_ptr, agg_val.val_ptr, agg_elem_size) != 0 || agg_elem->grp.val_int64 != grp_val.val_int64);
                          agg_elem = agg_elem->collision);
-                } else if (agg_elem_size <= sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value || agg_elem->agg.val_int64 != agg_val.val_int64 || memcmp(agg_elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size) != 0); 
+                } else if (agg_elem_size <= sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value || agg_elem->agg.val_int64 != agg_val.val_int64 || memcmp(agg_elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size) != 0);
                          agg_elem = agg_elem->collision);
-                } else { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg.val_int64 != agg_val.val_int64 || agg_elem->grp.val_int64 != grp_val.val_int64); 
+                } else {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg.val_int64 != agg_val.val_int64 || agg_elem->grp.val_int64 != grp_val.val_int64);
                          agg_elem = agg_elem->collision);
                 }
             }
             if (agg_elem == NULL) {
-                if (agg_elems_basket_used == IMCS_HASH_BASKET_N_ELEMS) {          
-                    agg_elems_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                    agg_elems_basket->next = agg_hash->baskets;                  
-                    agg_hash->baskets = agg_elems_basket;                        
-                    agg_elems_basket_used = 0;                                    
-                }                                                       
-                if (++agg_distinct_count >= agg_threshold) {                    
-                    imcs_hash_elem_t** table;                         
-                    size_t new_hash_table_size = imcs_next_prime_number(agg_hash_table_size);                     
-                    size_t j;                                   
-                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    for (j = 0; j < agg_hash_table_size; j++) {             
-                        imcs_hash_elem_t* next;                      
-                        imcs_hash_elem_t* curr;                      
-                        for (curr = agg_hash->table[j]; curr != NULL; curr = next) { 
-                            uint32 eh = curr->agg_hash % new_hash_table_size; 
-                            next = curr->collision;                     
-                            curr->collision = table[eh];                
-                            table[eh] = curr;                           
-                        }                                               
-                    }                                                   
-                    agg_hash->table_size = agg_hash_table_size = new_hash_table_size; 
-                    imcs_free(agg_hash->table);                          
-                    agg_hash->table = table;                                
-                    agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1; 
-                    agg_index = agg_hash_value % agg_hash_table_size;   
-                }                                                                        
-                agg_elem = &agg_elems_basket->u.elems[agg_elems_basket_used++];       
-                if (agg_elem_size <= sizeof(imcs_key_t)) {               
-                    agg_elem->agg.val_int64 = agg_val.val_int64;                  
-                } else {                                                
-                    if (agg_keys_basket_used + agg_elem_size > IMCS_HASH_BASKET_SIZE) { 
-                        agg_keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                        agg_keys_basket->next = agg_hash->baskets;              
-                        agg_hash->baskets = agg_keys_basket;                    
-                        agg_keys_basket_used = 0;                           
-                    }                                                   
-                    agg_elem->agg.val_ptr = &agg_keys_basket->u.keys[agg_keys_basket_used]; 
-                    agg_keys_basket_used += agg_elem_size;                      
-                    memcpy(agg_elem->agg.val_ptr, agg_val.val_ptr, agg_elem_size); 
-                }                                                       
-                if (grp_elem_size <= sizeof(imcs_key_t)) {               
-                    agg_elem->grp.val_int64 = grp_val.val_int64;                  
-                } else {                                                
-                    if (agg_keys_basket_used + grp_elem_size > IMCS_HASH_BASKET_SIZE) { 
-                        agg_keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t)); 
-                        agg_keys_basket->next = agg_hash->baskets;              
-                        agg_hash->baskets = agg_keys_basket;                    
-                        agg_keys_basket_used = 0;                           
-                    }                                                   
-                    agg_elem->grp.val_ptr = &agg_keys_basket->u.keys[agg_keys_basket_used]; 
-                    agg_keys_basket_used += grp_elem_size;                      
-                    memcpy(agg_elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size); 
-                }                                                       
+                if (agg_elems_basket_used == IMCS_HASH_BASKET_N_ELEMS) {
+                    agg_elems_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                    agg_elems_basket->next = agg_hash->baskets;
+                    agg_hash->baskets = agg_elems_basket;
+                    agg_elems_basket_used = 0;
+                }
+                if (++agg_distinct_count >= agg_threshold) {
+                    imcs_hash_elem_t** table;
+                    size_t new_hash_table_size = imcs_next_prime_number(agg_hash_table_size);
+                    size_t j;
+                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    for (j = 0; j < agg_hash_table_size; j++) {
+                        imcs_hash_elem_t* next;
+                        imcs_hash_elem_t* curr;
+                        for (curr = agg_hash->table[j]; curr != NULL; curr = next) {
+                            uint32 eh = curr->agg_hash % new_hash_table_size;
+                            next = curr->collision;
+                            curr->collision = table[eh];
+                            table[eh] = curr;
+                        }
+                    }
+                    agg_hash->table_size = agg_hash_table_size = new_hash_table_size;
+                    imcs_free(agg_hash->table);
+                    agg_hash->table = table;
+                    agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1;
+                    agg_index = agg_hash_value % agg_hash_table_size;
+                }
+                agg_elem = &agg_elems_basket->u.elems[agg_elems_basket_used++];
+                if (agg_elem_size <= sizeof(imcs_key_t)) {
+                    agg_elem->agg.val_int64 = agg_val.val_int64;
+                } else {
+                    if (agg_keys_basket_used + agg_elem_size > IMCS_HASH_BASKET_SIZE) {
+                        agg_keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                        agg_keys_basket->next = agg_hash->baskets;
+                        agg_hash->baskets = agg_keys_basket;
+                        agg_keys_basket_used = 0;
+                    }
+                    agg_elem->agg.val_ptr = &agg_keys_basket->u.keys[agg_keys_basket_used];
+                    agg_keys_basket_used += agg_elem_size;
+                    memcpy(agg_elem->agg.val_ptr, agg_val.val_ptr, agg_elem_size);
+                }
+                if (grp_elem_size <= sizeof(imcs_key_t)) {
+                    agg_elem->grp.val_int64 = grp_val.val_int64;
+                } else {
+                    if (agg_keys_basket_used + grp_elem_size > IMCS_HASH_BASKET_SIZE) {
+                        agg_keys_basket = (imcs_hash_basket_t*)imcs_alloc(sizeof(imcs_hash_basket_t));
+                        agg_keys_basket->next = agg_hash->baskets;
+                        agg_hash->baskets = agg_keys_basket;
+                        agg_keys_basket_used = 0;
+                    }
+                    agg_elem->grp.val_ptr = &agg_keys_basket->u.keys[agg_keys_basket_used];
+                    agg_keys_basket_used += grp_elem_size;
+                    memcpy(agg_elem->grp.val_ptr, grp_val.val_ptr, grp_elem_size);
+                }
                 agg_elem->agg_hash = agg_hash_value;
                 agg_elem->grp_hash = grp_hash_value;
                 agg_elem->count = 0;
-                agg_elem->collision = agg_hash->table[agg_index];                  
-                agg_hash->table[agg_index] = agg_elem;                             
+                agg_elem->collision = agg_hash->table[agg_index];
+                agg_hash->table[agg_index] = agg_elem;
             }
-            if (++agg_elem->count == ctx->min_occurrences) { 
+            if (++agg_elem->count == ctx->min_occurrences) {
                 elem->count += 1;
-            }                
-        }                                                               
-    }  
+            }
+        }
+    }
     agg_hash->table_used = agg_distinct_count;
     hash->table_used = distinct_count;
     return true;
-}                       
-                                                
-static void imcs_dup_hash_merge(imcs_iterator_h dst, imcs_iterator_h src) 
-{                                                                       
-    imcs_dup_hash_iterator_context_t* ctx = (imcs_dup_hash_iterator_context_t*)dst->context; 
-    imcs_dup_hash_iterator_context_t* src_ctx = (imcs_dup_hash_iterator_context_t*)src->context; 
-    imcs_hash_t* hash = ctx->groups.private_hash;                                   
+}
+
+static void imcs_dup_hash_merge(imcs_iterator_h dst, imcs_iterator_h src)
+{
+    imcs_dup_hash_iterator_context_t* ctx = (imcs_dup_hash_iterator_context_t*)dst->context;
+    imcs_dup_hash_iterator_context_t* src_ctx = (imcs_dup_hash_iterator_context_t*)src->context;
+    imcs_hash_t* hash = ctx->groups.private_hash;
     imcs_hash_t* agg_hash = ctx->agg_hash;
-    imcs_hash_t* src_agg_hash = src_ctx->agg_hash;                                   
-    imcs_hash_t* src_hash = src_ctx->groups.private_hash;                                   
+    imcs_hash_t* src_agg_hash = src_ctx->agg_hash;
+    imcs_hash_t* src_hash = src_ctx->groups.private_hash;
     size_t i, n;
-    size_t agg_elem_size = dst->opd[0]->elem_size; 
-    size_t grp_elem_size = dst->opd[1]->elem_size; 
-    imcs_hash_elem_t* elem;                                          
-    imcs_hash_elem_t* next;                                          
+    size_t agg_elem_size = dst->opd[0]->elem_size;
+    size_t grp_elem_size = dst->opd[1]->elem_size;
+    imcs_hash_elem_t* elem;
+    imcs_hash_elem_t* next;
     imcs_hash_elem_t* src_elem;
-    size_t hash_table_size = hash->table_size; 
-    size_t agg_hash_table_size = agg_hash->table_size; 
+    size_t hash_table_size = hash->table_size;
+    size_t agg_hash_table_size = agg_hash->table_size;
     size_t threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
-    size_t agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1; 
-    size_t distinct_count = hash->table_used;                                      
-    size_t agg_distinct_count = agg_hash->table_used;                                      
-    
-    for (i = 0, n = src_agg_hash->table_size; i < n; i++) { 
-        for (src_elem = src_agg_hash->table[i]; src_elem != NULL; src_elem = next) { 
+    size_t agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1;
+    size_t distinct_count = hash->table_used;
+    size_t agg_distinct_count = agg_hash->table_used;
+
+    for (i = 0, n = src_agg_hash->table_size; i < n; i++) {
+        for (src_elem = src_agg_hash->table[i]; src_elem != NULL; src_elem = next) {
             uint32 grp_hash_value = src_elem->grp_hash;
             uint32 agg_hash_value = src_elem->agg_hash;
             uint32 grp_index = grp_hash_value % hash_table_size;
-            uint32 agg_index = agg_hash_value % agg_hash_table_size;         
-            imcs_hash_elem_t* agg_elem = NULL;    
-            imcs_hash_elem_t** pprev = &hash->table[grp_index];    
+            uint32 agg_index = agg_hash_value % agg_hash_table_size;
+            imcs_hash_elem_t* agg_elem = NULL;
+            imcs_hash_elem_t** pprev = &hash->table[grp_index];
             int64 diff = 1;
 
             next = src_elem->collision;
-            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
+            if (grp_elem_size <= sizeof(imcs_key_t)) {
                 for (elem = *pprev; elem != NULL && (diff = elem->grp.val_int64 - src_elem->grp.val_int64) < 0; elem = *(pprev = &elem->collision));
-            } else {                                                    
+            } else {
                 for (elem = *pprev; elem != NULL && (diff = memcmp(elem->grp.val_ptr, src_elem->grp.val_ptr, grp_elem_size)) < 0; elem = *(pprev = &elem->collision));
-            } 
-            if (diff != 0) {                                         
+            }
+            if (diff != 0) {
                 elem = src_hash->table[grp_hash_value % src_hash->table_size]; /* resuse element from source merged table */
                 src_hash->table[grp_hash_value % src_hash->table_size] = elem->collision;
                 elem->grp_hash = grp_hash_value;
                 elem->grp = src_elem->grp;
                 elem->count = 0;
                 elem->collision = *pprev;
-                *pprev = elem;                                             
+                *pprev = elem;
 
-                if (++distinct_count >= threshold) {                    
-                    imcs_hash_elem_t** table;                         
-                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);                     
-                    size_t j;                                   
-                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    for (j = 0; j < hash_table_size; j++) {             
-                        imcs_hash_elem_t *curr, *next;                      
-                        for (curr = hash->table[j]; curr != NULL; curr = next) { 
-                            imcs_hash_elem_t* ep;      
-                            next = curr->collision;                     
-                            pprev = &table[curr->grp_hash % new_hash_table_size];    
-                            if (grp_elem_size <= sizeof(imcs_key_t)) {                   
+                if (++distinct_count >= threshold) {
+                    imcs_hash_elem_t** table;
+                    size_t new_hash_table_size = imcs_next_prime_number(hash_table_size);
+                    size_t j;
+                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    for (j = 0; j < hash_table_size; j++) {
+                        imcs_hash_elem_t *curr, *next;
+                        for (curr = hash->table[j]; curr != NULL; curr = next) {
+                            imcs_hash_elem_t* ep;
+                            next = curr->collision;
+                            pprev = &table[curr->grp_hash % new_hash_table_size];
+                            if (grp_elem_size <= sizeof(imcs_key_t)) {
                                 for (ep = *pprev; ep != NULL && (diff = ep->grp.val_int64 - curr->grp.val_int64) < 0; ep = *(pprev = &ep->collision));
-                            } else {                                                    
+                            } else {
                                 for (ep = *pprev; ep != NULL && (diff = memcmp(ep->grp.val_ptr, curr->grp.val_ptr, grp_elem_size)) < 0; ep = *(pprev = &ep->collision));
                             }
                             curr->collision = *pprev;
                             *pprev = curr;
-                        }                                               
-                    }                                                   
-                    hash->table_size = hash_table_size = new_hash_table_size; 
-                    imcs_free(hash->table);                          
-                    hash->table = table;                                
-                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1; 
-                }                                                                        
-            } else {    
-                if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
+                        }
+                    }
+                    hash->table_size = hash_table_size = new_hash_table_size;
+                    imcs_free(hash->table);
+                    hash->table = table;
+                    threshold = (size_t)(imcs_hash_table_load_factor*hash_table_size)-1;
+                }
+            } else {
+                if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) {
+                    for (agg_elem = agg_hash->table[agg_index];
                          agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value
-                                              || memcmp(agg_elem->agg.val_ptr, src_elem->agg.val_ptr, agg_elem_size) != 0 
-                                              || memcmp(agg_elem->grp.val_ptr, src_elem->grp.val_ptr, grp_elem_size) != 0); 
+                                              || memcmp(agg_elem->agg.val_ptr, src_elem->agg.val_ptr, agg_elem_size) != 0
+                                              || memcmp(agg_elem->grp.val_ptr, src_elem->grp.val_ptr, grp_elem_size) != 0);
                          agg_elem = agg_elem->collision);
-                } else if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size <= sizeof(imcs_key_t)) { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value 
-                                              || memcmp(agg_elem->agg.val_ptr, src_elem->agg.val_ptr, agg_elem_size) != 0 
-                                              || agg_elem->grp.val_int64 != src_elem->grp.val_int64); 
+                } else if (agg_elem_size > sizeof(imcs_key_t) && grp_elem_size <= sizeof(imcs_key_t)) {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value
+                                              || memcmp(agg_elem->agg.val_ptr, src_elem->agg.val_ptr, agg_elem_size) != 0
+                                              || agg_elem->grp.val_int64 != src_elem->grp.val_int64);
                          agg_elem = agg_elem->collision);
-                } else if (agg_elem_size <= sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value 
-                                              || agg_elem->agg.val_int64 != src_elem->agg.val_int64 
-                                              || memcmp(agg_elem->grp.val_ptr, src_elem->grp.val_ptr, grp_elem_size) != 0); 
+                } else if (agg_elem_size <= sizeof(imcs_key_t) && grp_elem_size > sizeof(imcs_key_t)) {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg_hash != agg_hash_value
+                                              || agg_elem->agg.val_int64 != src_elem->agg.val_int64
+                                              || memcmp(agg_elem->grp.val_ptr, src_elem->grp.val_ptr, grp_elem_size) != 0);
                          agg_elem = agg_elem->collision);
-                } else { 
-                    for (agg_elem = agg_hash->table[agg_index]; 
-                         agg_elem != NULL && (agg_elem->agg.val_int64 != src_elem->agg.val_int64 || agg_elem->grp.val_int64 != src_elem->grp.val_int64); 
+                } else {
+                    for (agg_elem = agg_hash->table[agg_index];
+                         agg_elem != NULL && (agg_elem->agg.val_int64 != src_elem->agg.val_int64 || agg_elem->grp.val_int64 != src_elem->grp.val_int64);
                          agg_elem = agg_elem->collision);
                 }
             }
             if (agg_elem == NULL) {
-                if (++agg_distinct_count >= agg_threshold) {                    
-                    imcs_hash_elem_t** table;                         
-                    size_t new_hash_table_size = imcs_next_prime_number(agg_hash_table_size);                     
-                    size_t j;                                   
-                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*)); 
-                    for (j = 0; j < agg_hash_table_size; j++) {             
-                        imcs_hash_elem_t* next;                      
-                        imcs_hash_elem_t* curr;                      
-                        for (curr = agg_hash->table[j]; curr != NULL; curr = next) { 
-                            uint32 eh = curr->agg_hash % new_hash_table_size; 
-                            next = curr->collision;                     
-                            curr->collision = table[eh];                
-                            table[eh] = curr;                           
-                        }                                               
-                    }                                                   
-                    agg_hash->table_size = agg_hash_table_size = new_hash_table_size; 
-                    imcs_free(agg_hash->table);                          
-                    agg_hash->table = table;                                
-                    agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1; 
-                    agg_index = agg_hash_value % agg_hash_table_size;   
-                }                                                                        
+                if (++agg_distinct_count >= agg_threshold) {
+                    imcs_hash_elem_t** table;
+                    size_t new_hash_table_size = imcs_next_prime_number(agg_hash_table_size);
+                    size_t j;
+                    table = (imcs_hash_elem_t**)imcs_alloc(new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    memset(table, 0, new_hash_table_size*sizeof(imcs_hash_elem_t*));
+                    for (j = 0; j < agg_hash_table_size; j++) {
+                        imcs_hash_elem_t* next;
+                        imcs_hash_elem_t* curr;
+                        for (curr = agg_hash->table[j]; curr != NULL; curr = next) {
+                            uint32 eh = curr->agg_hash % new_hash_table_size;
+                            next = curr->collision;
+                            curr->collision = table[eh];
+                            table[eh] = curr;
+                        }
+                    }
+                    agg_hash->table_size = agg_hash_table_size = new_hash_table_size;
+                    imcs_free(agg_hash->table);
+                    agg_hash->table = table;
+                    agg_threshold = (size_t)(imcs_hash_table_load_factor*agg_hash_table_size)-1;
+                    agg_index = agg_hash_value % agg_hash_table_size;
+                }
                 agg_elem = src_elem;
-                if (agg_elem->count >= ctx->min_occurrences) { 
+                if (agg_elem->count >= ctx->min_occurrences) {
                     elem->count += 1;
-                }                
-                agg_elem->collision = agg_hash->table[agg_index];                  
-                agg_hash->table[agg_index] = agg_elem;                             
-            } else { 
-                if (agg_elem->count < ctx->min_occurrences && agg_elem->count + src_elem->count >= ctx->min_occurrences) { 
+                }
+                agg_elem->collision = agg_hash->table[agg_index];
+                agg_hash->table[agg_index] = agg_elem;
+            } else {
+                if (agg_elem->count < ctx->min_occurrences && agg_elem->count + src_elem->count >= ctx->min_occurrences) {
                     elem->count += 1;
-                }                
-                agg_elem->count += src_elem->count;                                    
+                }
+                agg_elem->count += src_elem->count;
             }
-        }                                                               
-    }  
+        }
+    }
     agg_hash->table_used = agg_distinct_count;
     hash->table_used = distinct_count;
-    ctx->groups.shared->hash = hash;    
-}                       
-                                                
-static bool imcs_dup_hash_next_count(imcs_iterator_h iterator) 
-{                                                                       
+    ctx->groups.shared->hash = hash;
+}
+
+static bool imcs_dup_hash_next_count(imcs_iterator_h iterator)
+{
     imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context; /* corresponds to imcs_dup_hash_iterator_context_t::groups */
-    size_t this_tile_size = imcs_tile_size;                         
-    size_t i;                                            
-    imcs_hash_elem_t* elem;  
-    size_t chain_no;   
-    size_t table_size;   
-    imcs_hash_t* hash = ctx->shared->hash; 
+    size_t this_tile_size = imcs_tile_size;
+    size_t i;
+    imcs_hash_elem_t* elem;
+    size_t chain_no;
+    size_t table_size;
+    imcs_hash_t* hash = ctx->shared->hash;
     if (!hash) {
-        imcs_dup_hash_initialize(iterator); 
-        hash = ctx->shared->hash = ctx->private_hash;                                                                 
-    }                                                                   
+        imcs_dup_hash_initialize(iterator);
+        hash = ctx->shared->hash = ctx->private_hash;
+    }
     elem = ctx->curr_elem;
     chain_no = ctx->chain_no;
     table_size = hash->table_size;
-    for (i = 0; i < this_tile_size; i++) {                           
-        while (elem == NULL && chain_no < table_size) {    
-            elem = hash->table[chain_no++];                   
-        }                                                               
-        if (elem != NULL) {                                                
+    for (i = 0; i < this_tile_size; i++) {
+        while (elem == NULL && chain_no < table_size) {
+            elem = hash->table[chain_no++];
+        }
+        if (elem != NULL) {
             iterator->tile.arr_int64[i] = elem->count;
             elem = elem->collision;
-        } else {                                                        
-            break;                                                      
-        }                                                               
-    }                                                                   
-    ctx->curr_elem = elem;      
-    ctx->chain_no = chain_no;                                         
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
+        } else {
+            break;
+        }
+    }
+    ctx->curr_elem = elem;
+    ctx->chain_no = chain_no;
+    iterator->tile_size = i;
+    iterator->next_pos += i;
     return i != 0;
 }
-                                                                       
-static bool imcs_dup_hash_next_grp(imcs_iterator_h iterator) 
-{                                                                       
+
+static bool imcs_dup_hash_next_grp(imcs_iterator_h iterator)
+{
     imcs_hash_iterator_context_t* ctx = (imcs_hash_iterator_context_t*)iterator->context; /* corresponds to imcs_dup_hash_iterator_context_t::groups */
-    size_t this_tile_size = imcs_tile_size;                         
-    size_t i;                                            
-    imcs_hash_elem_t* elem;  
-    size_t chain_no;   
-    size_t table_size;   
-    size_t grp_elem_size = iterator->elem_size; 
-    imcs_hash_t* hash = ctx->shared->hash; 
+    size_t this_tile_size = imcs_tile_size;
+    size_t i;
+    imcs_hash_elem_t* elem;
+    size_t chain_no;
+    size_t table_size;
+    size_t grp_elem_size = iterator->elem_size;
+    imcs_hash_t* hash = ctx->shared->hash;
     if (!hash) {
-        imcs_dup_hash_initialize(iterator); 
-        hash = ctx->shared->hash = ctx->private_hash;                                                                 
-    }                                                                   
+        imcs_dup_hash_initialize(iterator);
+        hash = ctx->shared->hash = ctx->private_hash;
+    }
     elem = ctx->curr_elem;
     chain_no = ctx->chain_no;
     table_size = hash->table_size;
-    for (i = 0; i < this_tile_size; i++) {                           
-        while (elem == NULL && chain_no < table_size) {    
-            elem = hash->table[chain_no++];                   
-        }                                                               
-        if (elem != NULL) {                                                
-            memcpy(iterator->tile.arr_char + i*grp_elem_size, (grp_elem_size <= sizeof(imcs_key_t)) ? (char*)&elem->grp.val_int8 : elem->grp.val_ptr, grp_elem_size); 
+    for (i = 0; i < this_tile_size; i++) {
+        while (elem == NULL && chain_no < table_size) {
+            elem = hash->table[chain_no++];
+        }
+        if (elem != NULL) {
+            memcpy(iterator->tile.arr_char + i*grp_elem_size, (grp_elem_size <= sizeof(imcs_key_t)) ? (char*)&elem->grp.val_int8 : elem->grp.val_ptr, grp_elem_size);
             elem = elem->collision;
-        } else {                                                        
-            break;                                                      
-        }                                                               
-    }                                                                   
-    ctx->curr_elem = elem;                                              
-    ctx->chain_no = chain_no;                                         
-    iterator->tile_size = i;                                            
-    iterator->next_pos += i;                                         
+        } else {
+            break;
+        }
+    }
+    ctx->curr_elem = elem;
+    ctx->chain_no = chain_no;
+    iterator->tile_size = i;
+    iterator->next_pos += i;
     return i != 0;
-}                                                                       
+}
 
 void imcs_hash_dup_count(imcs_iterator_h result[2], imcs_iterator_h input, imcs_iterator_h group_by, size_t min_occurrences)
-{                                                                       
-    imcs_iterator_h result_cnt = imcs_new_iterator(sizeof(imcs_count_t), sizeof(imcs_dup_hash_iterator_context_t)); 
-    imcs_iterator_h result_grp = imcs_new_iterator(group_by->elem_size, sizeof(imcs_dup_hash_iterator_context_t)); 
-    imcs_dup_hash_iterator_context_t* ctx = (imcs_dup_hash_iterator_context_t*)result_cnt->context; 
+{
+    imcs_iterator_h result_cnt = imcs_new_iterator(sizeof(imcs_count_t), sizeof(imcs_dup_hash_iterator_context_t));
+    imcs_iterator_h result_grp = imcs_new_iterator(group_by->elem_size, sizeof(imcs_dup_hash_iterator_context_t));
+    imcs_dup_hash_iterator_context_t* ctx = (imcs_dup_hash_iterator_context_t*)result_cnt->context;
     imcs_shared_hash_t* shared;
 
-    shared = (imcs_shared_hash_t*)imcs_alloc(sizeof(imcs_shared_hash_t)); 
-    shared->hash = 0;                                                               
+    shared = (imcs_shared_hash_t*)imcs_alloc(sizeof(imcs_shared_hash_t));
+    shared->hash = 0;
 
-    ctx->groups.curr_elem = 0;                                                 
-    ctx->groups.chain_no = 0; 
+    ctx->groups.curr_elem = 0;
+    ctx->groups.chain_no = 0;
     ctx->groups.n_groups = imcs_hash_table_init_size;
-    ctx->groups.shared = shared; 
-    ctx->n_pairs = imcs_hash_table_init_size;    
-    ctx->min_occurrences = min_occurrences;
-    result_cnt->opd[0] = imcs_operand(input);                                           
-    result_cnt->opd[1] = imcs_operand(group_by);                                       
-    result_cnt->elem_type = TID_int64;               
-    result_cnt->next = imcs_dup_hash_next_count;    
-    result_cnt->reset = imcs_hash_agg_reset;                         
-    result_cnt->prepare =  imcs_dup_hash_initialize;                                             
-    result_cnt->merge = imcs_dup_hash_merge;                                               
-                                                                        
-    ctx = (imcs_dup_hash_iterator_context_t*)result_grp->context;        
-    ctx->groups.curr_elem = 0;                                                 
-    ctx->groups.chain_no = 0;                                                  
-    ctx->groups.n_groups = imcs_hash_table_init_size;
-    ctx->groups.shared = shared; 
+    ctx->groups.shared = shared;
     ctx->n_pairs = imcs_hash_table_init_size;
     ctx->min_occurrences = min_occurrences;
-    result_grp->opd[0] = imcs_operand(input);                                           
-    result_grp->opd[1] = imcs_operand(group_by);                                       
-    result_grp->elem_type = group_by->elem_type;                        
-    result_grp->next = imcs_dup_hash_next_grp;    
-    result_grp->reset = imcs_hash_agg_reset;                         
+    result_cnt->opd[0] = imcs_operand(input);
+    result_cnt->opd[1] = imcs_operand(group_by);
+    result_cnt->elem_type = TID_int64;
+    result_cnt->next = imcs_dup_hash_next_count;
+    result_cnt->reset = imcs_hash_agg_reset;
+    result_cnt->prepare =  imcs_dup_hash_initialize;
+    result_cnt->merge = imcs_dup_hash_merge;
+
+    ctx = (imcs_dup_hash_iterator_context_t*)result_grp->context;
+    ctx->groups.curr_elem = 0;
+    ctx->groups.chain_no = 0;
+    ctx->groups.n_groups = imcs_hash_table_init_size;
+    ctx->groups.shared = shared;
+    ctx->n_pairs = imcs_hash_table_init_size;
+    ctx->min_occurrences = min_occurrences;
+    result_grp->opd[0] = imcs_operand(input);
+    result_grp->opd[1] = imcs_operand(group_by);
+    result_grp->elem_type = group_by->elem_type;
+    result_grp->next = imcs_dup_hash_next_grp;
+    result_grp->reset = imcs_hash_agg_reset;
 
     result[0] = result_cnt;
     result[1] = result_grp;
 }
 
-typedef struct { 
+typedef struct {
     FunctionCallInfoData fcinfo;
     FmgrInfo flinfo;
 } imcs_call_context_t;
@@ -6245,12 +6248,12 @@ imcs_iterator_h imcs_##RET_TYPE##_call_##ARG_TYPE(imcs_iterator_h input, Oid fun
     IMCS_CALL_DEF(RET_TYPE, PG_RET_TYPE, int32, Int32)                  \
     IMCS_CALL_DEF(RET_TYPE, PG_RET_TYPE, int64, Int64)                  \
     IMCS_CALL_DEF(RET_TYPE, PG_RET_TYPE, float, Float4)                 \
-    IMCS_CALL_DEF(RET_TYPE, PG_RET_TYPE, double, Float8) 
+    IMCS_CALL_DEF(RET_TYPE, PG_RET_TYPE, double, Float8)
 
-IMCS_CALLS_DEF(int8, Char) 
-IMCS_CALLS_DEF(int16, Int16) 
-IMCS_CALLS_DEF(int32, Int32) 
-IMCS_CALLS_DEF(int64, Int64) 
+IMCS_CALLS_DEF(int8, Char)
+IMCS_CALLS_DEF(int16, Int16)
+IMCS_CALLS_DEF(int32, Int32)
+IMCS_CALLS_DEF(int64, Int64)
 IMCS_CALLS_DEF(float, Float4)
 IMCS_CALLS_DEF(double, Float8)
 
@@ -6258,19 +6261,19 @@ IMCS_CALLS_DEF(double, Float8)
 #define MATCH_ANY_SUBSTRING '%'
 #define ESCAPE_CHAR         '\\'
 
-typedef struct { 
+typedef struct {
     char const* pattern;
 } imcs_like_context_t;
 
 
-/* We use own implementation of string match instead of PostgreSQL textlike and texticlike functions 
+/* We use own implementation of string match instead of PostgreSQL textlike and texticlike functions
  * because:
  * - them are 1/3 faster: 150 vs 240 msec for performing 10 million case sensitive matches.
- * - testiclike is no reetntrant: it used palloc. And in PostgreSQL it is more than 3 times slower than 
+ * - testiclike is no reetntrant: it used palloc. And in PostgreSQL it is more than 3 times slower than
  *   case sensitive matches, while in our implementation the diffirence is much smaller - 40%
  * - character elements of timeseries are expected to be ASCII.
  */
-static inline bool imcs_match_string(char const* str, size_t str_len, char const* pattern) 
+static inline bool imcs_match_string(char const* str, size_t str_len, char const* pattern)
 {
     char const* wildcard = NULL;
     char const* strpos = NULL;
@@ -6302,77 +6305,77 @@ static inline bool imcs_match_string(char const* str, size_t str_len, char const
     return value;
 }
 
-static bool imcs_like_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                                
+static bool imcs_like_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     int elem_size = iterator->opd[0]->elem_size;
-    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context; 
+    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context;
     char* txt;
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    } 
-    txt = iterator->opd[0]->tile.arr_char;                                                                
-    tile_size = iterator->opd[0]->tile_size;                            
-    for (i = 0; i < tile_size; i++, txt += elem_size) {     
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    txt = iterator->opd[0]->tile.arr_char;
+    tile_size = iterator->opd[0]->tile_size;
+    for (i = 0; i < tile_size; i++, txt += elem_size) {
         iterator->tile.arr_int8[i] = imcs_match_string(txt, elem_size, ctx->pattern);
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}           
-                                                            
-static bool imcs_like_dict_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                                
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+static bool imcs_like_dict_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     imcs_elem_typeid_t elem_type = iterator->opd[0]->elem_type;
-    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context; 
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    } 
+    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context;
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
     tile_size = iterator->opd[0]->tile_size;
     if (elem_type == TID_int16) {
-        for (i = 0; i < tile_size; i++) {   
+        for (i = 0; i < tile_size; i++) {
             int code = (uint16)iterator->opd[0]->tile.arr_int16[i];
             imcs_dict_entry_t* entry;
             Assert(code < imcs_dict_size);
-            entry = imcs_dict_code_map[code];             
+            entry = imcs_dict_code_map[code];
             iterator->tile.arr_int8[i] = imcs_match_string(entry->key.val, entry->key.len, ctx->pattern);
-        }           
-    } else { 
+        }
+    } else {
         Assert(elem_type == TID_int32);
-        for (i = 0; i < tile_size; i++) {   
+        for (i = 0; i < tile_size; i++) {
             int code = iterator->opd[0]->tile.arr_int32[i];
             imcs_dict_entry_t* entry;
             Assert(code < imcs_dict_size);
-            entry = imcs_dict_code_map[code];             
+            entry = imcs_dict_code_map[code];
             iterator->tile.arr_int8[i] = imcs_match_string(entry->key.val, entry->key.len, ctx->pattern);
-        }           
-    }        
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}                                                                       
- 
- 
-imcs_iterator_h imcs_like(imcs_iterator_h input, char const* pattern)
-{
-    imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_like_context_t)); 
-    imcs_like_context_t* ctx = (imcs_like_context_t*)result->context;   
-    result->elem_type = TID_int8;                                 
-    result->opd[0] = imcs_operand(input);                               
-    if (input->flags & FLAG_TRANSLATED) {         
-        result->next = imcs_like_dict_next;            
-    } else { 
-        IMCS_CHECK_TYPE(input->elem_type, TID_char);                  
-        result->next = imcs_like_next;            
+        }
     }
-    result->flags = FLAG_CONTEXT_FREE;                                  
-    ctx->pattern = pattern;
-    return result;                                                      
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
 }
 
 
-static inline bool imcs_match_string_ignore_case(char const* s, size_t slen, char const* p) 
+imcs_iterator_h imcs_like(imcs_iterator_h input, char const* pattern)
+{
+    imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_like_context_t));
+    imcs_like_context_t* ctx = (imcs_like_context_t*)result->context;
+    result->elem_type = TID_int8;
+    result->opd[0] = imcs_operand(input);
+    if (input->flags & FLAG_TRANSLATED) {
+        result->next = imcs_like_dict_next;
+    } else {
+        IMCS_CHECK_TYPE(input->elem_type, TID_char);
+        result->next = imcs_like_next;
+    }
+    result->flags = FLAG_CONTEXT_FREE;
+    ctx->pattern = pattern;
+    return result;
+}
+
+
+static inline bool imcs_match_string_ignore_case(char const* s, size_t slen, char const* p)
 {
     unsigned char const* str = (unsigned char const*)s;
     unsigned char const* pattern = (unsigned char const*)p;
@@ -6406,77 +6409,77 @@ static inline bool imcs_match_string_ignore_case(char const* s, size_t slen, cha
     return value;
 }
 
-static bool imcs_ilike_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                                
+static bool imcs_ilike_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     int elem_size = iterator->opd[0]->elem_size;
-    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context; 
+    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context;
     char* txt;
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    } 
-    txt = iterator->opd[0]->tile.arr_char;                                                                
-    tile_size = iterator->opd[0]->tile_size;                            
-    for (i = 0; i < tile_size; i++, txt += elem_size) {     
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    txt = iterator->opd[0]->tile.arr_char;
+    tile_size = iterator->opd[0]->tile_size;
+    for (i = 0; i < tile_size; i++, txt += elem_size) {
         iterator->tile.arr_int8[i] = imcs_match_string_ignore_case(txt, elem_size, ctx->pattern);
-    }                                                                   
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}                                                                       
- 
-static bool imcs_ilike_dict_next(imcs_iterator_h iterator)       
-{                                                                       
-    size_t i, tile_size;                                                
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
+static bool imcs_ilike_dict_next(imcs_iterator_h iterator)
+{
+    size_t i, tile_size;
     imcs_elem_typeid_t elem_type = iterator->opd[0]->elem_type;
-    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context; 
-    if (!iterator->opd[0]->next(iterator->opd[0])) {                    
-        return false;                                                   
-    } 
-    tile_size = iterator->opd[0]->tile_size;                            
+    imcs_like_context_t* ctx = (imcs_like_context_t*)iterator->context;
+    if (!iterator->opd[0]->next(iterator->opd[0])) {
+        return false;
+    }
+    tile_size = iterator->opd[0]->tile_size;
     if (elem_type == TID_int16) {
-        for (i = 0; i < tile_size; i++) {   
+        for (i = 0; i < tile_size; i++) {
             int code = (uint16)iterator->opd[0]->tile.arr_int16[i];
             imcs_dict_entry_t* entry;
             Assert(code < imcs_dict_size);
-            entry = imcs_dict_code_map[code];             
+            entry = imcs_dict_code_map[code];
             iterator->tile.arr_int8[i] = imcs_match_string_ignore_case(entry->key.val, entry->key.len, ctx->pattern);
-        }           
-    } else { 
+        }
+    } else {
         Assert(elem_type == TID_int32);
-        for (i = 0; i < tile_size; i++) {   
+        for (i = 0; i < tile_size; i++) {
             int code = iterator->opd[0]->tile.arr_int32[i];
             imcs_dict_entry_t* entry;
             Assert(code < imcs_dict_size);
-            entry = imcs_dict_code_map[code];             
+            entry = imcs_dict_code_map[code];
             iterator->tile.arr_int8[i] = imcs_match_string_ignore_case(entry->key.val, entry->key.len, ctx->pattern);
-        }           
-    }        
-    iterator->tile_size = tile_size;                                    
-    iterator->next_pos += tile_size;                                    
-    return true;                                                        
-}                                                                       
- 
+        }
+    }
+    iterator->tile_size = tile_size;
+    iterator->next_pos += tile_size;
+    return true;
+}
+
 imcs_iterator_h imcs_ilike(imcs_iterator_h input, char const* pattern)
 {
-    imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_like_context_t)); 
-    imcs_like_context_t* ctx = (imcs_like_context_t*)result->context;   
+    imcs_iterator_h result = imcs_new_iterator(sizeof(int8), sizeof(imcs_like_context_t));
+    imcs_like_context_t* ctx = (imcs_like_context_t*)result->context;
     unsigned char* pat = (unsigned char*)pattern;
-    result->elem_type = TID_int8;                                 
-    result->opd[0] = imcs_operand(input);                               
-    if (input->flags & FLAG_TRANSLATED) {         
-        result->next = imcs_ilike_dict_next;            
-    } else { 
-        IMCS_CHECK_TYPE(input->elem_type, TID_char);                  
-        result->next = imcs_ilike_next;            
+    result->elem_type = TID_int8;
+    result->opd[0] = imcs_operand(input);
+    if (input->flags & FLAG_TRANSLATED) {
+        result->next = imcs_ilike_dict_next;
+    } else {
+        IMCS_CHECK_TYPE(input->elem_type, TID_char);
+        result->next = imcs_ilike_next;
     }
-    result->flags = FLAG_CONTEXT_FREE;                                  
+    result->flags = FLAG_CONTEXT_FREE;
     ctx->pattern = pattern;
-    while (*pat != '\0') { 
+    while (*pat != '\0') {
         *pat = tolower(*pat);
         pat += 1;
     }
-    return result;                                                      
+    return result;
 }
 
 #define IMCS_JOIN_TS_DEF(TYPE)                                          \
@@ -6535,44 +6538,44 @@ IMCS_JOIN_TS_DEF(float)
 IMCS_JOIN_TS_DEF(double)
 
 
-static void imcs_count_merge(imcs_iterator_h dst, imcs_iterator_h src) 
-{                                                                       
+static void imcs_count_merge(imcs_iterator_h dst, imcs_iterator_h src)
+{
     dst->tile.arr_int64[0] += src->tile.arr_int64[0];
-}                                                                       
-static bool imcs_count_next(imcs_iterator_h iterator)       
-{                                                                       
-    imcs_count_t count = 0;                                             
-    if (iterator->flags & FLAG_PREPARED) {                              
-        return iterator->tile_size != 0;                                
+}
+static bool imcs_count_next(imcs_iterator_h iterator)
+{
+    imcs_count_t count = 0;
+    if (iterator->flags & FLAG_PREPARED) {
+        return iterator->tile_size != 0;
     }
-    if (iterator->next_pos != 0) {                                      
-        return false;                                                   
-    }                                                                   
+    if (iterator->next_pos != 0) {
+        return false;
+    }
     if (iterator->opd[0]->reset == imcs_hash_agg_reset) { /* hash table already contains count: no need to calculate it */
         imcs_iterator_h input = imcs_parallel_iterator(iterator->opd[0]);
         if (input->next(input)) { /* should initialize hash table */
             count = ((imcs_hash_iterator_context_t*)iterator->opd[0]->context)->shared->hash->table_used;
         }
-    } else { 
-        while (iterator->opd[0]->next(iterator->opd[0])) {                    
+    } else {
+        while (iterator->opd[0]->next(iterator->opd[0])) {
             count += iterator->opd[0]->tile_size;
-        }       
-    }                                                            
-    iterator->next_pos = 1;                                             
-    iterator->tile_size = 1;                                            
-    iterator->tile.arr_int64[0] = count;              
-    return true;                                                        
-}                                                                       
-                                                                        
-imcs_iterator_h imcs_count_iterator(imcs_iterator_h input)             
-{                                                                       
-    imcs_iterator_h result = imcs_new_iterator(sizeof(int64), 0); 
-    result->elem_type = TID_int64;                                 
-    result->opd[0] = imcs_operand(input);                               
-    result->next = imcs_count_next;                         
-    if (input->reset != imcs_hash_agg_reset) {/* hash table already contains count: no need to calculate it */
-        result->prepare = imcs_count_next;   
-        result->merge = imcs_count_merge;                       
+        }
     }
-    return result;                                                      
+    iterator->next_pos = 1;
+    iterator->tile_size = 1;
+    iterator->tile.arr_int64[0] = count;
+    return true;
+}
+
+imcs_iterator_h imcs_count_iterator(imcs_iterator_h input)
+{
+    imcs_iterator_h result = imcs_new_iterator(sizeof(int64), 0);
+    result->elem_type = TID_int64;
+    result->opd[0] = imcs_operand(input);
+    result->next = imcs_count_next;
+    if (input->reset != imcs_hash_agg_reset) {/* hash table already contains count: no need to calculate it */
+        result->prepare = imcs_count_next;
+        result->merge = imcs_count_merge;
+    }
+    return result;
 }

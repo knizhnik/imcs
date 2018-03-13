@@ -67,7 +67,7 @@ declare
     perf text;
     id_type text;
     timestamp_type text;
-    relid integer;
+    relid oid;
     is_timestamp bool;
     attr_tid integer;
     timestamp_tid integer;

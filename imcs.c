@@ -1,4 +1,7 @@
 #include <unistd.h>
+#include <float.h>
+#include <math.h>
+#include <limits.h>
 #include "imcs.h"
 #include "btree.h"
 #include "disk.h"
@@ -1346,11 +1349,17 @@ static void imcs_shmem_startup(void)
     /* operator's pipe should exist until end of query execution.
      * So we can not use default memory context and have to create own own memory context which is reset by ExecutorEnd_hook
      */
+#if PG_VERSION_NUM>=110000
     imcs_mem_ctx = AllocSetContextCreate(TopMemoryContext,
+                                         "IMCS tempory memory",
+                                         ALLOCSET_DEFAULT_SIZES);
+#else
+	imcs_mem_ctx = AllocSetContextCreate(TopMemoryContext,
                                          "IMCS tempory memory",
                                          ALLOCSET_DEFAULT_MINSIZE,
                                          ALLOCSET_DEFAULT_INITSIZE,
-                                         ALLOCSET_DEFAULT_MAXSIZE);
+										 ALLOCSET_DEFAULT_MAXSIZE);
+#endif
 	LWLockRelease(AddinShmemInitLock);
     RegisterXactCallback(imcs_trans_callback, NULL);
 }
@@ -3700,7 +3709,7 @@ Datum cs_project(PG_FUNCTION_ARGS)
             int atttypid;
             char const* attname;
             if (attr_desc != NULL) {
-                Form_pg_attribute attr = attr_desc->attrs[i];
+                Form_pg_attribute attr = TupleDescAttr(attr_desc, i);
                 datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
                 if (attr->atttypid != timeseries_oid) {
                     usrfctx->iterators[i] = NULL;
@@ -3913,7 +3922,7 @@ Datum cs_project_agg(PG_FUNCTION_ARGS)
         get_call_result_type(fcinfo, NULL, &usrfctx->desc);
         funcctx->user_fctx = usrfctx;
         for (i = 0; i < 2; i++) {
-            Form_pg_attribute attr = attr_desc->attrs[i];
+            Form_pg_attribute attr = TupleDescAttr(attr_desc, i);
             Datum datum = GetAttributeByNum(t, attr->attnum, &usrfctx->nulls[i]);
             if (attr->atttypid != timeseries_oid) {
                 imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "Expect column with timeseries type");
@@ -4903,7 +4912,7 @@ Datum cs_as(PG_FUNCTION_ARGS)
     nulls = (bool*)palloc(n*sizeof(bool));
 
     for (i = 0; i < n; i++) {
-        Form_pg_attribute attr = desc->attrs[i];
+        Form_pg_attribute attr = TupleDescAttr(desc, i);
         nulls[i] = false;
         if (attr->atttypid == BPCHAROID) {
             values[i] = CStringGetTextDatum(src);
