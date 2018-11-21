@@ -5235,6 +5235,7 @@ Datum cs_delete_all(PG_FUNCTION_ARGS)
         hash_seq_init(&status, imcs_hash);
         while ((entry = hash_seq_search(&status)) != NULL) {
             deleted += imcs_delete_all(&entry->value);
+			hash_search(imcs_hash, &entry->key, HASH_DELETE, NULL);
         }
 
         LWLockRelease(LWLOCK(HASH_LOCK));
@@ -5266,6 +5267,7 @@ Datum columnar_store_truncate(PG_FUNCTION_ARGS)
                 && (entry->key.id[table_name_len] == '-' || entry->key.id[table_name_len] == '\0'))
             {
                 imcs_delete_all(&entry->value);
+				hash_search(imcs_hash, &entry->key, HASH_DELETE, NULL);
             }
         }
 
@@ -5301,6 +5303,7 @@ Datum columnar_store_truncate_column(PG_FUNCTION_ARGS)
                 && (entry->key.id[cs_id_prefix_len] == '-' || entry->key.id[cs_id_prefix_len] == '\0'))
             {
                 imcs_delete_all(&entry->value);
+				hash_search(imcs_hash, &entry->key, HASH_DELETE, NULL);
             }
         }
 
