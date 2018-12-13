@@ -207,7 +207,7 @@ imcs_bool imcs_is_process_alive(imcs_process_t proc)
 
 static void imcs_error_handler(char const* file, int line, char const* msg)
 {
-    elog(ERROR, "%s:%d %s errno=%d", file, line, msg, errno);
+    elog(ERROR, "%s:%d %s (%m)", file, line, msg);
 }
 
 /* Posix threads */
