@@ -13,7 +13,12 @@
 #include "utils/rel.h"
 #include "utils/date.h"
 #include "utils/datetime.h"
+#if PG_VERSION_NUM<120000
 #include "utils/nabstime.h"
+#endif
+#if PG_VERSION_NUM>=120000
+#include "utils/float.h"
+#endif
 #include "utils/syscache.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_language.h"
@@ -694,7 +699,7 @@ void imcs_ereport(int err_code, char const* err_msg,...)
     } else {
         vsprintf(err_buf, err_msg, args);
         va_end(args);
-        ereport(ERROR, (errcode(err_code), errmsg(err_buf)));
+        ereport(ERROR, (errcode(err_code), errmsg("%s", err_buf)));
     }
 }
 
@@ -1913,7 +1918,7 @@ static bool imcs_parallel_execute(imcs_iterator_h iterator)
     if (imcs_error_handlers != NULL) {
         for (i = 0; i < n_threads;  i++) {
             if (imcs_error_handlers[i].err_code != ERRCODE_SUCCESSFUL_COMPLETION) {
-                ereport(ERROR, (errcode(imcs_error_handlers[i].err_code), errmsg(imcs_error_handlers[i].err_msg)));
+                ereport(ERROR, (errcode(imcs_error_handlers[i].err_code), errmsg("%s", imcs_error_handlers[i].err_msg)));
             }
         }
     }
@@ -3699,7 +3704,11 @@ Datum cs_project(PG_FUNCTION_ARGS)
         usrfctx->iterators = (imcs_iterator_h*)palloc(sizeof(imcs_iterator_h)*n_attrs);
         usrfctx->values = (Datum*)palloc(sizeof(Datum)*n_attrs);
         usrfctx->nulls = (bool*)palloc(sizeof(bool)*n_attrs);
+#if PG_VERSION_NUM<120000
         usrfctx->desc = CreateTemplateTupleDesc(n_attrs, false);
+#else
+        usrfctx->desc = CreateTemplateTupleDesc(n_attrs);
+#endif
         funcctx->user_fctx = usrfctx;
         usrfctx->n_iterators = n_attrs;
         for (i = 0; i < n_attrs; i++) {
@@ -4850,7 +4859,11 @@ Datum cs_cut(PG_FUNCTION_ARGS)
         imcs_ereport(ERRCODE_DATATYPE_MISMATCH, "too few values in format string %s", format);
     }
     n_values = i;
+#if PG_VERSION_NUM<120000
     desc = CreateTemplateTupleDesc(n_values, false);
+#else
+    desc = CreateTemplateTupleDesc(n_values);
+#endif
     for (i = 0; i < n_values; i++) {
         TupleDescInitEntry(desc, i+1, NULL, imcs_elem_type_to_oid[elem_types[i]], -1, 0);
         nulls[i] = false;
@@ -5244,24 +5257,39 @@ static int32 imcs_date2week(int32 date)
 static int64 imcs_time2hour(int64 time)
 {
     struct pg_tm tm;
+#if PG_VERSION_NUM<120000
 	int tz;
     abstime2tm(time, &tz, &tm, NULL);
+#else
+	fsec_t fsec;
+	time2tm(time, &tm, &fsec);
+#endif
     return tm.tm_hour;
 }
 
 static int64 imcs_time2minute(int64 time)
 {
     struct pg_tm tm;
+#if PG_VERSION_NUM<120000
 	int tz;
     abstime2tm(time, &tz, &tm, NULL);
+#else
+	fsec_t fsec;
+	time2tm(time, &tm, &fsec);
+#endif
     return tm.tm_min;
 }
 
 static int64 imcs_time2second(int64 time)
 {
     struct pg_tm tm;
+#if PG_VERSION_NUM<120000
 	int tz;
     abstime2tm(time, &tz, &tm, NULL);
+#else
+	fsec_t fsec;
+	time2tm(time, &tm, &fsec);
+#endif
     return tm.tm_sec;
 }
 

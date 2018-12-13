@@ -1,6 +1,8 @@
 #include "func.h"
 #include "btree.h"
-
+#if PG_VERSION_NUM>=120000
+#include "utils/float.h"
+#endif
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
