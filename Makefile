@@ -13,7 +13,7 @@
 
 MODULE_big = imcs
 
-CUSTOM_COPT = -O3 -Wall -pthread
+CUSTOM_COPT = -O0 -Wall -pthread
 IMCS_VERSION=1.06
 
 ifdef USE_DISK

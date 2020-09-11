@@ -186,8 +186,10 @@ static bool imcs_subseq_page(imcs_iterator_h iterator, imcs_page_t* pg,  imcs_po
                                                                         
 static void imcs_reset_tree_iterator(imcs_iterator_h iterator) 
 { 
-    imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context; 
-    imcs_subseq_page(iterator, ctx->stack[0].page, iterator->first_pos, 0);
+    imcs_iterator_context_t* ctx = (imcs_iterator_context_t*)iterator->context;
+	if (iterator->first_pos <= iterator->last_pos) {
+		imcs_subseq_page(iterator, ctx->stack[0].page, iterator->first_pos, 0);
+	}
     imcs_reset_iterator(iterator);
 }
 
