@@ -438,7 +438,6 @@ imcs_iterator_h imcs_parse_##TYPE(char const* input, int elem_size)     \
 {                                                                       \
     imcs_iterator_h result = imcs_new_iterator(sizeof(TYPE), sizeof(imcs_parse_context_t)); \
     imcs_parse_context_t* ctx = (imcs_parse_context_t*)result->context; \
-    Assert(elem_size == sizeof(TYPE));                                  \
     result->elem_type = TID_##TYPE;                                     \
     result->next = imcs_parse_##TYPE##_next;                            \
     result->reset = imcs_reset_parse_iterator;                          \
