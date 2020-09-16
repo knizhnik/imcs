@@ -2,28 +2,17 @@
    "name": "imcs",
    "abstract": "In-Memory Columnar Store",
    "description": "IMCS provides columnar (vertical) store for PostgreSQL. It allows to reach 10-100 advantages in performance because of avoiding disk and MVCC overhead, vector operations, parallel execution and data skipping. IMCS providers a wide range of analytic operators.",
-   "version": "0.1.6",
+   "version": "0.1.7",
    "maintainer": ["Konstantin Kninzhik <knizhnik@garret.ru>"],
    "license": {
       "PostgreSQL": "http://www.postgresql.org/about/licence"
    },
    "release_status": "stable",
-   "prereqs": {
-      "runtime": {
-         "requires": {
-            "plpgsql": 0,
-            "PostgreSQL": "9.2.0"
-         },
-         "recommends": {
-            "PostgreSQL": "9.3.0"
-         }
-      }
-   },
    "provides": {
        "imcs": {
           "file": "imcs--1.1.sql",
           "docfile": "user_guide.html",
-          "version": "0.1.6",
+          "version": "0.1.7",
           "abstract": "In-Memory Columnar Store"
        }
    },
