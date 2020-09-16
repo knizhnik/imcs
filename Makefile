@@ -26,6 +26,7 @@ endif
 EXTENSION = imcs
 DATA = imcs--1.1.sql
 REGRESS = create span operators math datetime transform scalarop grandagg groupbyagg gridagg windowagg hashagg cumagg sort spec drop
+REGRESS_OPTS = --temp-config $(top_srcdir)/contrib/imcs/imcs.conf
 
 SHLIB_LINK += $(filter -lm, $(LIBS))
 

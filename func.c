@@ -502,7 +502,7 @@ imcs_iterator_h imcs_parse_char(char const* input, int elem_size)
     result->next = imcs_parse_char_next;
     result->reset = imcs_reset_parse_iterator;
     if (*input == '{') input += 1;
-    ctx->cur = ctx->beg = input + 1; // skip '{'
+    ctx->cur = ctx->beg = input;
     return result;
 }
 
