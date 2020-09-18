@@ -197,9 +197,6 @@ void imcs_subseq_random_access_iterator(imcs_iterator_h iterator, imcs_pos_t fro
 {
     imcs_timeseries_t* ts = iterator->cs_hdr;
     Assert(iterator->last_pos != IMCS_INFINITY);
-	if (from != 0 && last != IMCS_INFINITY) {
-		iterator->flags &= FLAG_RANDOM_ACCESS;
-	}
     from = ((int64)from < 0) ? iterator->last_pos + from + 1 : iterator->first_pos + from;
     till = ((int64)till < 0) ? iterator->last_pos + till + 1 : iterator->first_pos + till;
     if (from < iterator->first_pos) { 

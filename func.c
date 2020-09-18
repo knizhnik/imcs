@@ -3997,6 +3997,7 @@ static bool imcs_limit_next(imcs_iterator_h iterator)
 imcs_iterator_h imcs_limit(imcs_iterator_h input, imcs_pos_t from, imcs_pos_t till)
 {
     if (input->flags & FLAG_RANDOM_ACCESS) {
+		input = imcs_clone_iterator(input);
         imcs_subseq_random_access_iterator(input, from, till);
         return input;
     } else {
