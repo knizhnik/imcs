@@ -196,7 +196,10 @@ static void imcs_reset_tree_iterator(imcs_iterator_h iterator)
 void imcs_subseq_random_access_iterator(imcs_iterator_h iterator, imcs_pos_t from, imcs_pos_t till)
 {
     imcs_timeseries_t* ts = iterator->cs_hdr;
-    Assert(iterator->last_pos != IMCS_INFINITY);    
+    Assert(iterator->last_pos != IMCS_INFINITY);
+	if (from != 0 && last != IMCS_INFINITY) {
+		iterator->flags &= FLAG_RANDOM_ACCESS;
+	}
     from = ((int64)from < 0) ? iterator->last_pos + from + 1 : iterator->first_pos + from;
     till = ((int64)till < 0) ? iterator->last_pos + till + 1 : iterator->first_pos + till;
     if (from < iterator->first_pos) { 
