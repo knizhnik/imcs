@@ -3994,6 +3994,12 @@ static bool imcs_limit_next(imcs_iterator_h iterator)
    return false;
 }
 
+static void imcs_reset_limit_iterator(imcs_iterator_h iterator)
+{
+    imcs_reset_unary_agg_iterator(iterator);
+	iterator->next_pos = 0;
+}
+
 imcs_iterator_h imcs_limit(imcs_iterator_h input, imcs_pos_t from, imcs_pos_t till)
 {
     if (input->flags & FLAG_RANDOM_ACCESS) {
@@ -4010,7 +4016,7 @@ imcs_iterator_h imcs_limit(imcs_iterator_h input, imcs_pos_t from, imcs_pos_t ti
         result->last_pos = till;
         result->next = imcs_limit_next;
         result->flags = (input->flags & FLAG_TRANSLATED);
-        result->reset = imcs_reset_unary_agg_iterator;
+        result->reset = imcs_reset_limit_iterator;
         ctx->offset = ctx->count = 0;
         return result;
     }

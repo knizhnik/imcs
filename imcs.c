@@ -1016,7 +1016,7 @@ void imcs_reset_iterator(imcs_iterator_h iterator)
 {
     int i;
     iterator->tile_size = iterator->tile_offs = 0;
-    iterator->next_pos = 0;
+    iterator->next_pos = iterator->first_pos;
     for (i = 0; i < 3; i++) {
         if (iterator->opd[i]) {
             iterator->opd[i]->reset(iterator->opd[i]);
