@@ -903,7 +903,7 @@ create function cs_filter_pos(cond timeseries) returns timeseries as 'MODULE_PAT
 create function cs_filter_first_pos(timeseries, n integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create operator ? (leftarg=timeseries, rightarg=timeseries, procedure=cs_filter);
-create operator ? (leftarg=timeseries, procedure=cs_filter_pos);
+--create operator ? (leftarg=timeseries, procedure=cs_filter_pos);
 
 create function cs_unique(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_reverse(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
