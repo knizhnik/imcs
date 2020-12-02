@@ -903,7 +903,7 @@ create function cs_filter_pos(cond timeseries) returns timeseries as 'MODULE_PAT
 create function cs_filter_first_pos(timeseries, n integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create operator ? (leftarg=timeseries, rightarg=timeseries, procedure=cs_filter);
---create operator ? (leftarg=timeseries, procedure=cs_filter_pos);
+create operator ? (rightarg=timeseries, procedure=cs_filter_pos);
 
 create function cs_unique(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_reverse(timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
@@ -966,6 +966,17 @@ create function cs_group_last(input timeseries, group_by timeseries) returns tim
 create function cs_group_first(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_group_all(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_group_any(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+
+create function cs_win_group_max(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_min(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_avg(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_sum(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_var(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_dev(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_last(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_first(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_all(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
+create function cs_win_group_any(input timeseries, group_by timeseries) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 
 create function cs_grid_max(timeseries, step integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;
 create function cs_grid_min(timeseries, step integer) returns timeseries as 'MODULE_PATHNAME' language C stable strict;

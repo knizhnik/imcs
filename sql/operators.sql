@@ -8,7 +8,7 @@ select Close+*Volume from Quote_get('IBM');
 select Volume//Close from Quote_get('IBM');
 select Open~Close from Quote_get('IBM');
 select (Open>Close)?Day from Quote_get('IBM');
-select (Open>Close)? from Quote_get('IBM');
+select ?(Open>Close) from Quote_get('IBM');
 select -Open from Quote_get('IBM');
 select Open>Close from Quote_get('IBM');
 select Open>=Close from Quote_get('IBM');

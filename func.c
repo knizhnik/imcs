@@ -6588,3 +6588,197 @@ imcs_iterator_h imcs_count_iterator(imcs_iterator_h input)
     }
     return result;
 }
+
+
+
+#define IMCS_WIN_GROUP_AGG_DEF(TYPE, AGG_TYPE, MNEM, INIT, ACCUMULATE, RESULT) \
+static bool imcs_##MNEM##_##TYPE##_next(imcs_iterator_h iterator)       \
+{                                                                       \
+    size_t i, j = 0, tile_size;                                         \
+    size_t this_tile_size = imcs_tile_size;                             \
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)iterator->context;   \
+    size_t elem_size = iterator->opd[1]->elem_size;                     \
+	size_t repeat = ctx->count < this_tile_size ? ctx->count : this_tile_size; \
+	while (j < repeat) {													\
+		iterator->tile.arr_##AGG_TYPE[j++] = ctx->accumulator.val_##AGG_TYPE; \
+	}																	\
+	ctx->count -= repeat;												\
+	if (j == this_tile_size) {											\
+		iterator->tile_size = j;										\
+		return true;													\
+	}																	\
+    while (true) {														\
+        if (ctx->offset >= iterator->opd[1]->tile_size) {               \
+            if (!iterator->opd[1]->next(iterator->opd[1])) {            \
+                if (j + ctx->count != 0) {                              \
+                    if (ctx->count != 0) {                              \
+                        ctx->accumulator.val_##AGG_TYPE = RESULT(ctx->accumulator.val_##AGG_TYPE, ctx->count); \
+                        iterator->next_pos += 1;                        \
+						repeat = ctx->count < this_tile_size - j ? ctx->count : this_tile_size - j; \
+						ctx->count -= repeat;							\
+						do {											\
+							iterator->tile.arr_##AGG_TYPE[j++] = ctx->accumulator.val_##AGG_TYPE; \
+						} while (--repeat != 0);						\
+                    }                                                   \
+                    iterator->tile_size = j;                            \
+                    return true;                                        \
+                }                                                       \
+                return false;                                           \
+            } else {                                                    \
+                Assert(ctx->offset == iterator->opd[0]->tile_size);     \
+                if (!iterator->opd[0]->next(iterator->opd[0])) {        \
+                    return false;                                       \
+                }                                                       \
+                Assert(iterator->opd[1]->tile_size <= iterator->opd[0]->tile_size); \
+            }                                                           \
+            ctx->offset = 0;                                            \
+        }                                                               \
+        tile_size = iterator->opd[1]->tile_size;                        \
+        for (i = ctx->offset; i < tile_size; i++) {                     \
+            bool same;                                                  \
+            switch (elem_size) {                                        \
+              case 1:                                                   \
+                same = *ctx->history.arr_int8 == iterator->opd[1]->tile.arr_int8[i]; \
+                *ctx->history.arr_int8 = iterator->opd[1]->tile.arr_int8[i]; \
+                break;                                                  \
+              case 2:                                                   \
+                same = *ctx->history.arr_int16 == iterator->opd[1]->tile.arr_int16[i]; \
+                *ctx->history.arr_int16 = iterator->opd[1]->tile.arr_int16[i]; \
+                break;                                                  \
+              case 4:                                                   \
+                same = *ctx->history.arr_int32 == iterator->opd[1]->tile.arr_int32[i]; \
+                *ctx->history.arr_int32 = iterator->opd[1]->tile.arr_int32[i]; \
+                break;                                                  \
+              case 8:                                                  \
+                same = *ctx->history.arr_int64 == iterator->opd[1]->tile.arr_int64[i]; \
+                *ctx->history.arr_int64 = iterator->opd[1]->tile.arr_int64[i]; \
+                break;                                                  \
+              default:                                                  \
+                same = memcmp(ctx->history.arr_char, &iterator->opd[1]->tile.arr_char[i*elem_size], elem_size) == 0; \
+                memcpy(ctx->history.arr_char, &iterator->opd[1]->tile.arr_char[i*elem_size], elem_size); \
+            }                                                           \
+            if (ctx->count != 0 && !same) {                             \
+                ctx->accumulator.val_##AGG_TYPE = RESULT(ctx->accumulator.val_##AGG_TYPE, ctx->count); \
+                iterator->next_pos += 1;                                \
+				repeat = ctx->count < this_tile_size - j ? ctx->count : this_tile_size - j; \
+				ctx->count -= repeat;									\
+				do {													\
+					iterator->tile.arr_##AGG_TYPE[j++] = ctx->accumulator.val_##AGG_TYPE; \
+				} while (--repeat != 0);								\
+            }                                                           \
+            ctx->accumulator.val_##AGG_TYPE = (ctx->count == 0)         \
+                ? INIT(iterator->opd[0]->tile.arr_##TYPE[i])            \
+                : ACCUMULATE(ctx->accumulator.val_##AGG_TYPE, iterator->opd[0]->tile.arr_##TYPE[i], ctx->count); \
+            ctx->count += 1;                                            \
+            if (j == this_tile_size) {                                  \
+                ctx->offset = i + 1;                                    \
+                iterator->tile_size = this_tile_size;                   \
+                return true;                                            \
+            }                                                           \
+        }                                                               \
+        ctx->offset = tile_size;                                        \
+    }                                                                   \
+}                                                                       \
+                                                                        \
+imcs_iterator_h imcs_##MNEM##_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by) \
+{                                                                       \
+    imcs_iterator_h result = imcs_new_iterator(sizeof(AGG_TYPE), sizeof(imcs_agg_context_t) + group_by->elem_size); \
+    imcs_agg_context_t* ctx = (imcs_agg_context_t*)result->context;     \
+    IMCS_CHECK_TYPE(input->elem_type, TID_##TYPE);                      \
+    result->elem_type = TID_##AGG_TYPE;                                 \
+    result->opd[0] = imcs_operand(input);                               \
+    result->opd[1] = imcs_operand(group_by);                            \
+    result->next = imcs_##MNEM##_##TYPE##_next;                         \
+    result->reset = imcs_reset_binary_agg_iterator;                     \
+    ctx->offset = ctx->count = 0;                                       \
+    return result;                                                      \
+}
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int8, win_group_max, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MAX_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int16, win_group_max, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MAX_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int32, win_group_max, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MAX_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_max, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MAX_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, float, win_group_max, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MAX_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_max, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MAX_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int8, win_group_min, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MIN_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int16, win_group_min, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MIN_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int32, win_group_min, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MIN_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_min, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MIN_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, float, win_group_min, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MIN_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_min, IMCS_GROUP_AGG_INIT, IMCS_GROUP_MIN_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int8, win_group_first, IMCS_GROUP_AGG_INIT, IMCS_GROUP_FIRST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int16, win_group_first, IMCS_GROUP_AGG_INIT, IMCS_GROUP_FIRST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int32, win_group_first, IMCS_GROUP_AGG_INIT, IMCS_GROUP_FIRST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_first, IMCS_GROUP_AGG_INIT, IMCS_GROUP_FIRST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, float, win_group_first, IMCS_GROUP_AGG_INIT, IMCS_GROUP_FIRST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_first, IMCS_GROUP_AGG_INIT, IMCS_GROUP_FIRST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int8, win_group_last, IMCS_GROUP_AGG_INIT, IMCS_GROUP_LAST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int16, win_group_last, IMCS_GROUP_AGG_INIT, IMCS_GROUP_LAST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int32, win_group_last, IMCS_GROUP_AGG_INIT, IMCS_GROUP_LAST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_last, IMCS_GROUP_AGG_INIT, IMCS_GROUP_LAST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, float, win_group_last, IMCS_GROUP_AGG_INIT, IMCS_GROUP_LAST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_last, IMCS_GROUP_AGG_INIT, IMCS_GROUP_LAST_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int64, win_group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int64, win_group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int64, win_group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, double, win_group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_sum, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int8, win_group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int16, win_group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int32, win_group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_all, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ALL_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+imcs_iterator_h imcs_win_group_all_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types");
+    return NULL;
+}
+imcs_iterator_h imcs_win_group_all_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ALL is supported only for integer types");
+    return NULL;
+}
+
+IMCS_WIN_GROUP_AGG_DEF(int8, int8, win_group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, int16, win_group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, int32, win_group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, int64, win_group_any, IMCS_GROUP_AGG_INIT, IMCS_GROUP_ANY_ACCUMULATE, IMCS_GROUP_AGG_RESULT)
+
+imcs_iterator_h imcs_win_group_any_float(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types");
+    return NULL;
+}
+imcs_iterator_h imcs_win_group_any_double(imcs_iterator_h iterator, imcs_iterator_h group_by)
+{
+    imcs_ereport(ERRCODE_FEATURE_NOT_SUPPORTED, "Aggregate CS_GROUP_ANY is supported only for integer types");
+    return NULL;
+}
+
+IMCS_WIN_GROUP_AGG_DEF(int8, double, win_group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, double, win_group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, double, win_group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, double, win_group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, double, win_group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_avg, IMCS_GROUP_AGG_INIT, IMCS_GROUP_SUM_ACCUMULATE, IMCS_GROUP_AVG_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, double, win_group_var, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_VAR_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, double, win_group_var, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_VAR_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, double, win_group_var, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_VAR_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, double, win_group_var, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_VAR_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, double, win_group_var, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_VAR_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_var, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_VAR_RESULT)
+
+IMCS_WIN_GROUP_AGG_DEF(int8, double, win_group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int16, double, win_group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int32, double, win_group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(int64, double, win_group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(float, double, win_group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
+IMCS_WIN_GROUP_AGG_DEF(double, double, win_group_dev, IMCS_GROUP_VAR_INIT, IMCS_GROUP_VAR_ACCUMULATE, IMCS_GROUP_DEV_RESULT)
+

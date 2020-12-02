@@ -181,6 +181,16 @@ static const char* const imcs_command_mnem[] =
     "group_any",
     "group_last",
     "group_first",
+    "win_group_max",
+    "win_group_min",
+    "win_group_avg",
+    "win_group_sum",
+    "win_group_var",
+    "win_group_dev",
+    "win_group_all",
+    "win_group_any",
+    "win_group_last",
+    "win_group_first",
     "grid_max",
     "grid_min",
     "grid_avg",
@@ -408,6 +418,16 @@ PG_FUNCTION_INFO_V1(cs_group_any);
 PG_FUNCTION_INFO_V1(cs_group_all);
 PG_FUNCTION_INFO_V1(cs_group_last);
 PG_FUNCTION_INFO_V1(cs_group_first);
+PG_FUNCTION_INFO_V1(cs_win_group_max);
+PG_FUNCTION_INFO_V1(cs_win_group_min);
+PG_FUNCTION_INFO_V1(cs_win_group_avg);
+PG_FUNCTION_INFO_V1(cs_win_group_sum);
+PG_FUNCTION_INFO_V1(cs_win_group_var);
+PG_FUNCTION_INFO_V1(cs_win_group_dev);
+PG_FUNCTION_INFO_V1(cs_win_group_any);
+PG_FUNCTION_INFO_V1(cs_win_group_all);
+PG_FUNCTION_INFO_V1(cs_win_group_last);
+PG_FUNCTION_INFO_V1(cs_win_group_first);
 PG_FUNCTION_INFO_V1(cs_grid_max);
 PG_FUNCTION_INFO_V1(cs_grid_min);
 PG_FUNCTION_INFO_V1(cs_grid_avg);
@@ -3295,6 +3315,17 @@ IMCS_GROUP_OP(group_var)
 IMCS_GROUP_OP(group_dev)
 IMCS_GROUP_OP(group_first)
 IMCS_GROUP_OP(group_last)
+
+IMCS_GROUP_OP(win_group_max)
+IMCS_GROUP_OP(win_group_min)
+IMCS_GROUP_OP(win_group_sum)
+IMCS_GROUP_OP(win_group_any)
+IMCS_GROUP_OP(win_group_all)
+IMCS_GROUP_OP(win_group_avg)
+IMCS_GROUP_OP(win_group_var)
+IMCS_GROUP_OP(win_group_dev)
+IMCS_GROUP_OP(win_group_first)
+IMCS_GROUP_OP(win_group_last)
 
 IMCS_INTERVAL_OP(grid_max)
 IMCS_INTERVAL_OP(grid_min)

@@ -66,6 +66,16 @@
     imcs_iterator_h imcs_group_dev_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_last_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_group_first_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_max_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_min_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_sum_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_any_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_all_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_avg_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_var_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_dev_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_last_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
+    imcs_iterator_h imcs_win_group_first_##TYPE(imcs_iterator_h input, imcs_iterator_h group_by); \
     imcs_iterator_h imcs_grid_max_##TYPE(imcs_iterator_h input, size_t interval); \
     imcs_iterator_h imcs_grid_min_##TYPE(imcs_iterator_h input, size_t interval); \
     imcs_iterator_h imcs_grid_sum_##TYPE(imcs_iterator_h input, size_t interval); \

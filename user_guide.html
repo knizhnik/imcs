@@ -20,6 +20,7 @@
   <li><a href="#transform">Timeseries transformation functions</a></li>
   <li><a href="#grand">Grand aggregates</a></li>
   <li><a href="#groupby">Group-by aggregates</a></li>
+  <li><a href="#wingroupby">Group-by windows aggregates</a></li>
   <li><a href="#grid">Grid aggregates</a></li>
   <li><a href="#window">Window (moving) aggregates</a></li>
   <li><a href="#hash">Hash aggregates (group-by using hash function)</a></li>
@@ -910,6 +911,68 @@ It is not mandatory to sort this timeseries. But you should realize that sequenc
 </tr>
 <tr>
 <td><code>function cs_group_all(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Bitwise AND of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+</table>
+</p>
+
+
+<h3><a name="wingroupby">Group-by windows aggregates</a></h3>
+<p>
+  Functions calculating aggregates for each group. But unlike normal aggregates it preserves length of input sequence,
+  repeating aggregate value as much times as there are members in the group. It helps to compare for example
+  day's close price with average price for the week.
+Groups are identified by sequence of elements with the same value in <code>group-by</code> timeseries.
+It is not mandatory to sort this timeseries. But you should realize that sequences of the same value in different parts of the timeseries will form different groups. For example, there are four groups in timeseries <code>'{1, 1, 2, 1, 1, 1, 2, 2,}': ('{1, 1}', '{2}', '{1, 1, 1}', '{2, 2}')</code>. If you want to perform aggregation for all timeseries element with the same value, then use <code>cs_hash_*</code> functions instead.
+</p><p>
+<table border width='100%'>
+<tr><th width='30%'>Function</th><th width='70%'>Description</th></tr>
+<tr>
+<td><code>function cs_win_group_count(timeseries) returns timeseries</code></td>
+<td>Returns number of elements in each group (sequences of repeated values)</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_apporaxdc(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Approximates number of distinct values in each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_max(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Maximal value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_min(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Minimal value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_sum(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Sum of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_avg(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Average value of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_var(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Variation of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_dev(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Standard deviation of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_first(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>First element of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_last(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Last element of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_any(input timeseries, group_by timeseries) returns timeseries</code></td>
+<td>Bitwise OR of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
+</tr>
+<tr>
+<td><code>function cs_win_group_all(input timeseries, group_by timeseries) returns timeseries</code></td>
 <td>Bitwise AND of elements of each group. <code>group_by</code> timeseries identifies groups: sequences of repeated values.</td>
 </tr>
 </table>

@@ -58,3 +58,57 @@ select cs_group_any('int2:{3,1,6,7,0,3,6,5,2,3,7}','char:{1,1,1,2,2,3,3,4,5,5,5}
  int2:{7,7,7,5,7}
 (1 row)
 
+select cs_win_group_max(Close,cs_week(Day)) from Quote_get('IBM');
+         cs_win_group_max          
+-----------------------------------
+ float4:{20.2,20.2,50.5,50.5,50.5}
+(1 row)
+
+select cs_win_group_min(Close,cs_week(Day)) from Quote_get('IBM');
+         cs_win_group_min          
+-----------------------------------
+ float4:{10.5,10.5,30.2,30.2,30.2}
+(1 row)
+
+select cs_win_group_sum(Close,cs_week(Day)) from Quote_get('IBM');
+                                       cs_win_group_sum                                        
+-----------------------------------------------------------------------------------------------
+ float8:{30.7000007629395,30.7000007629395,120.900001525879,120.900001525879,120.900001525879}
+(1 row)
+
+select cs_win_group_avg(Close,cs_week(Day)) from Quote_get('IBM');
+                                       cs_win_group_avg                                        
+-----------------------------------------------------------------------------------------------
+ float8:{15.3500003814697,15.3500003814697,40.3000005086263,40.3000005086263,40.3000005086263}
+(1 row)
+
+select cs_win_group_var(Close,cs_week(Day)) from Quote_get('IBM');
+                                       cs_win_group_var                                        
+-----------------------------------------------------------------------------------------------
+ float8:{23.5225037002565,23.5225037002565,68.6866614786786,68.6866614786786,68.6866614786786}
+(1 row)
+
+select cs_win_group_dev(Close,cs_week(Day)) from Quote_get('IBM');
+                                       cs_win_group_dev                                        
+-----------------------------------------------------------------------------------------------
+ float8:{4.85000038146973,4.85000038146973,8.28774163923313,8.28774163923313,8.28774163923313}
+(1 row)
+
+select cs_win_group_first(Close,cs_week(Day)) from Quote_get('IBM');
+        cs_win_group_first         
+-----------------------------------
+ float4:{10.5,10.5,30.2,30.2,30.2}
+(1 row)
+
+select cs_win_group_last(Close,cs_week(Day)) from Quote_get('IBM');
+         cs_win_group_last         
+-----------------------------------
+ float4:{20.2,20.2,50.5,50.5,50.5}
+(1 row)
+
+select cs_win_group_sum('int4:{1,2,3,4,5,6,7,8,9,10}','int4:{1,1,1,2,2,3,3,3,3,4}');
+        cs_win_group_sum         
+---------------------------------
+ int8:{6,6,6,9,9,30,30,30,30,10}
+(1 row)
+

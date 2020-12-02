@@ -58,7 +58,7 @@ select (Open>Close)?Day from Quote_get('IBM');
  date:{11-04-2013,11-05-2013}
 (1 row)
 
-select (Open>Close)? from Quote_get('IBM');
+select ?(Open>Close) from Quote_get('IBM');
   ?column?  
 ------------
  int8:{2,3}
