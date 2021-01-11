@@ -919,7 +919,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
                         }
                         autoload_attempts = 1;
                         goto Retry;
-                    } else if (autoload_attempts == 1) {
+                    } else if (autoload_attempts == 1 && !is_timestamp) {
                         /* load particular column */
                         char stmt[MAX_SQL_STMT_LEN];
                         char* column_name = (char*)sep + 1;
@@ -931,15 +931,17 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
                             column_name = buf;
                             column_name[column_name_len] = '\0';
                         }
-                        SPI_connect();
-                        sprintf(stmt, "select %s_load_column('%s')", table_name, column_name);
-                        rc = SPI_execute(stmt, true, 0);
-                        SPI_finish();
-                        if (rc != SPI_OK_SELECT) {
-                            elog(ERROR, "Select failed with status %d", rc);
-                        }
-                        autoload_attempts = 0; /* do not make more than one attempt of autoloading data */
-                        goto Retry;
+						if (strcmp(column_name, id) != 0) {
+							SPI_connect();
+							sprintf(stmt, "select %s_load_column('%s')", table_name, column_name);
+							rc = SPI_execute(stmt, true, 0);
+							SPI_finish();
+							if (rc != SPI_OK_SELECT) {
+								elog(ERROR, "Select failed with status %d", rc);
+							}
+							autoload_attempts = 0; /* do not make more than one attempt of autoloading data */
+							goto Retry;
+						}
                     }
                 }
             }

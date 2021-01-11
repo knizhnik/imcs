@@ -264,7 +264,7 @@ begin
         create_get_func := create_get_func||timeseries_id||' '||id_type||', ';
     end if;
     create_get_func := create_get_func||'from_ts '||timestamp_type||' default null, till_ts '||timestamp_type||' default null, limit_ts bigint default null)
-        returns '||table_name||'_timeseries as $$
+        returns setof '||table_name||'_timeseries as $$
         declare
             result '||table_name||'_timeseries;
             search_result timeseries;
@@ -277,7 +277,7 @@ begin
     end if;
     create_get_func := create_get_func||',from_ts,till_ts,'||timestamp_tid||',limit_ts);
             if (search_result is null) then
-                return null;
+                return;
             end if;
             result."'||timestamp_id||'":=search_result;';
 
@@ -384,7 +384,7 @@ begin
     create_load_plsql_func := create_load_plsql_func||'; end loop; end if; return n; end; $$ language plpgsql';
     create_append_func := create_append_func||'; end loop; return n; end; $$ language plpgsql';
     create_delete_func := create_delete_func||'; return cs_count(search_result); end; $$ language plpgsql';
-    create_get_func := create_get_func||'return result; end; $$ language plpgsql stable';
+    create_get_func := create_get_func||'return next result; end; $$ language plpgsql stable';
     create_span_func := create_span_func||'return result; end; $$ language plpgsql stable strict';
     create_concat_func := create_concat_func||'end loop; return root; end; $$ language plpgsql stable';
     create_insert_trigger_func := create_insert_trigger_func||'; return NEW; end; $$ language plpgsql';
