@@ -267,6 +267,7 @@ static const char* const imcs_command_mnem[] =
 
 typedef struct {
     char* id;
+	Oid   db;
 } imcs_hash_key_t;
 
 typedef struct {
@@ -727,8 +728,9 @@ static void imcs_shmem_startup(void);
 
 static uint32 imcs_hash_fn(const void *key, Size keysize)
 {
-	char const* id = ((imcs_hash_key_t*)key)->id;
-    uint32 h = 0;
+	imcs_hash_key_t* ik = (imcs_hash_key_t*)key;
+	char const* id = ik->id;
+    uint32 h = ik->db;
     while (*id != 0) {
         h = h*31 + *id++;
     }
@@ -737,13 +739,16 @@ static uint32 imcs_hash_fn(const void *key, Size keysize)
 
 static int imcs_match_fn(const void *key1, const void *key2, Size keysize)
 {
-    return strcmp(((imcs_hash_key_t*)key1)->id, ((imcs_hash_key_t*)key2)->id);
+	imcs_hash_key_t* ik1 = (imcs_hash_key_t*)key1;
+	imcs_hash_key_t* ik2 = (imcs_hash_key_t*)key2;
+    return ik1->db == ik2->db && strcmp(ik1->id, ik2->id) == 0 ? 0 : 1;
 }
 
 static void* imcs_keycopy_fn(void *dest, const void *src, Size keysize)
 {
     imcs_hash_key_t* dk = (imcs_hash_key_t*)dest;
     imcs_hash_key_t* sk = (imcs_hash_key_t*)src;
+	dk->db = sk->db;
     dk->id = (char*)ShmemAlloc(strlen(sk->id)+1);
     if (dk->id == NULL) {
         imcs_ereport(ERRCODE_OUT_OF_MEMORY, "not enough shared memory for hash entry");
@@ -895,6 +900,7 @@ imcs_timeseries_t* imcs_get_timeseries(char const* id, imcs_elem_typeid_t elem_t
     }
   Retry:
     key.id = (char*)id;
+	key.db = MyDatabaseId;
     entry = (imcs_hash_entry_t*)hash_search(imcs_hash, &key, HASH_FIND, NULL);
     if (entry == NULL) {
         if (!create) {
