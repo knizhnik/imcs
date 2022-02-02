@@ -6203,7 +6203,8 @@ void imcs_hash_dup_count(imcs_iterator_h result[2], imcs_iterator_h input, imcs_
 }
 
 typedef struct {
-    FunctionCallInfoData fcinfo;
+    FunctionCallInfoBaseData fcinfo;
+	NullableDatum arg;
     FmgrInfo flinfo;
 } imcs_call_context_t;
 
@@ -6212,13 +6213,13 @@ static bool imcs_##RET_TYPE##_call_##ARG_TYPE##_next(imcs_iterator_h iterator) \
 {                                                                       \
     size_t i, tile_size;                                                \
     imcs_call_context_t* ctx = (imcs_call_context_t*)iterator->context; \
-    FunctionCallInfoData* fcinfo = &ctx->fcinfo;                        \
+    FunctionCallInfo fcinfo = &ctx->fcinfo;                        \
     if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
         return false;                                                   \
     }                                                                   \
     tile_size = iterator->opd[0]->tile_size;                            \
     for (i = 0; i < tile_size; i++) {                                   \
-        fcinfo->arg[0] = PG_ARG_TYPE##GetDatum(iterator->opd[0]->tile.arr_##ARG_TYPE[i]); \
+        fcinfo->args[0].value = PG_ARG_TYPE##GetDatum(iterator->opd[0]->tile.arr_##ARG_TYPE[i]); \
         iterator->tile.arr_##RET_TYPE[i] = DatumGet##PG_RET_TYPE(FunctionCallInvoke(fcinfo)); \
         if (fcinfo->isnull) {                                           \
             imcs_ereport(ERRCODE_NULL_VALUE_NOT_ALLOWED, "function returns null"); \
@@ -6231,7 +6232,7 @@ static bool imcs_##RET_TYPE##_call_##ARG_TYPE##_next(imcs_iterator_h iterator) \
                                                                         \
 imcs_iterator_h imcs_##RET_TYPE##_call_##ARG_TYPE(imcs_iterator_h input, Oid funcid) \
 {                                                                       \
-    imcs_iterator_h result = imcs_new_iterator(sizeof(RET_TYPE), sizeof(FunctionCallInfoData)); \
+    imcs_iterator_h result = imcs_new_iterator(sizeof(RET_TYPE), sizeof(imcs_call_context_t)); \
     imcs_call_context_t* ctx = (imcs_call_context_t*)result->context;   \
     IMCS_CHECK_TYPE(input->elem_type, TID_##ARG_TYPE);                  \
     result->elem_type = TID_##RET_TYPE;                                 \
@@ -6240,7 +6241,7 @@ imcs_iterator_h imcs_##RET_TYPE##_call_##ARG_TYPE(imcs_iterator_h input, Oid fun
     result->flags = FLAG_CONTEXT_FREE;                                  \
     fmgr_info(funcid, &ctx->flinfo);                                    \
     InitFunctionCallInfoData(ctx->fcinfo, &ctx->flinfo, 1, 0, 0, 0);    \
-    ctx->fcinfo.argnull[0] = false;                                     \
+    ctx->fcinfo.args[0].isnull = false;                                     \
     return result;                                                      \
 }
 

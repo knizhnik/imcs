@@ -13,12 +13,12 @@
 
 MODULE_big = imcs
 
-CUSTOM_COPT = -O3 -Wall -pthread
+PG_CPPFLAGS += -O3 -Wall -pthread
 IMCS_VERSION=1.06
 
 ifdef USE_DISK
 OBJS = imcs.o func.o smp.o btree.o threadpool.o fileio.o disk.o
-CUSTOM_COPT += -DIMCS_DISK_SUPPORT
+PG_CPPFLAGS += -DIMCS_DISK_SUPPORT
 else
 OBJS = imcs.o func.o smp.o btree.o threadpool.o
 endif
