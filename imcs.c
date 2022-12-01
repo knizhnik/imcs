@@ -117,6 +117,7 @@ static int shmem_size = 1024;
 static int n_timeseries = 10000;
 static int n_threads = 0;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
+static shmem_request_hook_type prev_shmem_request_hook = NULL;
 static ExecutorEnd_hook_type prev_ExecutorEnd = NULL;
 
 static int imcs_command_profile[imcs_cmd_last_command];
@@ -723,6 +724,7 @@ void imcs_ereport(int err_code, char const* err_msg,...)
 }
 
 static void imcs_shmem_startup(void);
+static void imcs_shmem_request(void);
 
 static uint32 imcs_hash_fn(const void *key, Size keysize)
 {
@@ -1362,16 +1364,11 @@ void _PG_init(void)
 							NULL,
 							NULL,
 							NULL);
-	/*
-	 * Request additional shared resources.  (These are no-ops if we're not in
-	 * the postmaster process.)  We'll allocate or attach to the shared
-	 * resources in imcs_shmem_startup().
-	 */
-	RequestAddinShmemSpace((size_t)shmem_size*MB);
-#if PG_VERSION_NUM >= 90600
-	RequestNamedLWLockTranche("imcs", 2 + MAX_ENTRY_LOCKS);
+#if PG_VERSION_NUM>=150000
+	prev_shmem_request_hook = shmem_request_hook;
+	shmem_request_hook = imcs_shmem_request;
 #else
-	RequestAddinLWLocks(2 + MAX_ENTRY_LOCKS);
+	imcs_shmem_request();
 #endif
 
 	/*
@@ -1406,6 +1403,25 @@ void _PG_fini(void)
     }
     UnregisterXactCallback(imcs_trans_callback, NULL);
     imcs_disk_close();
+}
+
+static void imcs_shmem_request(void)
+{
+	if (prev_shmem_request_hook) {
+		prev_shmem_request_hook();
+    }
+
+	/*
+	 * Request additional shared resources.  (These are no-ops if we're not in
+	 * the postmaster process.)  We'll allocate or attach to the shared
+	 * resources in imcs_shmem_startup().
+	 */
+	RequestAddinShmemSpace((size_t)shmem_size*MB);
+#if PG_VERSION_NUM >= 90600
+	RequestNamedLWLockTranche("imcs", 2 + MAX_ENTRY_LOCKS);
+#else
+	RequestAddinLWLocks(2 + MAX_ENTRY_LOCKS);
+#endif
 }
 
 static void imcs_shmem_startup(void)
@@ -1924,7 +1940,7 @@ Datum cs_hash_##func(PG_FUNCTION_ARGS)                                  \
      result[0] = imcs_parallel_iterator(result[0]);                     \
      outValues[0] = PointerGetDatum(result[0]);                         \
      outValues[1] = PointerGetDatum(result[1]);                         \
-     PG_RETURN_POINTER(HeapTupleGetDatum(heap_form_tuple(resultTupleDesc, outValues, nulls))); \
+     PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(resultTupleDesc, outValues, nulls))); \
 }
 
 
@@ -3430,7 +3446,7 @@ Datum cs_hash_count(PG_FUNCTION_ARGS)
     outValues[0] = PointerGetDatum(result[0]);
     outValues[1] = PointerGetDatum(result[1]);
     IMCS_TRACE(hash_count);
-    PG_RETURN_POINTER(HeapTupleGetDatum(heap_form_tuple(resultTupleDesc, outValues, nulls)));
+    PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(resultTupleDesc, outValues, nulls)));
 }
 Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
 {
@@ -3450,7 +3466,7 @@ Datum cs_hash_dup_count(PG_FUNCTION_ARGS)
     outValues[0] = PointerGetDatum(result[0]);
     outValues[1] = PointerGetDatum(result[1]);
     IMCS_TRACE(hash_dup_count);
-    PG_RETURN_POINTER(HeapTupleGetDatum(heap_form_tuple(resultTupleDesc, outValues, nulls)));
+    PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(resultTupleDesc, outValues, nulls)));
 }
 
 IMCS_HASH_AGG(max)
