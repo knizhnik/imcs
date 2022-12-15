@@ -89,7 +89,9 @@ static int shmem_size = 1024;
 static int n_timeseries = 10000;
 static int n_threads = 0;
 static shmem_startup_hook_type prev_shmem_startup_hook = NULL;
+#if PG_VERSION_NUM>=150000
 static shmem_request_hook_type prev_shmem_request_hook = NULL;
+#endif
 static ExecutorEnd_hook_type prev_ExecutorEnd = NULL;
 
 static int imcs_command_profile[imcs_cmd_last_command];
@@ -1302,7 +1304,6 @@ void _PG_init(void)
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = imcs_shmem_request;
 #else
-	RequestAddinLWLocks(2 + MAX_ENTRY_LOCKS);
 	imcs_shmem_request();
 #endif
 
@@ -1342,9 +1343,11 @@ void _PG_fini(void)
 
 static void imcs_shmem_request(void)
 {
+#if PG_VERSION_NUM>=150000
 	if (prev_shmem_request_hook) {
 		prev_shmem_request_hook();
     }
+#endif
 
 	/*
 	 * Request additional shared resources.  (These are no-ops if we're not in
