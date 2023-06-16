@@ -43,14 +43,12 @@ select Quote_count('ABB');
 select * from Quote_get('IBM');
  symbol | day | open | high | low | close | volume 
 --------+-----+------+------+-----+-------+--------
-        |     |      |      |     |       | 
-(1 row)
+(0 rows)
 
 select * from Quote_get('ABB');
  symbol | day | open | high | low | close | volume 
 --------+-----+------+------+-----+-------+--------
-        |     |      |      |     |       | 
-(1 row)
+(0 rows)
 
 select CrashLog_delete('2014-04-14 11:54', '2014-04-14 11:56');
  crashlog_delete 
