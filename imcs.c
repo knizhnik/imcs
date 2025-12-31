@@ -7,8 +7,10 @@
 #include "disk.h"
 #include "func.h"
 #include "smp.h"
+#include "catalog/pg_collation.h"
 #include "executor/spi.h"
 #include "commands/trigger.h"
+#include "utils/formatting.h"
 #include "utils/timestamp.h"
 #include "utils/rel.h"
 #include "utils/date.h"
@@ -4968,7 +4970,7 @@ Datum cs_as(PG_FUNCTION_ARGS)
     char* src = (char*)VARDATA(str);
     size_t len = VARSIZE(str) - VARHDRSZ;
     char const* type = PG_GETARG_CSTRING(1);
-    Oid	typid = TypenameGetTypid(lowerstr(type));
+    Oid	typid = TypenameGetTypid(str_tolower(type, strlen(type), DEFAULT_COLLATION_OID));
     imcs_key_t value;
     TupleDesc desc;
     int i, n;

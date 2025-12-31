@@ -17,7 +17,7 @@ typedef struct imcs_thread_pool_impl_t
 } imcs_thread_pool_impl_t;
 
 
-static void imcs_thread_pool_worker(imcs_thread_pool_impl_t* pool)
+static void* imcs_thread_pool_worker(imcs_thread_pool_impl_t* pool)
 {
     int work_id;
     pool->sync->lock(pool->sync);
@@ -34,6 +34,7 @@ static void imcs_thread_pool_worker(imcs_thread_pool_impl_t* pool)
         pool->sync->lock(pool->sync);
         pool->finish->signal(pool->finish, 1);
     }
+	return NULL;
 } 
     
 static void imcs_thread_pool_wait(imcs_thread_pool_impl_t* pool)
@@ -45,7 +46,7 @@ static void imcs_thread_pool_wait(imcs_thread_pool_impl_t* pool)
     pool->sync->unlock(pool->sync);
 
 }
-int counters[4] = {0,0,0,0};
+
 static void imcs_thread_pool_execute(struct imcs_thread_pool_t* self, imcs_job_t job, void* arg)
 {
     imcs_thread_pool_impl_t* pool = (imcs_thread_pool_impl_t*)self;

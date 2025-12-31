@@ -11,8 +11,8 @@
 #include <math.h>
 #include <limits.h>
 
-double imcs_hash_table_load_factor = 1.0;
-size_t imcs_hash_table_init_size = 1361;
+static double imcs_hash_table_load_factor = 1.0;
+static size_t imcs_hash_table_init_size = 1361;
 
 #define MAX_PRIME_NUMBERS 29
 static const uint32 imcs_prime_numbers[MAX_PRIME_NUMBERS] =
@@ -6209,9 +6209,12 @@ void imcs_hash_dup_count(imcs_iterator_h result[2], imcs_iterator_h input, imcs_
 }
 
 typedef struct {
-    FunctionCallInfoBaseData fcinfo;
 	NullableDatum arg;
     FmgrInfo flinfo;
+    union {
+		FunctionCallInfoBaseData info;
+		char info_data[SizeForFunctionCallInfo(1)];
+	} fc;
 } imcs_call_context_t;
 
 #define IMCS_CALL_DEF(RET_TYPE, PG_RET_TYPE, ARG_TYPE, PG_ARG_TYPE) \
@@ -6219,7 +6222,7 @@ static bool imcs_##RET_TYPE##_call_##ARG_TYPE##_next(imcs_iterator_h iterator) \
 {                                                                       \
     size_t i, tile_size;                                                \
     imcs_call_context_t* ctx = (imcs_call_context_t*)iterator->context; \
-    FunctionCallInfo fcinfo = &ctx->fcinfo;                        \
+    FunctionCallInfo fcinfo = &ctx->fc.info;                        \
     if (!iterator->opd[0]->next(iterator->opd[0])) {                    \
         return false;                                                   \
     }                                                                   \
@@ -6246,8 +6249,8 @@ imcs_iterator_h imcs_##RET_TYPE##_call_##ARG_TYPE(imcs_iterator_h input, Oid fun
     result->next = imcs_##RET_TYPE##_call_##ARG_TYPE##_next;            \
     result->flags = FLAG_CONTEXT_FREE;                                  \
     fmgr_info(funcid, &ctx->flinfo);                                    \
-    InitFunctionCallInfoData(ctx->fcinfo, &ctx->flinfo, 1, 0, 0, 0);    \
-    ctx->fcinfo.args[0].isnull = false;                                     \
+    InitFunctionCallInfoData(ctx->fc.info, &ctx->flinfo, 1, 0, 0, 0);	\
+    ctx->fc.info.args[0].isnull = false;								\
     return result;                                                      \
 }
 

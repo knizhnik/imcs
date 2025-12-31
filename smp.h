@@ -6,7 +6,7 @@ typedef int imcs_bool;
 
 #define IMCS_TM_INFINITE ((unsigned)-1)
 
-typedef void (*imcs_thread_proc_t)(void* arg);
+typedef void* (*imcs_thread_proc_t)(void* arg);
 
 typedef struct imcs_tls_t { 
     void* (*get)(struct imcs_tls_t* tls);
